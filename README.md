@@ -2,6 +2,13 @@
 
 BSF 智慧厨余平台前端正式交付工程。
 
+## 从 GitHub 拉取
+
+~~~powershell
+git clone https://github.com/meilaoba/BSF-.git
+cd BSF-
+~~~
+
 ## 在本机运行
 
 前置条件：
@@ -13,17 +20,18 @@ BSF 智慧厨余平台前端正式交付工程。
 目录建议：
 
 ~~~text
-项目目录/
-├─ bsf-delivery/          从 GitHub 拉取的前端
-├─ bms_mos.exe            客户提供的本地网关
-├─ config.json             客户提供的本地配置
-└─ bms_mos.log
+BSF-/                      从 GitHub 拉取的前端
+├─ index.html
+├─ package.json
+├─ bms_mos.exe            可放在仓库根目录或上一级目录
+├─ config.json            可放在仓库根目录或上一级目录
+└─ bms_mos.log            可与 config.json 放在一起
 ~~~
 
 启动：
 
 ~~~powershell
-cd bsf-delivery
+cd BSF-
 npm run dev
 ~~~
 
