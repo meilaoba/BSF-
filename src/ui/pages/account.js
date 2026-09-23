@@ -1,5 +1,5 @@
 function renderAccount(container){
-  const roleLabel = currentRole === 'admin' ? 'Admin' : currentRole === 'client-admin' ? 'Client Admin' : 'User';
+  const roleLabel = currentRole === 'admin' ? 'Master Admin' : currentRole === 'client-admin' ? 'Client Admin' : 'User';
   const displayName = roleLabel + ' User';
   container.innerHTML = `
     <div style="margin-bottom:24px;">

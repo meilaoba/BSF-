@@ -4,7 +4,7 @@ async function login(){
   currentRole = document.getElementById('role-select').value;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('main-app').style.display='block';
-  document.getElementById('role-badge').textContent = currentRole === 'admin' ? 'Admin' : currentRole === 'client-admin' ? 'Client Admin' : 'User';
+  document.getElementById('role-badge').textContent = currentRole === 'admin' ? 'Master Admin' : currentRole === 'client-admin' ? 'Client Admin' : 'User';
   if(currentRole === 'admin') document.getElementById('client-name').textContent = 'All Clients';
   else if(currentRole === 'client-admin') document.getElementById('client-name').textContent = 'GreenCity Solutions Ltd';
   else document.getElementById('client-name').textContent = 'GreenCity Solutions Ltd';

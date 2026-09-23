@@ -18,6 +18,7 @@ export function createBackendApi(options = {}) {
 
     getMachines(params) { return http.get('/machines', params); },
     getMachineMetrics(id, params) { return http.get('/machines/' + encodeURIComponent(id) + '/metrics', params); },
+    restartMachine(id) { return http.post('/devices/' + encodeURIComponent(id) + '/restart'); },
     getLocations(params) { return http.get('/locations', params); },
     getGraphs(params) { return http.get('/graphs', params); },
     getFoodWaste(params) { return http.get('/graphs/food-waste', params); },
@@ -27,6 +28,7 @@ export function createBackendApi(options = {}) {
     getAlerts(params) { return http.get('/alerts', params); },
     saveAlertThresholds(data) { return http.put('/alerts/thresholds', data); },
     sendAlertNotification(data) { return http.post('/notifications/alert', data); },
+    sendWhatsAppNotification(data) { return http.post('/notifications/whatsapp', data); },
 
     getUsers(params) { return http.get('/users', params); },
     createUser(data) { return http.post('/users', data); },

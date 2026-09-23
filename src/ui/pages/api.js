@@ -18,7 +18,7 @@ function renderApi(container){
         <div style="display:flex;flex-direction:column;gap:12px;">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#0f172a;border-radius:8px;">
             <div><span style="color:#e2e8f0;font-weight:600;font-size:14px;">MQTT Broker</span><p style="margin:2px 0 0;font-size:12px;color:#64748b;">Configured in bms_mos.exe</p></div>
-            <span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;id="api-gateway-status" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(100,116,139,0.15);color:#94a3b8;">Checking</span>
+            <span id="api-gateway-status" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(100,116,139,0.15);color:#94a3b8;">Checking</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#0f172a;border-radius:8px;">
             <div><span style="color:#e2e8f0;font-weight:600;font-size:14px;">REST API</span><p style="margin:2px 0 0;font-size:12px;color:#64748b;">/api/v1</p></div>

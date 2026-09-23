@@ -11,7 +11,7 @@ function renderAlerts(container){
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Machine Filter
         <select id="alert-machine-filter" onchange="alertFilters.machine=this.value;renderAlerts(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"></select>
       </label>
-      <button onclick="openThresholdModal()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Edit the threshold of each machine</button>
+      <button onclick="openThresholdModal()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Edit the threshold of each machine</button><button onclick="restartSelectedMachine()" style="padding:10px 20px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Restart Machine</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
       <div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;">
@@ -19,15 +19,15 @@ function renderAlerts(container){
         <div style="display:flex;flex-direction:column;gap:12px;">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#0f172a;border-radius:8px;">
             <div><span style="color:#e2e8f0;font-weight:600;font-size:14px;">CO₂</span><p style="margin:2px 0 0;font-size:12px;color:#64748b;">Indoor Air Quality</p></div>
-            <div style="text-align:right;"><span style="color:#f59e0b;font-weight:700;font-size:16px;">900 ppm</span><p style="margin:2px 0 0;font-size:11px;color:#64748b;">Email to Admin</p></div>
+            <div style="text-align:right;"><span style="color:#f59e0b;font-weight:700;font-size:16px;">900 ppm</span><p style="margin:2px 0 0;font-size:11px;color:#64748b;">Email / WhatsApp to Admin</p></div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#0f172a;border-radius:8px;">
             <div><span style="color:#e2e8f0;font-weight:600;font-size:14px;">NO₂</span><p style="margin:2px 0 0;font-size:12px;color:#64748b;">Exhaust Gas</p></div>
-            <div style="text-align:right;"><span style="color:#f59e0b;font-weight:700;font-size:16px;">0.18 ppm</span><p style="margin:2px 0 0;font-size:11px;color:#64748b;">Email to Admin</p></div>
+            <div style="text-align:right;"><span style="color:#f59e0b;font-weight:700;font-size:16px;">0.18 ppm</span><p style="margin:2px 0 0;font-size:11px;color:#64748b;">Email / WhatsApp to Admin</p></div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#0f172a;border-radius:8px;">
             <div><span style="color:#e2e8f0;font-weight:600;font-size:14px;">H₂S</span><p style="margin:2px 0 0;font-size:12px;color:#64748b;">Exhaust Gas</p></div>
-            <div style="text-align:right;"><span style="color:#f59e0b;font-weight:700;font-size:16px;">0.25 ppm</span><p style="margin:2px 0 0;font-size:11px;color:#64748b;">Email to Admin</p></div>
+            <div style="text-align:right;"><span style="color:#f59e0b;font-weight:700;font-size:16px;">0.25 ppm</span><p style="margin:2px 0 0;font-size:11px;color:#64748b;">Email / WhatsApp to Admin</p></div>
           </div>
         </div>
         ${currentRole==='admin'?'<button style="width:100%;margin-top:12px;padding:10px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:13px;cursor:pointer;">Edit Thresholds</button>':''}
@@ -102,7 +102,7 @@ async function sendTemperatureNotification(alert){
   const key = alert.id;
   if(alertNotifications.indexOf(key) >= 0) return;
   alertNotifications.push(key);
-  const payload = {device:alert.device, type:alert.type, value:alert.value, threshold:alert.threshold, email:'admin@platform.hk', channels:['email']};
+  const payload = {device:alert.device, type:alert.type, value:alert.value, threshold:alert.threshold, email:'admin@platform.hk', whatsapp:window.BSF_WHATSAPP_TO || '', channels:['email','whatsapp']};
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try { await window.BSF_API.sendAlertNotification(payload); }
     catch(error) { console.warn('Temperature notification failed:', error.message); }
@@ -111,6 +111,23 @@ async function sendTemperatureNotification(alert){
 
 function runTemperatureAlertCheck(){
   getTemperatureAlerts().forEach(function(alert){ sendTemperatureNotification(alert); });
+}
+
+
+async function restartSelectedMachine(){
+  const machineId = alertFilters.machine || '';
+  if(!machineId){ alert('Please select a machine in Machine Filter first'); return; }
+  if(!confirm('Restart machine ' + machineId + '?')) return;
+  if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
+    try {
+      await window.BSF_API.restartMachine(machineId);
+      alert('Restart command sent: ' + machineId);
+    } catch(error) {
+      alert('Restart failed: ' + error.message);
+    }
+  } else {
+    alert('Restart API pending: POST /devices/' + machineId + '/restart');
+  }
 }
 
 function getAlertFilteredDevices(){
