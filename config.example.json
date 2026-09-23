@@ -1,0 +1,28 @@
+{
+  "mqtt": {
+    "broker": "tcp://broker.example.com:1883",
+    "clientId": "bms-mos-collector",
+    "username": "YOUR_USERNAME",
+    "password": "YOUR_PASSWORD",
+    "topic": "CUSTOMER/DEVICE/data",
+    "qos": 1,
+    "cleanStart": true,
+    "keepAlive": 30,
+    "connectTimeout": 10,
+    "sessionExpiry": 3600,
+    "insecureSkipVerify": false,
+    "clientCert": "",
+    "clientKey": ""
+  },
+  "server": {
+    "apiKey": "",
+    "enableCors": true
+  },
+  "store": {
+    "maxRecords": 2048,
+    "persistFile": "data/messages.jsonl"
+  },
+  "log": {
+    "file": "bms_mos.log"
+  }
+}

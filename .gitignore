@@ -1,0 +1,8 @@
+node_modules/
+.env
+config.json
+bms_mos.exe
+bms_mos.log
+data/
+runtime-config.local.json
+*.log

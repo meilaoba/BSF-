@@ -1,0 +1,12 @@
+{
+  "name": "bsf-delivery",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "BSF Smart Kitchen Waste IoT structured delivery frontend",
+  "scripts": {
+    "check:gateway": "node scripts/gateway-check.mjs",
+    "dev": "node scripts/dev-server.mjs",
+    "start": "node scripts/dev-server.mjs"
+  }
+}
