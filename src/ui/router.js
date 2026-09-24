@@ -17,7 +17,9 @@ async function login(){
 async function loadDataForCurrentRole(){
   if(!window.BSF_LOAD_GATEWAY_DATA) return false;
   const limit = currentRole === 'admin' ? 100 : 1;
-  return window.BSF_LOAD_GATEWAY_DATA(limit);
+  const loaded = await window.BSF_LOAD_GATEWAY_DATA(limit);
+  if(window.BSF_NOTIFICATIONS) window.BSF_NOTIFICATIONS.syncFromAlerts();
+  return loaded;
 }
 
 function scheduleDataRefresh(){

@@ -26,6 +26,9 @@ export function createBackendApi(options = {}) {
     getReports(params) { return http.get('/reports', params); },
 
     getAlerts(params) { return http.get('/alerts', params); },
+    getNotifications(params) { return http.get('/notifications', params); },
+    markNotificationRead(id) { return http.put('/notifications/' + encodeURIComponent(id) + '/read'); },
+    markAllNotificationsRead() { return http.put('/notifications/read-all'); },
     saveAlertThresholds(data) { return http.put('/alerts/thresholds', data); },
     sendAlertNotification(data) { return http.post('/notifications/alert', data); },
     sendWhatsAppNotification(data) { return http.post('/notifications/whatsapp', data); },
