@@ -1,3 +1,36 @@
+
+const CLIENT_RAW_HISTORY_KEY = 'bsf.delivery.clientRawDataHistory';
+const CLIENT_RAW_HISTORY_LIMIT = 2000;
+
+function clientRawHistoryKey(){
+  return CLIENT_RAW_HISTORY_KEY + '.' + (currentRole || 'user');
+}
+
+function readClientRawHistory(){
+  try {
+    const rows = JSON.parse(localStorage.getItem(clientRawHistoryKey()) || '[]');
+    return Array.isArray(rows) ? rows : [];
+  } catch(error) {
+    return [];
+  }
+}
+
+function saveClientRawHistory(rows){
+  const trimmed = rows.slice(0, CLIENT_RAW_HISTORY_LIMIT);
+  try { localStorage.setItem(clientRawHistoryKey(), JSON.stringify(trimmed)); } catch(error) {}
+}
+
+function mergeClientRawHistory(history, incoming){
+  const map = new Map();
+  history.concat(incoming).forEach(function(row){
+    if(!row || !row.device || !row.recordedAt) return;
+    map.set(row.device + '@' + row.recordedAt, row);
+  });
+  return Array.from(map.values()).sort(function(a,b){
+    return String(b.recordedAt).localeCompare(String(a.recordedAt));
+  }).slice(0, CLIENT_RAW_HISTORY_LIMIT);
+}
+
 /* Gateway data bridge: maps bms_mos messages into legacy UI collections. */
 function bsfFormatTime(sec){
   if(!sec) return '—';
@@ -116,7 +149,14 @@ window.BSF_LOAD_GATEWAY_DATA = async function(limit){
     if(!messages.length) return false;
     const realDevices = bsfMapDevices(messages);
     devices.splice(0, devices.length, ...realDevices);
-    rawDataRows.splice(0, rawDataRows.length, ...bsfMapRawRows(messages));
+    const mappedRows = bsfMapRawRows(messages);
+    if(currentRole === 'admin'){
+      rawDataRows.splice(0, rawDataRows.length, ...mappedRows);
+    } else {
+      const history = mergeClientRawHistory(readClientRawHistory(), mappedRows);
+      rawDataRows.splice(0, rawDataRows.length, ...history);
+      saveClientRawHistory(history);
+    }
     alerts.splice(0, alerts.length, ...bsfMapAlerts(realDevices));
     window.BSF_GATEWAY_LAST_LOAD = Date.now();
     return true;
