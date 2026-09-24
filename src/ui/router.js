@@ -1,10 +1,23 @@
+function syncLoginRole(){
+  const role = (document.getElementById('role-select') || {}).value || 'admin';
+  const defaults = { admin:'admin@platform.hk', 'client-admin':'client@platform.hk', user:'user@platform.hk' };
+  const input = document.getElementById('login-username');
+  if(input) input.value = defaults[role] || defaults.user;
+}
+
 let dataRefreshTimer = null;
 
 async function login(){
   currentRole = document.getElementById('role-select').value;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('main-app').style.display='block';
-  document.getElementById('role-badge').textContent = currentRole === 'admin' ? 'Master Admin' : currentRole === 'client-admin' ? 'Client Admin' : 'User';
+  const roleMeta = { admin:{label:'Master Admin'}, 'client-admin':{label:'Client Admin'}, user:{label:'User'} };
+  const roleInfo = roleMeta[currentRole] || roleMeta.user;
+  const loginName = (document.getElementById('login-username') || {}).value || roleInfo.label;
+  document.getElementById('role-badge').textContent = roleInfo.label;
+  document.getElementById('user-name').textContent = loginName;
+  const initials = loginName.replace(/@.*/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || roleInfo.label.slice(0, 2).toUpperCase();
+  document.getElementById('user-avatar').textContent = initials;
   if(currentRole === 'admin') document.getElementById('client-name').textContent = 'All Clients';
   else if(currentRole === 'client-admin') document.getElementById('client-name').textContent = 'GreenCity Solutions Ltd';
   else document.getElementById('client-name').textContent = 'GreenCity Solutions Ltd';

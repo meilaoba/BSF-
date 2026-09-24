@@ -17,7 +17,7 @@
       </div>
       <div style="margin-bottom:20px;">
         <label style="display:block;font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Role</label>
-        <select id="role-select" style="width:100%;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;outline:none;cursor:pointer;">
+        <select id="role-select" onchange="syncLoginRole()" style="width:100%;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;outline:none;cursor:pointer;">
           <option value="admin">Master Admin</option>
           <option value="client-admin">Client Admin</option>
           <option value="user">User</option>
@@ -25,7 +25,7 @@
       </div>
       <div style="margin-bottom:20px;">
         <label style="display:block;font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Email / Username</label>
-        <input type="text" value="admin@platform.hk" style="width:100%;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;outline:none;box-sizing:border-box;" />
+        <input id="login-username" type="text" value="admin@platform.hk" style="width:100%;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;outline:none;box-sizing:border-box;" />
       </div>
       <div style="margin-bottom:24px;">
         <label style="display:block;font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Password</label>
@@ -49,8 +49,8 @@
           <span id="notification-badge" style="display:none;position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;background:#ef4444;border-radius:10px;font-size:10px;display:none;align-items:center;justify-content:center;color:#fff;font-weight:700;">0</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <div style="width:32px;height:32px;background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;">AD</div>
-          <span style="font-size:14px;color:#e2e8f0;">Master Admin</span>
+          <div id="user-avatar" style="width:32px;height:32px;background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;">MA</div>
+          <span id="user-name" style="font-size:14px;color:#e2e8f0;">Master Admin</span>
         </div>
         <button onclick="logout()" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;">Logout</button>
       </div>
