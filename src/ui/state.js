@@ -1,7 +1,7 @@
 let currentRole = 'admin';
 let currentPage = 'machines';
 let machineFilters = { client: '', device: '' };
-let rawDataFilters = { client: '', device: '' };
+let rawDataFilters = { client: '', device: '', start: '', end: '' };
 let alertFilters = { client: '', machine: '' };
 let apiFilters = { client: '', machine: '' };
 let machineThresholds = {};

@@ -123,10 +123,20 @@ function markAllNotificationsRead(){
 document.addEventListener('click', function(){ const panel = notificationPanel(); if(panel) panel.style.display = 'none'; });
 document.addEventListener('DOMContentLoaded', function(){ ensureNotificationPanel(); syncFromAlerts(); });
 
+function addNotification(record){
+  const item = Object.assign({ id:'notification-' + Date.now(), title:'Notification', detail:'', time:new Date().toLocaleString(), device:'', read:false }, record || {});
+  item.id = String(item.id);
+  notificationRecords.unshift(item);
+  renderNotificationBadge();
+  renderNotificationPanel();
+  return item;
+}
+
 window.BSF_NOTIFICATIONS = {
   syncFromAlerts: syncFromAlerts,
   toggle: toggleNotificationPanel,
-  render: renderNotificationPanel
+  render: renderNotificationPanel,
+  add: addNotification
 };
 window.toggleNotificationPanel = toggleNotificationPanel;
 window.openNotification = openNotification;

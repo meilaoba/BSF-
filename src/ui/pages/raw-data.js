@@ -1,3 +1,10 @@
+function rawDataTime(row){ const value=String(row.recordedAt || '').replace(' ','T'); const time=new Date(value).getTime(); return Number.isFinite(time)?time:null; }
+function rawDataFilteredRows(){ const clientDevices=rawDataFilters.client?devices.filter(function(dev){return dev.client===rawDataFilters.client;}):devices; const ids=new Set(clientDevices.map(function(dev){return dev.id;})); const startTime=rawDataFilters.start?new Date(rawDataFilters.start).getTime():null; const endTime=rawDataFilters.end?new Date(rawDataFilters.end).getTime():null; return rawDataRows.filter(function(row){ if(rawDataFilters.client&&!ids.has(row.device))return false; if(rawDataFilters.device&&row.device!==rawDataFilters.device)return false; const time=rawDataTime(row); if(startTime!==null&&time!==null&&time<startTime)return false; if(endTime!==null&&time!==null&&time>endTime)return false; return true; }); }
+function applyRawDataFilter(){ rawDataFilters.start=(document.getElementById('raw-start-filter')||{}).value||''; rawDataFilters.end=(document.getElementById('raw-end-filter')||{}).value||''; renderRawData(document.getElementById('page-content')); }
+function rawCsvCell(value){ return '"' + String(value===undefined||value===null?'':value).replace(/"/g,'""') + '"'; }
+function rawDataToast(message){ let toast=document.getElementById('raw-data-toast'); if(!toast){toast=document.createElement('div');toast.id='raw-data-toast';document.body.appendChild(toast);} toast.textContent=message; toast.style.cssText='position:fixed;top:20px;right:20px;z-index:100000;padding:12px 18px;border-radius:8px;color:#e2e8f0;background:#065f46;border:1px solid #10b981;box-shadow:0 12px 30px rgba(0,0,0,.35);font-size:13px;font-weight:600;'; setTimeout(function(){if(toast)toast.remove();},3000); }
+function exportRawDataCsv(){ const rows=rawDataFilteredRows(); const head=['Recorded At','Device','State','Ferment','Weight(kg)','Temp(°C)','Hum(%)','Energy(kWh)','CO2(ppm)','NO2(ppm)','H2S(ppm)','Signal']; const body=rows.map(function(row){return [row.recordedAt,row.device,row.deviceState,row.fermentState,row.weight,row.temperature,row.humidity,row.energy,row.co2,row.no2,row.h2s,row.signal];}); const csv=[head].concat(body).map(function(row){return row.map(rawCsvCell).join(',');}).join('\r\n'); const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const link=document.createElement('a'); link.href=url; link.download='bsf-raw-data-'+new Date().toISOString().slice(0,10)+'.csv'; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url); rawDataToast('Raw Data CSV export started'); }
+
 function populateRawDataFilters(clients, clientDevices){
   const clientSelect = document.getElementById('raw-client-filter');
   const deviceSelect = document.getElementById('raw-device-filter');
@@ -10,10 +17,8 @@ function populateRawDataFilters(clients, clientDevices){
 }
 function renderRawData(container){
   const clients = [...new Set(devices.map(dev=>dev.client))];
-  const clientDevices = rawDataFilters.client ? devices.filter(dev=>dev.client===rawDataFilters.client) : devices;
-  const selectedDeviceIds = new Set(clientDevices.map(dev=>dev.id));
-  const filteredRows = rawDataRows.filter(row => (!rawDataFilters.client || selectedDeviceIds.has(row.device)) && (!rawDataFilters.device || row.device===rawDataFilters.device));
-  const rowSummary = (rawDataFilters.client || rawDataFilters.device) ? (filteredRows.length ? 'Showing 1-'+filteredRows.length+' of '+filteredRows.length+' records' : 'No records') : 'Showing 1-15 of 2,847 records';
+  const filteredRows = rawDataFilteredRows();
+  const rowSummary = filteredRows.length ? 'Showing 1-'+filteredRows.length+' of '+filteredRows.length+' records' : 'No records';
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Raw Data</h2>
@@ -27,10 +32,10 @@ function renderRawData(container){
     </div>
     <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
       <select id="raw-device-filter" onchange="rawDataFilters.device=this.value;renderRawData(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"></select>
-      <input type="datetime-local" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
-      <input type="datetime-local" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
-      <button style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Filter</button>
-      <button style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Export CSV</button>
+      <input id="raw-start-filter" type="datetime-local" value="${rawDataFilters.start || ''}" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
+      <input id="raw-end-filter" type="datetime-local" value="${rawDataFilters.end || ''}" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
+      <button style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;" onclick="applyRawDataFilter()">Filter</button>
+      <button style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;" onclick="exportRawDataCsv()">Export CSV</button>
     </div>
     <div style="background:#1e293b;border-radius:12px;border:1px solid #334155;overflow:hidden;">
       <div style="overflow-x:auto;">

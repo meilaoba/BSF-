@@ -13,6 +13,10 @@ function renderAlerts(container){
       </label>
       <button onclick="openThresholdModal()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Edit the threshold of each machine</button><button onclick="restartSelectedMachine()" style="padding:10px 20px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Restart Machine</button>
     </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 20px;background:#1e293b;border:1px solid #334155;border-left:3px solid #ef4444;border-radius:12px;margin-bottom:20px;flex-wrap:wrap;">
+      <div><div style="font-size:14px;font-weight:600;color:#f8fafc;">Sample Alert Preview</div><div style="margin-top:5px;font-size:12px;color:#94a3b8;">Temperature High · Device exceeds 58 °C · Email / WhatsApp</div></div>
+      <button onclick="openPushAlertModal()" style="padding:8px 16px;background:#3b82f6;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Push Sample Alert</button>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
       <div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;">
         <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 16px;text-transform:uppercase;letter-spacing:0.5px;">Default Thresholds</h3>
@@ -168,4 +172,47 @@ function saveThresholdModal(){
   machineThresholds[machine] = {low:low, high:high};
   closeThresholdModal();
   renderAlerts(document.getElementById('page-content'));
+}
+
+function alertPushToast(message){
+  let toast = document.getElementById('alert-push-toast');
+  if(!toast){ toast=document.createElement('div'); toast.id='alert-push-toast'; document.body.appendChild(toast); }
+  toast.textContent=message;
+  toast.style.cssText='position:fixed;top:20px;right:20px;z-index:100000;padding:12px 18px;border-radius:8px;color:#e2e8f0;background:#1d4ed8;border:1px solid #3b82f6;box-shadow:0 12px 30px rgba(0,0,0,.35);font-size:13px;font-weight:600;';
+  setTimeout(function(){ if(toast) toast.remove(); }, 3200);
+}
+
+function applyPushTemplate(){
+  const template = (document.getElementById('push-template-input') || {}).value || 'Temperature High';
+  const message = document.getElementById('push-message-input');
+  if(!message) return;
+  if(template === 'Temperature High') message.value = 'Temperature High alert: device exceeded 58 °C.';
+  else if(template === 'Temperature Low') message.value = 'Temperature Low alert: device below 12 °C.';
+  else if(template === 'Device Offline') message.value = 'Device Offline alert: no data received within threshold period.';
+  else message.value = '';
+}
+
+function openPushAlertModal(){
+  const list = getAlertFilteredDevices();
+  const selected = alertFilters.machine || (list[0] ? list[0].id : '');
+  const options = list.map(function(dev){ return '<option value="' + clientEscape(dev.id) + '"' + (dev.id===selected?' selected':'') + '>' + clientEscape(dev.id) + ' · ' + clientEscape(dev.client) + '</option>'; }).join('');
+  let modal = document.getElementById('push-alert-modal');
+  if(!modal){ modal=document.createElement('div'); modal.id='push-alert-modal'; document.body.appendChild(modal); }
+  modal.innerHTML = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;"><div style="width:min(560px,100%);background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5);"><h3 style="margin:0 0 18px;color:#f8fafc;font-size:18px;">Push Alert</h3><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Machine</label><select id="push-device-input" style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;">' + options + '</select><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Alert Template</label><select id="push-template-input" onchange="applyPushTemplate()" style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;"><option>Temperature High</option><option>Temperature Low</option><option>Device Offline</option><option>Custom Message</option></select><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Message</label><textarea id="push-message-input" style="width:100%;box-sizing:border-box;min-height:72px;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;resize:vertical;">Temperature High alert: device exceeded 58 °C.</textarea><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin:14px 0 8px;">Channels</label><label style="display:flex;align-items:center;gap:8px;color:#e2e8f0;font-size:13px;margin-bottom:8px;"><input id="push-channel-email" type="checkbox" checked /> Email</label><label style="display:flex;align-items:center;gap:8px;color:#e2e8f0;font-size:13px;"><input id="push-channel-whatsapp" type="checkbox" checked /> WhatsApp</label><div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;"><button onclick="closePushAlertModal()" style="padding:9px 18px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-size:13px;cursor:pointer;">Cancel</button><button onclick="sendPushAlert()" style="padding:9px 18px;background:#3b82f6;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Send Alert</button></div></div></div>';
+}
+
+function closePushAlertModal(){ const modal=document.getElementById('push-alert-modal'); if(modal) modal.remove(); }
+
+async function sendPushAlert(){
+  const device=(document.getElementById('push-device-input')||{}).value||'';
+  const message=(document.getElementById('push-message-input')||{}).value||'';
+  const emailChecked=!!(document.getElementById('push-channel-email')||{}).checked;
+  const whatsappChecked=!!(document.getElementById('push-channel-whatsapp')||{}).checked;
+  const channels=[]; if(emailChecked)channels.push('email'); if(whatsappChecked)channels.push('whatsapp');
+  if(!channels.length){ alertPushToast('Select at least one channel'); return; }
+  const payload={device:device,type:message.split(':')[0],message:message,channels:channels,email:emailChecked?'admin@platform.hk':'',whatsapp:whatsappChecked?(window.BSF_WHATSAPP_TO||''):''};
+  if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){ try { await window.BSF_API.sendAlertNotification(payload); } catch(error){ alertPushToast('API pending: ' + error.message); return; } }
+  if(window.BSF_NOTIFICATIONS) window.BSF_NOTIFICATIONS.add({id:'push-'+Date.now(),title:'Alert pushed',detail:device+' · '+channels.join(' / ')+' · '+message,time:typeof bsfFormatTime==='function'?bsfFormatTime(Date.now()/1000):new Date().toLocaleString(),read:false});
+  closePushAlertModal();
+  alertPushToast('Alert push started: ' + channels.join(' / '));
 }
