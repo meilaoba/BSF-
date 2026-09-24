@@ -34,7 +34,6 @@ function renderAlerts(container){
             <div style="text-align:right;"><span style="color:#f59e0b;font-weight:700;font-size:16px;">0.25 ppm</span><p style="margin:2px 0 0;font-size:11px;color:#64748b;">Email / WhatsApp to Admin</p></div>
           </div>
         </div>
-        ${currentRole==='admin'?'<button style="width:100%;margin-top:12px;padding:10px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:13px;cursor:pointer;">Edit Thresholds</button>':''}
       </div>
       <div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;">
         <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 16px;text-transform:uppercase;letter-spacing:0.5px;">Alert History</h3>
