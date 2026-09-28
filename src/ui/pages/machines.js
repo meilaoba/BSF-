@@ -1,3 +1,22 @@
+function machinePreviewEscape(value){
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function machineHasCoordinates(device){
+  if(!device) return false;
+  const rawLat = device.lat;
+  const rawLng = device.lng;
+  if(rawLat === null || rawLat === undefined || rawLat === '' || rawLng === null || rawLng === undefined || rawLng === '') return false;
+  const lat = Number(rawLat);
+  const lng = Number(rawLng);
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
 function renderMachines(container){
   const clients = [...new Set(devices.map(dev=>dev.client))];
   const clientDevices = machineFilters.client
@@ -7,6 +26,23 @@ function renderMachines(container){
     ? clientDevices.filter(dev=>dev.id===machineFilters.device)
     : clientDevices;
   const d = filteredDevices[0] || devices[0];
+  const previewDevices = filteredDevices.filter(machineHasCoordinates);
+  const previewLats = previewDevices.map(function(dev){ return Number(dev.lat); });
+  const previewLngs = previewDevices.map(function(dev){ return Number(dev.lng); });
+  const previewMinLat = previewLats.length ? Math.min.apply(null, previewLats) : 0;
+  const previewMaxLat = previewLats.length ? Math.max.apply(null, previewLats) : 0;
+  const previewMinLng = previewLngs.length ? Math.min.apply(null, previewLngs) : 0;
+  const previewMaxLng = previewLngs.length ? Math.max.apply(null, previewLngs) : 0;
+  const previewMarkers = previewDevices.map(function(dev){
+    const latRange = previewMaxLat - previewMinLat || 1;
+    const lngRange = previewMaxLng - previewMinLng || 1;
+    const left = previewDevices.length === 1 ? 50 : 12 + ((Number(dev.lng) - previewMinLng) / lngRange) * 76;
+    const top = previewDevices.length === 1 ? 50 : 12 + ((previewMaxLat - Number(dev.lat)) / latRange) * 76;
+    const status = String(dev.status || 'offline').toLowerCase();
+    const color = status==='online' ? '#10b981' : status==='running' ? '#3b82f6' : status==='standby' ? '#f59e0b' : '#ef4444';
+    return '<div title="' + machinePreviewEscape(dev.id) + ' - ' + machinePreviewEscape(status.toUpperCase()) + '" style="position:absolute;top:' + top.toFixed(2) + '%;left:' + left.toFixed(2) + '%;transform:translate(-50%,-50%);width:14px;height:14px;background:' + color + ';border-radius:50%;box-shadow:0 0 0 4px ' + color + '33;border:2px solid #1e293b;"></div>';
+  }).join('');
+  const previewEmpty = previewDevices.length ? '' : '<p style="color:#64748b;font-size:12px;margin:8px 0 0;">GPS coordinates unavailable</p>';
 
   container.innerHTML = `
     <div style="margin-bottom:24px;">
@@ -71,11 +107,9 @@ function renderMachines(container){
             <div style="font-size:48px;margin-bottom:8px;">📍</div>
             <p style="color:#94a3b8;font-size:13px;margin:0;">${(d.lat === null || d.lng === null) ? '—, —' : d.lat + ', ' + d.lng}</p>
             <p style="color:#64748b;font-size:12px;margin:4px 0 0;">Last update: ${d.lastUpdate}</p>
+            ${previewEmpty}
           </div>
-          <div style="position:absolute;top:20%;left:25%;width:14px;height:14px;background:#10b981;border-radius:50%;box-shadow:0 0 0 4px rgba(16,185,129,0.3);border:2px solid #1e293b;"></div>
-          <div style="position:absolute;top:35%;left:60%;width:14px;height:14px;background:#3b82f6;border-radius:50%;box-shadow:0 0 0 4px rgba(59,130,246,0.3);border:2px solid #1e293b;"></div>
-          <div style="position:absolute;top:55%;left:40%;width:14px;height:14px;background:#ef4444;border-radius:50%;box-shadow:0 0 0 4px rgba(239,68,68,0.3);border:2px solid #1e293b;"></div>
-          <div style="position:absolute;top:45%;left:75%;width:14px;height:14px;background:#f59e0b;border-radius:50%;box-shadow:0 0 0 4px rgba(245,158,11,0.3);border:2px solid #1e293b;"></div>
+          ${previewMarkers}
         </div>
       </div>
     </div>
