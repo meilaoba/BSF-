@@ -1,4 +1,6 @@
 
+let rawDataFilterMessage = '';
+
 function rawDataPaginationHtml(totalPages){
   const current = Math.min(Math.max(rawDataPage,1), Math.max(totalPages,1));
   let html = '<button '+(current<=1?'disabled':'')+' onclick="setRawDataPage('+(current-1)+')" style="padding:6px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:'+(current<=1?'#475569':'#94a3b8')+';font-size:12px;cursor:'+(current<=1?'not-allowed':'pointer')+';">Prev</button>';
@@ -14,8 +16,48 @@ function rawDataPaginationHtml(totalPages){
 function setRawDataPage(page){ rawDataPage=page; renderRawData(document.getElementById('page-content')); }
 
 function rawDataTime(row){ const value=String(row.recordedAt || '').replace(' ','T'); const time=new Date(value).getTime(); return Number.isFinite(time)?time:null; }
+function rawDataUpdateDateLimits(){
+  const startInput=document.getElementById('raw-start-filter');
+  const endInput=document.getElementById('raw-end-filter');
+  if(startInput) startInput.max=rawDataFilters.end || '';
+  if(endInput) endInput.min=rawDataFilters.start || '';
+}
+function rawDataSetStartDate(value){
+  rawDataFilterMessage='';
+  rawDataFilters.start=value || '';
+  if(rawDataFilters.start && rawDataFilters.end && rawDataFilters.start > rawDataFilters.end){
+    rawDataFilters.start=rawDataFilters.end;
+    rawDataFilterMessage='Start date cannot be after end date. It has been adjusted to the end date.';
+  }
+  const input=document.getElementById('raw-start-filter');
+  if(input) input.value=rawDataFilters.start;
+  rawDataUpdateDateLimits();
+}
+function rawDataSetEndDate(value){
+  rawDataFilterMessage='';
+  rawDataFilters.end=value || '';
+  if(rawDataFilters.start && rawDataFilters.end && rawDataFilters.end < rawDataFilters.start){
+    rawDataFilters.end=rawDataFilters.start;
+    rawDataFilterMessage='End date cannot be before start date. It has been adjusted to the start date.';
+  }
+  const input=document.getElementById('raw-end-filter');
+  if(input) input.value=rawDataFilters.end;
+  rawDataUpdateDateLimits();
+}
 function rawDataFilteredRows(){ const clientDevices=rawDataFilters.client?devices.filter(function(dev){return dev.client===rawDataFilters.client;}):devices; const ids=new Set(clientDevices.map(function(dev){return dev.id;})); const startTime=rawDataFilters.start?new Date(rawDataFilters.start).getTime():null; const endTime=rawDataFilters.end?new Date(rawDataFilters.end).getTime():null; return rawDataRows.filter(function(row){ if(rawDataFilters.client&&!ids.has(row.device))return false; if(rawDataFilters.device&&row.device!==rawDataFilters.device)return false; const time=rawDataTime(row); if(startTime!==null&&time!==null&&time<startTime)return false; if(endTime!==null&&time!==null&&time>endTime)return false; return true; }); }
-function applyRawDataFilter(){ rawDataFilters.start=(document.getElementById('raw-start-filter')||{}).value||''; rawDataFilters.end=(document.getElementById('raw-end-filter')||{}).value||''; rawDataPage=1; renderRawData(document.getElementById('page-content')); }
+function applyRawDataFilter(){
+  let start=(document.getElementById('raw-start-filter')||{}).value||'';
+  let end=(document.getElementById('raw-end-filter')||{}).value||'';
+  rawDataFilterMessage='';
+  if(start && end && start > end){
+    end=start;
+    rawDataFilterMessage='Start date cannot be after end date. End date has been adjusted.';
+  }
+  rawDataFilters.start=start;
+  rawDataFilters.end=end;
+  rawDataPage=1;
+  renderRawData(document.getElementById('page-content'));
+}
 function rawCsvCell(value){ return '"' + String(value===undefined||value===null?'':value).replace(/"/g,'""') + '"'; }
 function rawDataToast(message){ let toast=document.getElementById('raw-data-toast'); if(!toast){toast=document.createElement('div');toast.id='raw-data-toast';document.body.appendChild(toast);} toast.textContent=message; toast.style.cssText='position:fixed;top:20px;right:20px;z-index:100000;padding:12px 18px;border-radius:8px;color:#e2e8f0;background:#065f46;border:1px solid #10b981;box-shadow:0 12px 30px rgba(0,0,0,.35);font-size:13px;font-weight:600;'; setTimeout(function(){if(toast)toast.remove();},3000); }
 function exportRawDataCsv(){ const rows=rawDataFilteredRows(); const head=['Recorded At','Device','State','Ferment','Weight(kg)','Temp(°C)','Hum(%)','Energy(kWh)','CO2(ppm)','NO2(ppm)','H2S(ppm)','Signal']; const body=rows.map(function(row){return [row.recordedAt,row.device,row.deviceState,row.fermentState,row.weight,row.temperature,row.humidity,row.energy,row.co2,row.no2,row.h2s,row.signal];}); const csv=[head].concat(body).map(function(row){return row.map(rawCsvCell).join(',');}).join('\r\n'); const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const link=document.createElement('a'); link.href=url; link.download='bsf-raw-data-'+new Date().toISOString().slice(0,10)+'.csv'; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url); rawDataToast('Raw Data CSV export started'); }
@@ -27,11 +69,12 @@ function populateRawDataFilters(clients, clientDevices){
     clientSelect.innerHTML = '<option value="">All Clients</option>' + clients.map(client=>'<option value="'+client+'"'+(rawDataFilters.client===client?' selected':'')+'>'+client+'</option>').join('');
   }
   if(deviceSelect){
-    deviceSelect.innerHTML = '<option value="">All Devices</option>' + clientDevices.map(dev=>'<option value="'+dev.id+'"'+(rawDataFilters.device===dev.id?' selected':'')+'>'+dev.id+'</option>').join('');
+    deviceSelect.innerHTML = '<option value="">All Machines</option>' + clientDevices.map(dev=>'<option value="'+dev.id+'"'+(rawDataFilters.device===dev.id?' selected':'')+'>'+dev.id+'</option>').join('');
   }
 }
 function renderRawData(container){
   const clients = [...new Set(devices.map(dev=>dev.client))];
+  const clientDevices = rawDataFilters.client ? devices.filter(dev=>dev.client===rawDataFilters.client) : devices;
   const filteredRows = rawDataFilteredRows();
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / RAW_DATA_PAGE_SIZE));
   if(rawDataPage > totalPages) rawDataPage = totalPages;
@@ -50,13 +93,24 @@ function renderRawData(container){
         <select id="raw-client-filter" onchange="rawDataFilters.client=this.value;rawDataFilters.device='';rawDataPage=1;renderRawData(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:240px;"></select>
       </label>
     </div>
-    <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
-      <select id="raw-device-filter" onchange="rawDataFilters.device=this.value;rawDataPage=1;renderRawData(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"></select>
-      <input id="raw-start-filter" type="datetime-local" value="${rawDataFilters.start || ''}" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
-      <input id="raw-end-filter" type="datetime-local" value="${rawDataFilters.end || ''}" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end;">
+      <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
+        Machine Filter
+        <select id="raw-device-filter" onchange="rawDataFilters.device=this.value;rawDataPage=1;renderRawData(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"></select>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
+        Start Date
+        <input id="raw-start-filter" type="datetime-local" value="${rawDataFilters.start || ''}" max="${rawDataFilters.end || ''}" onchange="rawDataSetStartDate(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
+      </label>
+      <span style="color:#64748b;display:flex;align-items:center;padding-bottom:11px;">to</span>
+      <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
+        End Date
+        <input id="raw-end-filter" type="datetime-local" value="${rawDataFilters.end || ''}" min="${rawDataFilters.start || ''}" onchange="rawDataSetEndDate(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
+      </label>
       <button style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;" onclick="applyRawDataFilter()">Filter</button>
       <button style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;" onclick="exportRawDataCsv()">Export CSV</button>
     </div>
+    <p id="raw-date-validation" style="min-height:18px;margin:0 0 12px;color:${rawDataFilterMessage ? '#f59e0b' : 'transparent'};font-size:12px;">${rawDataFilterMessage || '.'}</p>
     <div style="background:#1e293b;border-radius:12px;border:1px solid #334155;overflow:hidden;">
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
