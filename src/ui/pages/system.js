@@ -8,7 +8,7 @@ function renderSystem(container){
       <div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;">
         <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 16px;text-transform:uppercase;letter-spacing:0.5px;">General Settings</h3>
         <div style="display:flex;flex-direction:column;gap:14px;">
-          <div><label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Company Name</label><input type="text" value="IoT Tech Systems" style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" /></div>
+          <div><label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Client Name</label><input type="text" value="IoT Tech Systems" style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" /></div>
           <div><label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Timezone</label><select style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option>Asia/Hong_Kong (UTC+8)</option><option>UTC</option></select></div>
           <div><label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Language</label><select style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option>English</option><option>中文</option></select></div>
         </div>
