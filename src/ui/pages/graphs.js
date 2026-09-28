@@ -48,7 +48,7 @@ function graphFilteredRawRows(){
 }
 
 function graphClientOptions(){
-  return Array.from(new Set(devices.map(function(device){ return device.client; }).filter(Boolean))).sort();
+  return scopedClientNames().sort();
 }
 
 function graphMachineOptions(){
@@ -226,7 +226,8 @@ function renderGraphs(container){
       '<div style="display:flex;justify-content:space-between;margin-top:8px;"><span style="font-size:12px;color:#64748b;">Unit: ' + unit + '</span><span style="font-size:12px;color:#64748b;">Avg: ' + avgValue + ' ' + unit + '</span></div></div>';
   }
 
-  const clientOptions = ['<option value="">All Clients</option>'].concat(graphClientOptions().map(function(client){
+  const clientScoped = isClientScopedRole();
+  const clientOptions = (clientScoped ? [] : ['<option value="">All Clients</option>']).concat(graphClientOptions().map(function(client){
     return '<option value="' + graphEscape(client) + '"' + (graphFilters.client === client ? ' selected' : '') + '>' + graphEscape(client) + '</option>';
   })).join('');
   const machineOptions = ['<option value="">All Machines</option>'].concat(graphMachineOptions().map(function(device){
@@ -241,7 +242,7 @@ function renderGraphs(container){
     <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end;">
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
         Client Filter
-        <select id="graph-client-filter" onchange="graphSetClient(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:190px;">${clientOptions}</select>
+        <select id="graph-client-filter" ${clientScoped?'disabled':''} onchange="graphSetClient(this.value)" style="padding:10px 16px;background:${clientScoped?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${clientScoped?'#94a3b8':'#e2e8f0'};font-size:14px;min-width:190px;cursor:${clientScoped?'not-allowed':'pointer'};">${clientOptions}</select>
       </label>
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
         Machine Filter

@@ -14,12 +14,14 @@ async function login(){
   const roleMeta = { admin:{label:'Master Admin'}, 'client-admin':{label:'Client Admin'}, user:{label:'User'} };
   const roleInfo = roleMeta[currentRole] || roleMeta.user;
   const loginName = (document.getElementById('login-username') || {}).value || roleInfo.label;
+  currentUsername = loginName;
   document.getElementById('role-badge').textContent = roleInfo.label;
   document.getElementById('user-name').textContent = loginName;
   const initials = loginName.replace(/@.*/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || roleInfo.label.slice(0, 2).toUpperCase();
   document.getElementById('user-avatar').textContent = initials;
   renderNav();
   await loadDataForCurrentRole();
+  applyClientScopeToState();
   scheduleDataRefresh();
   navigate('machines');
 }
@@ -28,6 +30,7 @@ async function loadDataForCurrentRole(){
   if(!window.BSF_LOAD_GATEWAY_DATA) return false;
   const limit = currentRole === 'admin' ? 100 : 1;
   const loaded = await window.BSF_LOAD_GATEWAY_DATA(limit);
+  applyClientScopeToState();
   if(window.BSF_NOTIFICATIONS) window.BSF_NOTIFICATIONS.syncFromAlerts();
   return loaded;
 }
@@ -45,6 +48,8 @@ function scheduleDataRefresh(){
 function logout(){
   if(dataRefreshTimer) clearInterval(dataRefreshTimer);
   dataRefreshTimer = null;
+  currentUsername = '';
+  currentClient = '';
   document.getElementById('main-app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
 }

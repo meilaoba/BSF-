@@ -51,8 +51,9 @@ function reportMonthOptions(){
 }
 
 function reportFilterOptions(){
-  const clients = [...new Set(devices.map(function(dev){ return dev.client || 'Unassigned'; }))];
-  const clientOptions = '<option value="">All Clients</option>' + clients.map(function(client){
+  const clients = scopedClientNames();
+  const clientScoped = isClientScopedRole();
+  const clientOptions = (clientScoped ? '' : '<option value="">All Clients</option>') + clients.map(function(client){
     return '<option value="' + client + '"' + (reportFilters.client===client?' selected':'') + '>' + client + '</option>';
   }).join('');
   const availableDevices = reportFilters.client ? devices.filter(function(dev){ return dev.client===reportFilters.client; }) : devices;
@@ -126,7 +127,7 @@ function renderReports(container){
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Report Generation</h2>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;align-items:center;">
-      <select onchange="setReportFilter('client',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">${options.clientOptions}</select>
+      <select ${isClientScopedRole()?'disabled':''} onchange="setReportFilter('client',this.value)" style="padding:10px 16px;background:${isClientScopedRole()?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${isClientScopedRole()?'#94a3b8':'#e2e8f0'};font-size:14px;cursor:${isClientScopedRole()?'not-allowed':'pointer'};">${options.clientOptions}</select>
       <select onchange="setReportFilter('period',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option value="monthly"${reportFilters.period==='monthly'?' selected':''}>Monthly Report</option><option value="yearly"${reportFilters.period==='yearly'?' selected':''}>Yearly Report</option></select>
       ${reportFilters.period === 'monthly' ? '<select id="report-month-filter" onchange="setReportFilter(\'month\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportMonthOptions() + '</select>' : ''}
       ${reportFilters.period === 'yearly' ? '<select id="report-year-filter" onchange="setReportFilter(\'year\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportYearOptions() + '</select>' : ''}

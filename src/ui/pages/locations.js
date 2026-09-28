@@ -30,8 +30,9 @@ async function initGoogleMapLocations(){
   if(bg) bg.remove();
   document.querySelectorAll('.locations-static-marker').forEach(el=>el.remove());
 
-  const center = devices.length
-    ? {lat:devices[0].lat, lng:devices[0].lng}
+  const scopedMapDevices = scopedDevices();
+  const center = scopedMapDevices.length
+    ? {lat:scopedMapDevices[0].lat, lng:scopedMapDevices[0].lng}
     : {lat:22.3193, lng:114.1694};
 
   locationsMap = new window.google.maps.Map(canvas, {
@@ -43,7 +44,7 @@ async function initGoogleMapLocations(){
   });
 
   const colorOf = status => status==='online' ? '#10b981' : status==='running' ? '#3b82f6' : status==='standby' ? '#f59e0b' : '#ef4444';
-  devices.forEach(dev=>{
+  scopedMapDevices.forEach(dev=>{
     const marker = new window.google.maps.Marker({
       position:{lat:dev.lat,lng:dev.lng},
       map: locationsMap,
@@ -65,8 +66,11 @@ async function initGoogleMapLocations(){
 }
 
 function renderLocations(container){
-  const clientOptions = [...new Set(devices.map(function(dev){ return dev.client; }))].map(function(client){ return '<option>'+client+'</option>'; }).join('');
-  const positioned = devices.filter(function(dev){ return Number.isFinite(dev.lat) && Number.isFinite(dev.lng); });
+  const locationDevices = scopedDevices();
+  const clientScoped = isClientScopedRole();
+  const clientNames = scopedClientNames();
+  const clientOptions = clientNames.map(function(client){ return '<option'+(clientScoped?' selected':'')+'>'+client+'</option>'; }).join('');
+  const positioned = locationDevices.filter(function(dev){ return Number.isFinite(dev.lat) && Number.isFinite(dev.lng); });
   const markerHtml = positioned.map(function(dev, i){
     const top = 25 + (i % 4) * 15;
     const left = 30 + (i % 5) * 12;
@@ -81,7 +85,7 @@ function renderLocations(container){
     </div>
     <div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;margin-bottom:20px;">
       <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-        <select style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option>All Clients</option>${clientOptions}</select>
+        <select ${clientScoped?'disabled':''} style="padding:10px 16px;background:${clientScoped?'#111827':'#0f172a'};border:1px solid #334155;border-radius:8px;color:${clientScoped?'#94a3b8':'#e2e8f0'};font-size:14px;cursor:${clientScoped?'not-allowed':'pointer'};">${clientScoped ? clientOptions : '<option>All Clients</option>'+clientOptions}</select>
         <select style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option>All Status</option><option>Online</option><option>Offline</option><option>Running</option><option>Standby</option></select>
         <input type="text" placeholder="Search device..." style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:200px;" />
       </div>
@@ -100,7 +104,7 @@ function renderLocations(container){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
-      ${devices.map(dev=>`
+      ${locationDevices.map(dev=>`
         <div style="background:#1e293b;border-radius:12px;padding:16px;border:1px solid #334155;">
           <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
             <div>

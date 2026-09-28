@@ -66,14 +66,20 @@ function populateRawDataFilters(clients, clientDevices){
   const clientSelect = document.getElementById('raw-client-filter');
   const deviceSelect = document.getElementById('raw-device-filter');
   if(clientSelect){
-    clientSelect.innerHTML = '<option value="">All Clients</option>' + clients.map(client=>'<option value="'+client+'"'+(rawDataFilters.client===client?' selected':'')+'>'+client+'</option>').join('');
+    const scoped = isClientScopedRole();
+    clientSelect.innerHTML = (scoped ? '' : '<option value="">All Clients</option>') + clients.map(client=>'<option value="'+client+'"'+(rawDataFilters.client===client?' selected':'')+'>'+client+'</option>').join('');
+    clientSelect.disabled = scoped;
+    clientSelect.style.background = scoped ? '#111827' : '#1e293b';
+    clientSelect.style.color = scoped ? '#94a3b8' : '#e2e8f0';
+    clientSelect.style.cursor = scoped ? 'not-allowed' : 'pointer';
   }
   if(deviceSelect){
     deviceSelect.innerHTML = '<option value="">All Machines</option>' + clientDevices.map(dev=>'<option value="'+dev.id+'"'+(rawDataFilters.device===dev.id?' selected':'')+'>'+dev.id+'</option>').join('');
   }
 }
 function renderRawData(container){
-  const clients = [...new Set(devices.map(dev=>dev.client))];
+  const clients = scopedClientNames();
+  const clientScoped = isClientScopedRole();
   const clientDevices = rawDataFilters.client ? devices.filter(dev=>dev.client===rawDataFilters.client) : devices;
   const filteredRows = rawDataFilteredRows();
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / RAW_DATA_PAGE_SIZE));

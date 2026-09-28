@@ -91,9 +91,14 @@ function filteredAlerts(){
 function populateAlertFilters(){
   const clientSelect = document.getElementById('alert-client-filter');
   const machineSelect = document.getElementById('alert-machine-filter');
-  const clients = [...new Set(devices.map(function(dev){ return dev.client; }))];
+  const clients = scopedClientNames();
   if(clientSelect){
-    clientSelect.innerHTML = '<option value="">All Clients</option>' + clients.map(function(client){ return '<option value="'+client+'"'+(alertFilters.client===client?' selected':'')+'>'+client+'</option>'; }).join('');
+    const scoped = isClientScopedRole();
+    clientSelect.innerHTML = (scoped ? '' : '<option value="">All Clients</option>') + clients.map(function(client){ return '<option value="'+client+'"'+(alertFilters.client===client?' selected':'')+'>'+client+'</option>'; }).join('');
+    clientSelect.disabled = scoped;
+    clientSelect.style.background = scoped ? '#111827' : '#1e293b';
+    clientSelect.style.color = scoped ? '#94a3b8' : '#e2e8f0';
+    clientSelect.style.cursor = scoped ? 'not-allowed' : 'pointer';
   }
   const list = alertFilters.client ? devices.filter(function(dev){ return dev.client===alertFilters.client; }) : devices;
   if(machineSelect){

@@ -1,7 +1,7 @@
 let userRecords = [];
 
 function renderUsers(container){
-  const users = userRecords;
+  const users = isClientScopedRole() ? userRecords.filter(function(user){ return user.client === currentClient; }) : userRecords;
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">User Management</h2>
@@ -41,12 +41,13 @@ function renderUsers(container){
 }
 
 function userClientOptions(selected){
-  const names = ['All'].concat(clientRecords.map(function(c){ return c.name; }));
-  return names.map(function(name){ return '<option value="' + clientEscape(name) + '"' + (selected===name?' selected':'') + '>' + clientEscape(name) + '</option>'; }).join('');
+  const scoped = isClientScopedRole();
+  const names = scoped ? [currentClient] : ['All'].concat(clientRecords.map(function(c){ return c.name; }));
+  return names.map(function(name){ return '<option value="' + clientEscape(name) + '"' + ((selected===name || (scoped && !selected)) ? ' selected':'') + '>' + clientEscape(name) + '</option>'; }).join('');
 }
 
 function userMachineOptions(clientName, selected){
-  const list = clientName && clientName !== 'All' ? devices.filter(function(dev){ return dev.client===clientName; }) : devices;
+  const list = clientName && clientName !== 'All' ? scopedDevices().filter(function(dev){ return dev.client===clientName; }) : scopedDevices();
   return '<option value="">None</option>' + list.map(function(dev){ return '<option value="' + clientEscape(dev.id) + '"' + (selected===dev.id?' selected':'') + '>' + clientEscape(dev.id) + '</option>'; }).join('');
 }
 
@@ -64,7 +65,10 @@ function openUserModal(index){
   if(!modal){ modal = document.createElement('div'); modal.id='user-modal'; document.body.appendChild(modal); }
   modal.dataset.editIndex = isEdit ? String(index) : '';
   const roles = ['Master Admin','Client Admin','User'].map(function(role){ return '<option value="' + role + '"' + (user.role===role?' selected':'') + '>' + role + '</option>'; }).join('');
-  modal.innerHTML = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;"><div style="width:min(560px,100%);background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5);"><h3 style="margin:0 0 18px;color:#f8fafc;font-size:18px;">' + (isEdit ? 'Edit User' : 'Add User') + '</h3><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Name</label><input id="user-name-input" value="' + clientEscape(user.name) + '" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" /><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Email</label><input id="user-email-input" value="' + clientEscape(user.email) + '" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" /><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Role</label><select id="user-role-input" style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;">' + roles + '</select><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Client</label><select id="user-client-input" onchange="syncUserMachineOptions()" style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;">' + userClientOptions(user.client) + '</select><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Machine</label><select id="user-machine-input" style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + userMachineOptions(user.client, user.machineId) + '</select><div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;"><button onclick="closeUserModal()" style="padding:9px 18px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-size:13px;cursor:pointer;">Cancel</button><button onclick="saveUserModal()" style="padding:9px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save</button></div></div></div>';
+  const clientScoped = isClientScopedRole();
+  const clientSelectAttrs = clientScoped ? ' disabled' : '';
+  const clientSelectStyle = clientScoped ? 'background:#111827;color:#94a3b8;cursor:not-allowed;' : 'background:#0f172a;color:#e2e8f0;cursor:pointer;';
+  modal.innerHTML = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;"><div style="width:min(560px,100%);background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5);"><h3 style="margin:0 0 18px;color:#f8fafc;font-size:18px;">' + (isEdit ? 'Edit User' : 'Add User') + '</h3><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Name</label><input id="user-name-input" value="' + clientEscape(user.name) + '" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" /><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Email</label><input id="user-email-input" value="' + clientEscape(user.email) + '" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" /><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Role</label><select id="user-role-input" style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;">' + roles + '</select><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Client</label><select id="user-client-input"' + clientSelectAttrs + ' onchange="syncUserMachineOptions()" style="width:100%;padding:10px 14px;'+clientSelectStyle+'border:1px solid #334155;border-radius:8px;font-size:14px;margin-bottom:14px;">' + userClientOptions(user.client) + '</select><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Machine</label><select id="user-machine-input" style="width:100%;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + userMachineOptions(user.client, user.machineId) + '</select><div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;"><button onclick="closeUserModal()" style="padding:9px 18px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-size:13px;cursor:pointer;">Cancel</button><button onclick="saveUserModal()" style="padding:9px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save</button></div></div></div>';
 }
 
 function closeUserModal(){ const modal=document.getElementById('user-modal'); if(modal) modal.remove(); }
@@ -74,7 +78,7 @@ async function saveUserModal(){
   const name=(document.getElementById('user-name-input')||{}).value ? document.getElementById('user-name-input').value.trim() : '';
   const email=(document.getElementById('user-email-input')||{}).value ? document.getElementById('user-email-input').value.trim() : '';
   const role=(document.getElementById('user-role-input')||{}).value || 'User';
-  const client=(document.getElementById('user-client-input')||{}).value || '';
+  const client=isClientScopedRole() ? currentClient : ((document.getElementById('user-client-input')||{}).value || '');
   const machineId=(document.getElementById('user-machine-input')||{}).value || '';
   if(!name || !email){ alert('Name and Email are required'); return; }
   const editIndex=modal.dataset.editIndex===''?-1:Number(modal.dataset.editIndex);
