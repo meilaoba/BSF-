@@ -94,10 +94,7 @@ function renderRawData(container){
       <p style="color:#64748b;font-size:14px;margin:0;">Telemetry and sensor raw records from all connected devices</p>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-      <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
-        Client Filter
-        <select id="raw-client-filter" onchange="rawDataFilters.client=this.value;rawDataFilters.device='';rawDataPage=1;renderRawData(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:240px;"></select>
-      </label>
+      ${clientScoped ? clientScopeBadge() : '<label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Client Filter<select id="raw-client-filter" onchange="rawDataFilters.client=this.value;rawDataFilters.device=\'\';rawDataPage=1;renderRawData(document.getElementById(\'page-content\'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:240px;"></select></label>'}
     </div>
     <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end;">
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">

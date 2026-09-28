@@ -51,13 +51,7 @@ function renderMachines(container){
       <p style="color:#64748b;font-size:14px;margin:0;">Real-time monitoring of all connected kitchen waste units</p>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;align-items:flex-end;">
-      <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
-        Client Filter
-        <select ${clientScoped?'disabled':''} onchange="machineFilters.client=this.value;machineFilters.device='';renderMachines(document.getElementById('page-content'));" style="padding:10px 16px;background:${clientScoped?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${clientScoped?'#94a3b8':'#e2e8f0'};font-size:14px;min-width:220px;cursor:${clientScoped?'not-allowed':'pointer'};">
-          ${clientScoped ? '' : '<option value="" ' + (machineFilters.client===''?'selected':'') + '>All Clients</option>'}
-          ${clients.map(client=>`<option value="${client}" ${machineFilters.client===client?'selected':''}>${client}</option>`).join('')}
-        </select>
-      </label>
+      ${clientScoped ? clientScopeBadge() : '<label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Client Filter<select onchange="machineFilters.client=this.value;machineFilters.device=\'\';renderMachines(document.getElementById(\'page-content\'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"><option value="" ' + (machineFilters.client===''?'selected':'') + '>All Clients</option>' + clients.map(function(client){ return '<option value="'+client+'" '+(machineFilters.client===client?'selected':'')+'>'+client+'</option>'; }).join('') + '</select></label>'}
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
         Machine Filter
         <select onchange="machineFilters.device=this.value;renderMachines(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;">

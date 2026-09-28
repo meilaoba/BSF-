@@ -240,10 +240,7 @@ function renderGraphs(container){
       <p style="color:#64748b;font-size:14px;margin:0;">Visualize trends across temperature, humidity, weight, energy and carbon reduction</p>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end;">
-      <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
-        Client Filter
-        <select id="graph-client-filter" ${clientScoped?'disabled':''} onchange="graphSetClient(this.value)" style="padding:10px 16px;background:${clientScoped?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${clientScoped?'#94a3b8':'#e2e8f0'};font-size:14px;min-width:190px;cursor:${clientScoped?'not-allowed':'pointer'};">${clientOptions}</select>
-      </label>
+      ${clientScoped ? clientScopeBadge() : '<label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Client Filter<select id="graph-client-filter" onchange="graphSetClient(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:190px;">' + clientOptions + '</select></label>'}
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
         Machine Filter
         <select id="graph-machine-filter" onchange="graphSetMachine(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:190px;">${machineOptions}</select>

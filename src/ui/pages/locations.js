@@ -85,7 +85,7 @@ function renderLocations(container){
     </div>
     <div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;margin-bottom:20px;">
       <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-        <select ${clientScoped?'disabled':''} style="padding:10px 16px;background:${clientScoped?'#111827':'#0f172a'};border:1px solid #334155;border-radius:8px;color:${clientScoped?'#94a3b8':'#e2e8f0'};font-size:14px;cursor:${clientScoped?'not-allowed':'pointer'};">${clientScoped ? clientOptions : '<option>All Clients</option>'+clientOptions}</select>
+        ${clientScoped ? clientScopeBadge() : '<select style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option>All Clients</option>' + clientOptions + '</select>'}
         <select style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option>All Status</option><option>Online</option><option>Offline</option><option>Running</option><option>Standby</option></select>
         <input type="text" placeholder="Search device..." style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:200px;" />
       </div>

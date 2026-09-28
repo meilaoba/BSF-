@@ -58,6 +58,18 @@ function applyClientScopeToState(){
   if(typeof reportFilters !== 'undefined'){ reportFilters.client = client; reportFilters.device = ''; }
 }
 
+function clientScopeName(){
+  const client = refreshClientScope() || 'Unassigned';
+  return String(client).replace(/[&<>"']/g, function(ch){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+  });
+}
+
+function clientScopeBadge(){
+  if(!isClientScopedRole()) return '';
+  return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-left:3px solid #10b981;border-radius:8px;color:#e2e8f0;font-size:13px;min-width:210px;"><span style="color:#94a3b8;font-weight:600;">Current Client</span><strong style="color:#10b981;">' + clientScopeName() + '</strong></div>';
+}
+
 const navItems = {
   admin: [
     {id:'machines',label:'Machines',icon:'⚙️'},
