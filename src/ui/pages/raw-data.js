@@ -44,7 +44,7 @@ function rawDataSetEndDate(value){
   if(input) input.value=rawDataFilters.end;
   rawDataUpdateDateLimits();
 }
-function rawDataFilteredRows(){ const clientDevices=rawDataFilters.client?devices.filter(function(dev){return dev.client===rawDataFilters.client;}):devices; const ids=new Set(clientDevices.map(function(dev){return dev.id;})); const startTime=rawDataFilters.start?new Date(rawDataFilters.start).getTime():null; const endTime=rawDataFilters.end?new Date(rawDataFilters.end).getTime():null; return rawDataRows.filter(function(row){ if(rawDataFilters.client&&!ids.has(row.device))return false; if(rawDataFilters.device&&row.device!==rawDataFilters.device)return false; const time=rawDataTime(row); if(startTime!==null&&time!==null&&time<startTime)return false; if(endTime!==null&&time!==null&&time>endTime)return false; return true; }); }
+function rawDataFilteredRows(){ const clientDevices=scopedDevices(); const ids=new Set(clientDevices.map(function(dev){return dev.id;})); const startTime=rawDataFilters.start?new Date(rawDataFilters.start).getTime():null; const endTime=rawDataFilters.end?new Date(rawDataFilters.end).getTime():null; return rawDataRows.filter(function(row){ if(rawDataFilters.client&&!ids.has(row.device))return false; if(rawDataFilters.device&&row.device!==rawDataFilters.device)return false; const time=rawDataTime(row); if(startTime!==null&&time!==null&&time<startTime)return false; if(endTime!==null&&time!==null&&time>endTime)return false; return true; }); }
 function applyRawDataFilter(){
   let start=(document.getElementById('raw-start-filter')||{}).value||'';
   let end=(document.getElementById('raw-end-filter')||{}).value||'';
@@ -74,13 +74,18 @@ function populateRawDataFilters(clients, clientDevices){
     clientSelect.style.cursor = scoped ? 'not-allowed' : 'pointer';
   }
   if(deviceSelect){
-    deviceSelect.innerHTML = '<option value="">All Machines</option>' + clientDevices.map(dev=>'<option value="'+dev.id+'"'+(rawDataFilters.device===dev.id?' selected':'')+'>'+dev.id+'</option>').join('');
+    const userRole = isUserRole();
+    deviceSelect.innerHTML = (userRole ? '' : '<option value="">All Machines</option>') + clientDevices.map(dev=>'<option value="'+dev.id+'"'+(rawDataFilters.device===dev.id?' selected':'')+'>'+dev.id+'</option>').join('');
+    deviceSelect.disabled = userRole;
+    deviceSelect.style.background = userRole ? '#111827' : '#1e293b';
+    deviceSelect.style.color = userRole ? '#94a3b8' : '#e2e8f0';
+    deviceSelect.style.cursor = userRole ? 'not-allowed' : 'pointer';
   }
 }
 function renderRawData(container){
   const clients = scopedClientNames();
   const clientScoped = isClientScopedRole();
-  const clientDevices = rawDataFilters.client ? devices.filter(dev=>dev.client===rawDataFilters.client) : devices;
+  const clientDevices = scopedDevices();
   const filteredRows = rawDataFilteredRows();
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / RAW_DATA_PAGE_SIZE));
   if(rawDataPage > totalPages) rawDataPage = totalPages;
@@ -98,7 +103,7 @@ function renderRawData(container){
     </div>
     <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end;">
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
-        Machine Filter
+        ${isUserRole() ? 'Machine' : 'Machine Filter'}
         <select id="raw-device-filter" onchange="rawDataFilters.device=this.value;rawDataPage=1;renderRawData(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"></select>
       </label>
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">

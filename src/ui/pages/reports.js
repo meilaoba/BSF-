@@ -22,7 +22,9 @@ function reportPeriodRange(){
 
 function reportRowsForPeriod(){
   const range = reportPeriodRange();
+  const visibleIds = new Set(scopedDevices().map(function(device){ return device.id; }));
   return rawDataRows.filter(function(row){
+    if(!visibleIds.has(row.device)) return false;
     const dateText = String(row.recordedAt || '').slice(0,10);
     if(!dateText || dateText < range.start || dateText > range.end) return false;
     if(reportFilters.client){
@@ -56,8 +58,8 @@ function reportFilterOptions(){
   const clientOptions = (clientScoped ? '' : '<option value="">All Clients</option>') + clients.map(function(client){
     return '<option value="' + client + '"' + (reportFilters.client===client?' selected':'') + '>' + client + '</option>';
   }).join('');
-  const availableDevices = reportFilters.client ? devices.filter(function(dev){ return dev.client===reportFilters.client; }) : devices;
-  const deviceOptions = '<option value="">All Devices</option>' + availableDevices.map(function(dev){
+  const availableDevices = scopedDevices();
+  const deviceOptions = (isUserRole() ? '' : '<option value="">All Devices</option>') + availableDevices.map(function(dev){
     return '<option value="' + dev.id + '"' + (reportFilters.device===dev.id?' selected':'') + '>' + dev.id + '</option>';
   }).join('');
   return { clientOptions:clientOptions, deviceOptions:deviceOptions };
@@ -131,7 +133,7 @@ function renderReports(container){
       <select onchange="setReportFilter('period',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option value="monthly"${reportFilters.period==='monthly'?' selected':''}>Monthly Report</option><option value="yearly"${reportFilters.period==='yearly'?' selected':''}>Yearly Report</option></select>
       ${reportFilters.period === 'monthly' ? '<select id="report-month-filter" onchange="setReportFilter(\'month\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportMonthOptions() + '</select>' : ''}
       ${reportFilters.period === 'yearly' ? '<select id="report-year-filter" onchange="setReportFilter(\'year\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportYearOptions() + '</select>' : ''}
-      <select onchange="setReportFilter('device',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">${options.deviceOptions}</select>
+      <select ${isUserRole()?'disabled':''} onchange="setReportFilter('device',this.value)" style="padding:10px 16px;background:${isUserRole()?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${isUserRole()?'#94a3b8':'#e2e8f0'};font-size:14px;cursor:${isUserRole()?'not-allowed':'pointer'};">${options.deviceOptions}</select>
       <button onclick="generateReportPreview()" style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Generate Preview</button>
     </div>
     <div id="report-preview" style="background:#1e293b;border-radius:12px;padding:32px;border:1px solid #334155;max-width:900px;margin:0 auto;">

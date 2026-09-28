@@ -34,7 +34,9 @@ function ensureGraphDateFilters(){
 
 function graphFilteredRawRows(){
   ensureGraphDateFilters();
+  const visibleIds = new Set(scopedDevices().map(function(device){ return device.id; }));
   return rawDataRows.filter(function(row){
+    if(!visibleIds.has(row.device)) return false;
     const dateText = String(row.recordedAt || '').slice(0,10);
     if(graphFilters.start && dateText < graphFilters.start) return false;
     if(graphFilters.end && dateText > graphFilters.end) return false;
@@ -52,9 +54,7 @@ function graphClientOptions(){
 }
 
 function graphMachineOptions(){
-  return devices.filter(function(device){
-    return !graphFilters.client || device.client === graphFilters.client;
-  });
+  return scopedDevices();
 }
 
 function graphPeriodFilterMarkup(){
@@ -230,7 +230,7 @@ function renderGraphs(container){
   const clientOptions = (clientScoped ? [] : ['<option value="">All Clients</option>']).concat(graphClientOptions().map(function(client){
     return '<option value="' + graphEscape(client) + '"' + (graphFilters.client === client ? ' selected' : '') + '>' + graphEscape(client) + '</option>';
   })).join('');
-  const machineOptions = ['<option value="">All Machines</option>'].concat(graphMachineOptions().map(function(device){
+  const machineOptions = (isUserRole() ? [] : ['<option value="">All Machines</option>']).concat(graphMachineOptions().map(function(device){
     return '<option value="' + graphEscape(device.id) + '"' + (graphFilters.machine === device.id ? ' selected' : '') + '>' + graphEscape(device.id) + '</option>';
   })).join('');
 
@@ -242,8 +242,8 @@ function renderGraphs(container){
     <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end;">
       ${clientScoped ? clientScopeBadge() : '<label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Client Filter<select id="graph-client-filter" onchange="graphSetClient(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:190px;">' + clientOptions + '</select></label>'}
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
-        Machine Filter
-        <select id="graph-machine-filter" onchange="graphSetMachine(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:190px;">${machineOptions}</select>
+        Machine
+        <select id="graph-machine-filter" ${isUserRole()?'disabled':''} onchange="graphSetMachine(this.value)" style="padding:10px 16px;background:${isUserRole()?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${isUserRole()?'#94a3b8':'#e2e8f0'};font-size:14px;min-width:190px;cursor:${isUserRole()?'not-allowed':'pointer'};">${machineOptions}</select>
       </label>
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
         Start Date

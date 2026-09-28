@@ -51,6 +51,7 @@ function logout(){
   dataRefreshTimer = null;
   currentUsername = '';
   currentClient = '';
+  currentMachineId = '';
   document.getElementById('main-app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
 }

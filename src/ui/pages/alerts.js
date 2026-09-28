@@ -6,7 +6,7 @@ function renderAlerts(container){
     </div>
     <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:flex-end;">
       ${isClientScopedRole() ? clientScopeBadge() : '<label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Client Filter<select id="alert-client-filter" onchange="alertFilters.client=this.value;alertFilters.machine=\'\';renderAlerts(document.getElementById(\'page-content\'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"></select></label>'}
-      <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Machine Filter
+      <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">${isUserRole() ? 'Machine' : 'Machine Filter'}
         <select id="alert-machine-filter" onchange="alertFilters.machine=this.value;renderAlerts(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"></select>
       </label>
       ${currentRole === 'admin' ? '<button onclick="openThresholdModal()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Edit the threshold of each machine</button>' : ''}<button ${alertFilters.machine ? '' : 'disabled title="Select a machine first"'} onclick="restartSelectedMachine()" style="padding:10px 20px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:${alertFilters.machine ? 'pointer' : 'not-allowed'};opacity:${alertFilters.machine ? '1' : '.55'};">Restart Machine</button>
@@ -98,9 +98,14 @@ function populateAlertFilters(){
     clientSelect.style.color = scoped ? '#94a3b8' : '#e2e8f0';
     clientSelect.style.cursor = scoped ? 'not-allowed' : 'pointer';
   }
-  const list = alertFilters.client ? devices.filter(function(dev){ return dev.client===alertFilters.client; }) : devices;
+  const list = scopedDevices();
   if(machineSelect){
-    machineSelect.innerHTML = '<option value="">All Machines</option>' + list.map(function(dev){ return '<option value="'+dev.id+'"'+(alertFilters.machine===dev.id?' selected':'')+'>'+dev.id+'</option>'; }).join('');
+    const userRole = isUserRole();
+    machineSelect.innerHTML = (userRole ? '' : '<option value="">All Machines</option>') + list.map(function(dev){ return '<option value="'+dev.id+'"'+(alertFilters.machine===dev.id?' selected':'')+'>'+dev.id+'</option>'; }).join('');
+    machineSelect.disabled = userRole;
+    machineSelect.style.background = userRole ? '#111827' : '#1e293b';
+    machineSelect.style.color = userRole ? '#94a3b8' : '#e2e8f0';
+    machineSelect.style.cursor = userRole ? 'not-allowed' : 'pointer';
   }
 }
 
@@ -139,7 +144,7 @@ async function restartSelectedMachine(){
 }
 
 function getAlertFilteredDevices(){
-  let list = alertFilters.client ? devices.filter(function(dev){ return dev.client===alertFilters.client; }) : devices.slice();
+  let list = scopedDevices();
   if(alertFilters.machine) list = list.filter(function(dev){ return dev.id===alertFilters.machine; });
   return list;
 }

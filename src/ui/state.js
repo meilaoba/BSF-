@@ -2,6 +2,7 @@ let currentRole = 'admin';
 let currentPage = 'machines';
 let currentUsername = '';
 let currentClient = '';
+let currentMachineId = '';
 let machineFilters = { client: '', device: '' };
 let rawDataFilters = { client: '', device: '', start: '', end: '' };
 let rawDataPage = 1;
@@ -16,6 +17,10 @@ let googleMapsLoading = null;
 
 function isClientScopedRole(){
   return currentRole === 'client-admin' || currentRole === 'user';
+}
+
+function isUserRole(){
+  return currentRole === 'user';
 }
 
 function resolveClientForCurrentUser(){
@@ -36,6 +41,25 @@ function refreshClientScope(){
   return currentClient;
 }
 
+function resolveMachineForCurrentUser(){
+  if(currentRole !== 'user') return '';
+  const profile = window.BSF_USER_PROFILE || window.BSF_CURRENT_USER || {};
+  const direct = profile.machineId || profile.deviceId || window.BSF_CURRENT_MACHINE_ID;
+  if(direct) return direct;
+  if(typeof userRecords !== 'undefined' && Array.isArray(userRecords)){
+    const record = userRecords.find(function(user){ return user.username === currentUsername || user.email === currentUsername; });
+    if(record && record.machineId) return record.machineId;
+  }
+  const clientDevices = devices.filter(function(device){ return (device.client || 'Unassigned') === currentClient; });
+  return clientDevices.length ? clientDevices[0].id : '';
+}
+
+function refreshMachineScope(){
+  if(currentRole !== 'user'){ currentMachineId = ''; return ''; }
+  currentMachineId = resolveMachineForCurrentUser();
+  return currentMachineId;
+}
+
 function scopedClientNames(){
   refreshClientScope();
   const names = Array.from(new Set(devices.map(function(device){ return device.client || 'Unassigned'; })));
@@ -44,18 +68,22 @@ function scopedClientNames(){
 
 function scopedDevices(){
   const client = refreshClientScope();
-  return isClientScopedRole() ? devices.filter(function(device){ return (device.client || 'Unassigned') === client; }) : devices;
+  const machineId = refreshMachineScope();
+  let list = isClientScopedRole() ? devices.filter(function(device){ return (device.client || 'Unassigned') === client; }) : devices.slice();
+  if(currentRole === 'user' && machineId) list = list.filter(function(device){ return device.id === machineId; });
+  return list;
 }
 
 function applyClientScopeToState(){
   const client = refreshClientScope();
   if(!isClientScopedRole()) return;
-  machineFilters.client = client; machineFilters.device = '';
-  rawDataFilters.client = client; rawDataFilters.device = '';
-  alertFilters.client = client; alertFilters.machine = '';
-  apiFilters.client = client; apiFilters.machine = '';
-  if(typeof graphFilters !== 'undefined'){ graphFilters.client = client; graphFilters.machine = ''; }
-  if(typeof reportFilters !== 'undefined'){ reportFilters.client = client; reportFilters.device = ''; }
+  const machineId = refreshMachineScope();
+  machineFilters.client = client; machineFilters.device = machineId;
+  rawDataFilters.client = client; rawDataFilters.device = machineId;
+  alertFilters.client = client; alertFilters.machine = machineId;
+  apiFilters.client = client; apiFilters.machine = machineId;
+  if(typeof graphFilters !== 'undefined'){ graphFilters.client = client; graphFilters.machine = machineId; }
+  if(typeof reportFilters !== 'undefined'){ reportFilters.client = client; reportFilters.device = machineId; }
 }
 
 function clientScopeName(){
