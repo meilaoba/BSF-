@@ -11,7 +11,7 @@ function renderAlerts(container){
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Machine Filter
         <select id="alert-machine-filter" onchange="alertFilters.machine=this.value;renderAlerts(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"></select>
       </label>
-      <button onclick="openThresholdModal()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Edit the threshold of each machine</button><button onclick="restartSelectedMachine()" style="padding:10px 20px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Restart Machine</button>
+      <button onclick="openThresholdModal()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Edit the threshold of each machine</button><button ${alertFilters.machine ? '' : 'disabled title="Select a machine first"'} onclick="restartSelectedMachine()" style="padding:10px 20px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:${alertFilters.machine ? 'pointer' : 'not-allowed'};opacity:${alertFilters.machine ? '1' : '.55'};">Restart Machine</button>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 20px;background:#1e293b;border:1px solid #334155;border-left:3px solid #ef4444;border-radius:12px;margin-bottom:20px;flex-wrap:wrap;">
       <div><div style="font-size:14px;font-weight:600;color:#f8fafc;">Sample Alert Preview</div><div style="margin-top:5px;font-size:12px;color:#94a3b8;">Temperature High · Device exceeds 58 °C · Email / WhatsApp</div></div>
@@ -120,6 +120,8 @@ function runTemperatureAlertCheck(){
 async function restartSelectedMachine(){
   const machineId = alertFilters.machine || '';
   if(!machineId){ alert('Please select a machine in Machine Filter first'); return; }
+  const selectedMachine = getAlertFilteredDevices().find(function(device){ return device.id === machineId; });
+  if(!selectedMachine){ alert('The selected machine is not available under the current filters'); return; }
   if(!confirm('Restart machine ' + machineId + '?')) return;
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try {
@@ -134,13 +136,14 @@ async function restartSelectedMachine(){
 }
 
 function getAlertFilteredDevices(){
-  let list = alertFilters.client ? devices.filter(function(dev){ return dev.client===alertFilters.client; }) : devices;
+  let list = alertFilters.client ? devices.filter(function(dev){ return dev.client===alertFilters.client; }) : devices.slice();
   if(alertFilters.machine) list = list.filter(function(dev){ return dev.id===alertFilters.machine; });
-  return list.length ? list : devices;
+  return list;
 }
 
 function openThresholdModal(){
   const list = getAlertFilteredDevices();
+  if(!list.length){ alertPushToast('No machine matches the selected filters'); return; }
   const selectedId = alertFilters.machine || (list[0] ? list[0].id : '');
   const selectedThreshold = getMachineThreshold(selectedId);
   const options = list.map(function(dev){ return '<option value="' + clientEscape(dev.id) + '"' + (dev.id===selectedId?' selected':'') + '>' + clientEscape(dev.id) + ' · ' + clientEscape(dev.client) + '</option>'; }).join('');
@@ -193,6 +196,7 @@ function applyPushTemplate(){
 
 function openPushAlertModal(){
   const list = getAlertFilteredDevices();
+  if(!list.length){ alertPushToast('No machine matches the selected filters'); return; }
   const selected = alertFilters.machine || (list[0] ? list[0].id : '');
   const options = list.map(function(dev){ return '<option value="' + clientEscape(dev.id) + '"' + (dev.id===selected?' selected':'') + '>' + clientEscape(dev.id) + ' · ' + clientEscape(dev.client) + '</option>'; }).join('');
   let modal = document.getElementById('push-alert-modal');
