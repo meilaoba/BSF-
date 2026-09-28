@@ -209,15 +209,31 @@ function showReportExportToast(message, type){
   reportExportToastTimer = setTimeout(function(){ toast.style.opacity = '0'; setTimeout(function(){ if(toast) toast.remove(); }, 250); }, 3200);
 }
 function downloadReportFile(filename, mime, content){
-  const blob = new Blob([content], { type:mime });
+  downloadReportBlob(filename, new Blob([content], { type:mime }));
+}
+
+function downloadReportBlob(filename, blob){
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+}
+
+function downloadReportDataUrl(filename, dataUrl){
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 function csvCell(value){ return '"' + String(value === undefined || value === null ? '' : value).replace(/"/g, '""') + '"'; }
@@ -240,7 +256,7 @@ function exportReportExcel(){
   showReportExportToast('Excel 导出已开始');
 }
 
-function exportReportPdf(){
+async function exportReportPdf(){
   const model = reportExportModel();
   const pdfTitle = model.pdfTitle || model.title;
   const rows = [['Metric','Value','Unit'],['Waste Collected','—','kg'],['GHG Reduced','—','kg CO2e'],['Energy Consumed','—','kWh'],['Est. Fertilizer',model.fertilizerValue,'kg'],['Avg Container Temp','—','°C'],['Avg Humidity','—','%']];
@@ -313,7 +329,24 @@ function exportReportPdf(){
     doc.setFontSize(13);
     doc.text('Monthly Food Waste In (KG)', margin, cursorY);
     drawTable(cursorY + 26, foodRows);
-    doc.save('bsf-report-' + new Date().toISOString().slice(0,10) + '.pdf');
+    const fileName = 'bsf-report-' + new Date().toISOString().slice(0,10) + '.pdf';
+    if(typeof window.showSaveFilePicker === 'function'){
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: fileName,
+          startIn: 'downloads',
+          types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(doc.output('blob'));
+        await writable.close();
+        showReportExportToast('PDF 已保存');
+        return;
+      } catch(error) {
+        if(error && error.name === 'AbortError') return;
+      }
+    }
+    downloadReportDataUrl(fileName, doc.output('datauristring'));
     showReportExportToast('PDF 已开始下载，请查看浏览器下载目录');
     return;
   }
