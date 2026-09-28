@@ -66,7 +66,7 @@ function renderAccount(container){
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Account Settings</h2>
-      <p style="color:#64748b;font-size:14px;margin:0;">Manage your profile, avatar and security preferences</p>
+      <p style="color:#64748b;font-size:14px;margin:0;">Manage your profile and security preferences</p>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
       <div style="background:#1e293b;border-radius:12px;padding:24px;border:1px solid #334155;">
@@ -95,7 +95,7 @@ function renderAccount(container){
         <input id="account-new-password" type="password" placeholder="At least 8 characters" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" />
         <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Confirm New Password</label>
         <input id="account-confirm-password" type="password" placeholder="Repeat new password" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
-        <p style="margin:10px 0 0;color:#64748b;font-size:11px;">Password must be at least 8 characters. A backend password API is required for the final update.</p>
+        <p style="margin:10px 0 0;color:#64748b;font-size:11px;">Use at least 8 characters.</p>
         <button onclick="saveAccountPassword()" style="width:100%;margin-top:18px;padding:11px 18px;background:#3b82f6;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:13px;cursor:pointer;">Update Password</button>
       </div>
     </div>
@@ -117,7 +117,7 @@ function handleAccountAvatarSelect(event){
     }
     accountSaveLocalProfile(profile);
     renderAccount(document.getElementById('page-content'));
-    accountToast((window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled) ? 'Avatar updated' : 'Avatar saved locally');
+    accountToast((window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled) ? 'Avatar updated' : 'Avatar updated');
   };
   reader.readAsDataURL(file);
 }
@@ -145,7 +145,7 @@ async function saveAccountProfile(){
   profile.email = current.email;
   accountSaveLocalProfile(profile);
   applyStoredAccountProfile();
-  accountToast((window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled) ? 'Profile updated' : 'Profile saved locally');
+  accountToast((window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled) ? 'Profile updated' : 'Profile saved');
 }
 
 async function saveAccountPassword(){
@@ -157,7 +157,7 @@ async function saveAccountPassword(){
   if(newPassword !== confirmPassword){ accountToast('New passwords do not match', 'error'); return; }
   if(newPassword === currentPassword){ accountToast('New password must be different', 'error'); return; }
   if(!window.BSF_API_CONFIG || !window.BSF_API_CONFIG.enabled){
-    accountToast('Password change requires the backend API', 'error');
+    accountToast('Password update is temporarily unavailable', 'error');
     return;
   }
   try {
