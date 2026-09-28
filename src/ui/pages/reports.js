@@ -193,7 +193,8 @@ function reportExportModel(){
   const foodWaste = reportFoodWasteData.map(function(row){
     return { label:row.label || row.period || row.date || '', value:Number(row.value !== undefined ? row.value : row.waste !== undefined ? row.waste : row.weight) };
   }).filter(function(row){ return row.label && Number.isFinite(row.value); });
-  return { title:title, period:reportPeriod, client:reportClient, device:reportDevice, fertilizerValue:fertilizerValue, foodWaste:foodWaste };
+  const pdfTitle = (reportFilters.device ? 'Machine' : 'Client') + ' ' + reportPeriodTitle() + ' Report';
+  return { title:title, pdfTitle:pdfTitle, period:reportPeriod, client:reportClient, device:reportDevice, fertilizerValue:fertilizerValue, foodWaste:foodWaste };
 }
 
 let reportExportToastTimer = null;
@@ -241,14 +242,20 @@ function exportReportExcel(){
 
 function exportReportPdf(){
   const model = reportExportModel();
+  const pdfTitle = model.pdfTitle || model.title;
   const rows = [['Metric','Value','Unit'],['Waste Collected','—','kg'],['GHG Reduced','—','kg CO₂e'],['Energy Consumed','—','kWh'],['Est. Fertilizer',model.fertilizerValue,'kg'],['Avg Container Temp','—','°C'],['Avg Humidity','—','%']];
-  const tableRows = rows.map(function(row){ return '<tr>' + row.map(function(cell){ return '<td>' + cell + '</td>'; }).join('') + '</tr>'; }).join('');
-  const foodRows = model.foodWaste.map(function(row){ return '<tr><td>' + row.label + '</td><td>' + row.value + '</td><td>KG</td></tr>'; }).join('');
+  const tableRows = rows.map(function(row){
+    return '<tr>' + row.map(function(cell){ return '<td>' + String(cell) + '</td>'; }).join('') + '</tr>';
+  }).join('');
+  const foodRows = model.foodWaste.map(function(row){
+    return '<tr><td>' + row.label + '</td><td>' + row.value + '</td><td>KG</td></tr>';
+  }).join('');
+  const reportCss = '@page{size:A4 portrait;margin:12mm;}*{box-sizing:border-box;}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,"Helvetica Neue",sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.report-header{width:57%;padding-bottom:12px;border-bottom:1px solid #777;}.report-title{margin:0 0 34px;font-size:28px;line-height:1.15;font-weight:700;letter-spacing:-.25px;}.report-meta{margin:0;font-size:13px;line-height:1.45;}.report-section{margin-top:42px;}.report-section h2{margin:0 0 22px;font-size:18px;line-height:1.25;font-weight:700;letter-spacing:-.1px;}.report-table{width:57%;min-width:420px;border-collapse:collapse;table-layout:fixed;}.report-table th,.report-table td{border:1px solid #777;padding:12px 8px;font-size:13px;line-height:1.35;text-align:left;vertical-align:middle;}.report-table th{font-weight:700;}.report-table th:nth-child(1),.report-table td:nth-child(1){width:54%;}.report-table th:nth-child(2),.report-table td:nth-child(2){width:18%;}.report-table th:nth-child(3),.report-table td:nth-child(3){width:28%;}.report-table tr{break-inside:avoid;page-break-inside:avoid;}@media print{body{width:auto;}.report-section{break-inside:avoid;}}';
   const printWindow = window.open('', '_blank');
   if(!printWindow){ showReportExportToast('浏览器阻止了打印窗口，请允许弹窗', 'error'); return; }
-  printWindow.document.write('<html><head><title>' + model.title + '</title></head><body><h1>' + model.title + '</h1><p>' + model.period + ' · ' + model.client + ' · ' + model.device + '</p><h3>Report Summary</h3><table border="1" cellspacing="0" cellpadding="6">' + tableRows + '</table><h3>Monthly Food Waste In (KG)</h3><table border="1" cellspacing="0" cellpadding="6"><tr><th>Period</th><th>Value</th><th>Unit</th></tr>' + foodRows + '</table></body></html>');
+  printWindow.document.write('<html><head><meta charset="UTF-8"><title>' + pdfTitle + '</title><style>' + reportCss + '</style></head><body><header class="report-header"><h1 class="report-title">' + pdfTitle + '</h1><p class="report-meta">' + model.period + ' · ' + model.client + ' · ' + model.device + '</p></header><section class="report-section"><h2>Report Summary</h2><table class="report-table"><tbody>' + tableRows + '</tbody></table></section><section class="report-section"><h2>Monthly Food Waste In (KG)</h2><table class="report-table"><thead><tr><th>Period</th><th>Value</th><th>Unit</th></tr></thead><tbody>' + foodRows + '</tbody></table></section></body></html>');
   printWindow.document.close();
   printWindow.focus();
   showReportExportToast('已打开打印窗口，请选择“另存为 PDF”');
-  setTimeout(function(){ printWindow.print(); }, 300);
+  setTimeout(function(){ printWindow.print(); }, 500);
 }
