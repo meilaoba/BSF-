@@ -1,12 +1,53 @@
-let reportFilters = { client:'', device:'', period:'monthly' };
+let reportFilters = { client:'', device:'', period:'monthly', month:new Date().getMonth()+1, year:new Date().getFullYear() };
 let reportFoodWasteData = [];
 
 function reportPeriodTitle(){
   return reportFilters.period === 'yearly' ? 'Yearly' : 'Monthly';
 }
 
-function reportDimensionTitle(){
-  return reportFilters.device ? 'Machine' : 'Client';
+function reportPad(value){
+  return String(value).padStart(2, '0');
+}
+
+function reportPeriodRange(){
+  const year = Number(reportFilters.year) || new Date().getFullYear();
+  if(reportFilters.period === 'yearly'){
+    return { start:year + '-01-01', end:year + '-12-31' };
+  }
+  const month = Math.min(12, Math.max(1, Number(reportFilters.month) || 1));
+  const lastDay = new Date(year, month, 0).getDate();
+  const monthText = reportPad(month);
+  return { start:year + '-' + monthText + '-01', end:year + '-' + monthText + '-' + reportPad(lastDay) };
+}
+
+function reportRowsForPeriod(){
+  const range = reportPeriodRange();
+  return rawDataRows.filter(function(row){
+    const dateText = String(row.recordedAt || '').slice(0,10);
+    if(!dateText || dateText < range.start || dateText > range.end) return false;
+    if(reportFilters.client){
+      const device = devices.find(function(item){ return item.id === row.device; });
+      if(!device || device.client !== reportFilters.client) return false;
+    }
+    if(reportFilters.device && row.device !== reportFilters.device) return false;
+    return true;
+  });
+}
+
+function reportYearOptions(){
+  const years = new Set(rawDataRows.map(function(row){ return String(row.recordedAt || '').slice(0,4); }).filter(Boolean));
+  years.add(String(reportFilters.year || new Date().getFullYear()));
+  return Array.from(years).sort().reverse().map(function(year){
+    return '<option value="' + year + '"' + (String(reportFilters.year)===year?' selected':'') + '>' + year + '</option>';
+  }).join('');
+}
+
+function reportMonthOptions(){
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return monthNames.map(function(label, index){
+    const value = String(index + 1);
+    return '<option value="' + value + '"' + (String(reportFilters.month)===value?' selected':'') + '>' + label + '</option>';
+  }).join('');
 }
 
 function reportFilterOptions(){
@@ -48,7 +89,7 @@ function renderReportFoodWasteChart(){
 async function loadReportFoodWaste(){
   if(!window.BSF_API || !window.BSF_API_CONFIG || !window.BSF_API_CONFIG.enabled){ reportFoodWasteData = []; renderReportFoodWasteChart(); return; }
   try {
-    const data = await window.BSF_API.getFoodWaste({period:'monthly', clientId:reportFilters.client || undefined, deviceId:reportFilters.device || undefined});
+    const data = await window.BSF_API.getFoodWaste({period:reportFilters.period, year:reportFilters.year, month:reportFilters.period === 'monthly' ? reportFilters.month : undefined, clientId:reportFilters.client || undefined, deviceId:reportFilters.device || undefined});
     reportFoodWasteData = data && (data.items || data.list) ? (data.items || data.list) : (Array.isArray(data) ? data : []);
   } catch(error) { reportFoodWasteData = []; }
   renderReportFoodWasteChart();
@@ -61,35 +102,38 @@ function setReportFilter(key, value){
 }
 
 function renderReports(container){
-  const now = new Date();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const reportDays = reportFilters.period === 'yearly' ? 365 : daysInMonth;
+  const range = reportPeriodRange();
+  const rangeStart = new Date(range.start + 'T00:00:00');
+  const rangeEnd = new Date(range.end + 'T00:00:00');
+  const reportDays = Math.max(1, Math.round((rangeEnd - rangeStart) / 86400000) + 1);
+  const periodRows = reportRowsForPeriod();
   const reportData = window.BSF_REPORT_DATA || {};
   const dailyFertilizerRaw = reportData.dailyFertilizer !== undefined ? reportData.dailyFertilizer : window.BSF_REPORT_DAILY_FERTILIZER;
   const dailyFertilizer = Number(dailyFertilizerRaw);
   const fertilizerValue = Number.isFinite(dailyFertilizer) ? (dailyFertilizer * reportDays).toFixed(1) : '—';
-  const validTemps = rawDataRows.map(function(row){ return Number(row.temperature); }).filter(Number.isFinite);
-  const validHumidity = rawDataRows.map(function(row){ return Number(row.humidity); }).filter(Number.isFinite);
+  const validTemps = periodRows.map(function(row){ return Number(row.temperature); }).filter(Number.isFinite);
+  const validHumidity = periodRows.map(function(row){ return Number(row.humidity); }).filter(Number.isFinite);
   const avgTemp = validTemps.length ? (validTemps.reduce(function(a,b){ return a+b; },0) / validTemps.length).toFixed(1) : '—';
   const avgHumidity = validHumidity.length ? (validHumidity.reduce(function(a,b){ return a+b; },0) / validHumidity.length).toFixed(1) : '—';
   const reportClient = reportFilters.client || (devices[0] ? devices[0].client : 'Unassigned');
   const reportDevice = reportFilters.device || 'All Devices';
-  const reportPeriod = rawDataRows.length ? rawDataRows[rawDataRows.length-1].recordedAt.slice(0,10) + ' - ' + rawDataRows[0].recordedAt.slice(0,10) : 'No data';
+  const reportPeriod = range.start + ' - ' + range.end;
   const options = reportFilterOptions();
-  const title = reportDimensionTitle() + ' ' + reportPeriodTitle() + ' Report';
+  const title = reportPeriodTitle() + ' Report';
 
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Report Generation</h2>
-      <p style="color:#64748b;font-size:14px;margin:0;">Generate monthly/yearly operational and environmental impact reports</p>
     </div>
-    <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+    <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;align-items:center;">
       <select onchange="setReportFilter('client',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">${options.clientOptions}</select>
       <select onchange="setReportFilter('period',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option value="monthly"${reportFilters.period==='monthly'?' selected':''}>Monthly Report</option><option value="yearly"${reportFilters.period==='yearly'?' selected':''}>Yearly Report</option></select>
+      ${reportFilters.period === 'monthly' ? '<select id="report-month-filter" onchange="setReportFilter(\'month\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportMonthOptions() + '</select>' : ''}
+      ${reportFilters.period === 'yearly' ? '<select id="report-year-filter" onchange="setReportFilter(\'year\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportYearOptions() + '</select>' : ''}
       <select onchange="setReportFilter('device',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">${options.deviceOptions}</select>
-      <button style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Generate Preview</button>
+      <button onclick="generateReportPreview()" style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Generate Preview</button>
     </div>
-    <div style="background:#1e293b;border-radius:12px;padding:32px;border:1px solid #334155;max-width:900px;margin:0 auto;">
+    <div id="report-preview" style="background:#1e293b;border-radius:12px;padding:32px;border:1px solid #334155;max-width:900px;margin:0 auto;">
       <div style="text-align:center;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #334155;">
         <h1 style="font-size:24px;font-weight:700;color:#f8fafc;margin:0;">${title}</h1>
         <p style="color:#94a3b8;margin:8px 0 0;font-size:14px;">${reportPeriod} · ${reportClient} · ${reportDevice}</p>
@@ -124,18 +168,28 @@ function renderReports(container){
   renderReportFoodWasteChart();
   loadReportFoodWaste();
 }
+
+function generateReportPreview(){
+  const container = document.getElementById('page-content');
+  renderReports(container);
+  const preview = container.querySelector('#report-preview');
+  if(preview) preview.scrollIntoView({ behavior:'smooth', block:'start' });
+  showReportExportToast('Report preview updated');
+}
+
 function reportExportModel(){
-  const now = new Date();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const reportDays = reportFilters.period === 'yearly' ? 365 : daysInMonth;
+  const range = reportPeriodRange();
+  const rangeStart = new Date(range.start + 'T00:00:00');
+  const rangeEnd = new Date(range.end + 'T00:00:00');
+  const reportDays = Math.max(1, Math.round((rangeEnd - rangeStart) / 86400000) + 1);
   const reportData = window.BSF_REPORT_DATA || {};
   const dailyFertilizerRaw = reportData.dailyFertilizer !== undefined ? reportData.dailyFertilizer : window.BSF_REPORT_DAILY_FERTILIZER;
   const dailyFertilizer = Number(dailyFertilizerRaw);
   const fertilizerValue = Number.isFinite(dailyFertilizer) ? (dailyFertilizer * reportDays).toFixed(1) : '—';
   const reportClient = reportFilters.client || (devices[0] ? devices[0].client : 'Unassigned');
   const reportDevice = reportFilters.device || 'All Devices';
-  const reportPeriod = rawDataRows.length ? rawDataRows[rawDataRows.length-1].recordedAt.slice(0,10) + ' - ' + rawDataRows[0].recordedAt.slice(0,10) : 'No data';
-  const title = reportDimensionTitle() + ' ' + reportPeriodTitle() + ' Report';
+  const reportPeriod = range.start + ' - ' + range.end;
+  const title = reportPeriodTitle() + ' Report';
   const foodWaste = reportFoodWasteData.map(function(row){
     return { label:row.label || row.period || row.date || '', value:Number(row.value !== undefined ? row.value : row.waste !== undefined ? row.waste : row.weight) };
   }).filter(function(row){ return row.label && Number.isFinite(row.value); });
