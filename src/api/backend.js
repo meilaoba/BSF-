@@ -10,6 +10,7 @@ export function createBackendApi(options = {}) {
   return {
     login(data) { return http.post('/auth/login', data); },
     getProfile() { return http.get('/auth/profile'); },
+    changePassword(data) { return http.post('/auth/change-password', data); },
 
     getClients(params) { return http.get('/clients', params); },
     createClient(data) { return http.post('/clients', data); },

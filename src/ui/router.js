@@ -19,6 +19,7 @@ async function login(){
   document.getElementById('user-name').textContent = loginName;
   const initials = loginName.replace(/@.*/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || roleInfo.label.slice(0, 2).toUpperCase();
   document.getElementById('user-avatar').textContent = initials;
+  if(typeof applyStoredAccountProfile === 'function') applyStoredAccountProfile();
   renderNav();
   await loadDataForCurrentRole();
   applyClientScopeToState();
