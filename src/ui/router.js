@@ -18,9 +18,6 @@ async function login(){
   document.getElementById('user-name').textContent = loginName;
   const initials = loginName.replace(/@.*/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || roleInfo.label.slice(0, 2).toUpperCase();
   document.getElementById('user-avatar').textContent = initials;
-  if(currentRole === 'admin') document.getElementById('client-name').textContent = 'All Clients';
-  else if(currentRole === 'client-admin') document.getElementById('client-name').textContent = 'GreenCity Solutions Ltd';
-  else document.getElementById('client-name').textContent = 'GreenCity Solutions Ltd';
   renderNav();
   await loadDataForCurrentRole();
   scheduleDataRefresh();
