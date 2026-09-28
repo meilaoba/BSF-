@@ -18,6 +18,9 @@ export function createBackendApi(options = {}) {
 
     getMachines(params) { return http.get('/machines', params); },
     getMachineMetrics(id, params) { return http.get('/machines/' + encodeURIComponent(id) + '/metrics', params); },
+    updateMachine(id, data) { return http.put('/machines/' + encodeURIComponent(id), data); },
+    deactivateMachine(id) { return http.post('/machines/' + encodeURIComponent(id) + '/deactivate'); },
+    reactivateMachine(id) { return http.post('/machines/' + encodeURIComponent(id) + '/reactivate'); },
     restartMachine(id) { return http.post('/devices/' + encodeURIComponent(id) + '/restart'); },
     getLocations(params) { return http.get('/locations', params); },
     getGraphs(params) { return http.get('/graphs', params); },
