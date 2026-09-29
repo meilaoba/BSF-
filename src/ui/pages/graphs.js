@@ -262,7 +262,7 @@ function renderGraphs(container){
     ${lineChart(ghgSeries, 'ghg', '#10b981', 'kg CO₂e', 'ghg')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       ${lineChart(tempSeries, 'temp', '#f97316', '°C', 'temp')}
-      ${lineChart(energySeries, 'energy', '#ef4444', 'kWh', 'energy')}
+      ${currentRole === 'admin' ? lineChart(energySeries, 'energy', '#ef4444', 'kWh', 'energy') : ''}
     </div>
   `;
   loadFoodWasteChart();
