@@ -25,6 +25,35 @@ function resolveGatewayUrl() {
 
 const gatewayUrl = resolveGatewayUrl();
 
+const gatewayRateLimit = new Map();
+const GATEWAY_RATE_WINDOW_MS = 60 * 1000;
+const GATEWAY_RATE_MAX = 120;
+
+function securityHeaders() {
+  return {
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://127.0.0.1:* http://localhost:* https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; worker-src 'self' blob:",
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(self)',
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Resource-Policy': 'same-origin'
+  };
+}
+
+function isGatewayRateLimited(req) {
+  const now = Date.now();
+  const ip = req.socket.remoteAddress || 'unknown';
+  const current = gatewayRateLimit.get(ip) || { start: now, count: 0 };
+  if (now - current.start > GATEWAY_RATE_WINDOW_MS) {
+    current.start = now;
+    current.count = 0;
+  }
+  current.count += 1;
+  gatewayRateLimit.set(ip, current);
+  return current.count > GATEWAY_RATE_MAX;
+}
+
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -43,24 +72,38 @@ function sendFile(res, filePath) {
       res.end('Not found');
       return;
     }
-    res.writeHead(200, { 'Content-Type': contentTypes[path.extname(filePath)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+    res.writeHead(200, Object.assign({ 'Content-Type': contentTypes[path.extname(filePath)] || 'application/octet-stream', 'Cache-Control': 'no-store' }, securityHeaders()));
     fs.createReadStream(filePath).pipe(res);
   });
 }
 
 function proxyGateway(req, res, incomingUrl) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, securityHeaders()));
+    res.end(JSON.stringify({ code: 405, message: 'Method Not Allowed', data: null }));
+    return;
+  }
+  if (isGatewayRateLimited(req)) {
+    res.writeHead(429, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, securityHeaders()));
+    res.end(JSON.stringify({ code: 429, message: 'Too Many Requests', data: null }));
+    return;
+  }
   const targetPath = incomingUrl.pathname.replace(/^\/api\/gateway/, '/api') + incomingUrl.search;
   const target = new URL(targetPath, gatewayUrl);
   const client = target.protocol === 'https:' ? https : http;
   const proxyReq = client.request(target, {
     method: req.method,
-    headers: Object.assign({}, req.headers, { host: target.host })
+    headers: Object.assign({ accept: req.headers.accept || 'application/json' }, { host: target.host }),
+    timeout: 15000
   }, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+    const headers = Object.assign({}, proxyRes.headers, securityHeaders());
+    res.writeHead(proxyRes.statusCode || 502, headers);
     proxyRes.pipe(res);
   });
+  proxyReq.on('timeout', () => proxyReq.destroy(new Error('Gateway timeout')));
   proxyReq.on('error', (error) => {
-    res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+    if (res.headersSent) return;
+    res.writeHead(502, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, securityHeaders()));
     res.end(JSON.stringify({ code: 502, message: error.message, data: null }));
   });
   req.pipe(proxyReq);

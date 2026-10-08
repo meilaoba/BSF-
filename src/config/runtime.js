@@ -34,8 +34,24 @@ export function setApiBaseUrl(value) {
   return clean;
 }
 
+function safeGatewayBaseUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw || typeof window === 'undefined' || !window.location) return DEFAULT_RUNTIME_CONFIG.gatewayBaseUrl;
+  try {
+    const url = new URL(raw, window.location.origin);
+    const localHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1';
+    const sameOrigin = url.origin === window.location.origin;
+    const safeProtocol = url.protocol === 'https:' || (localHost && url.protocol === 'http:');
+    if (!sameOrigin && !(localHost && safeProtocol)) return DEFAULT_RUNTIME_CONFIG.gatewayBaseUrl;
+    return url.href.replace(/\/+$/, '');
+  } catch (error) {
+    return DEFAULT_RUNTIME_CONFIG.gatewayBaseUrl;
+  }
+}
+
 export function getGatewayBaseUrl() {
-  return setGatewayBaseUrl(readQueryValue('gateway') || readStorageValue(GATEWAY_STORAGE_KEY) || DEFAULT_RUNTIME_CONFIG.gatewayBaseUrl);
+  const candidate = readQueryValue('gateway') || readStorageValue(GATEWAY_STORAGE_KEY) || DEFAULT_RUNTIME_CONFIG.gatewayBaseUrl;
+  return setGatewayBaseUrl(safeGatewayBaseUrl(candidate));
 }
 
 export function getApiBaseUrl() {
