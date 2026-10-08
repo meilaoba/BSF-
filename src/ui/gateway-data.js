@@ -143,6 +143,30 @@ function bsfMapAlerts(devices){
   return out;
 }
 
+window.BSF_LOAD_GATEWAY_LATEST = async function(){
+  const gateway = await bsfWaitForGateway();
+  if(!gateway) return false;
+  try {
+    const latest = await gateway.latest();
+    if(!latest || !Array.isArray(latest.devices) || !latest.devices.length) return false;
+    const latestKey = Number(latest.receivedAt || latest.timestamp || 0);
+    if(window.BSF_GATEWAY_LAST_RECEIVED_AT === latestKey) return false;
+    window.BSF_GATEWAY_LAST_RECEIVED_AT = latestKey;
+    const realDevices = bsfMapDevices([latest]);
+    devices.splice(0, devices.length, ...realDevices);
+    const mappedRows = bsfMapRawRows([latest]);
+    const mergedRows = mergeClientRawHistory(rawDataRows, mappedRows);
+    rawDataRows.splice(0, rawDataRows.length, ...mergedRows);
+    if(currentRole !== 'admin') saveClientRawHistory(mergedRows);
+    alerts.splice(0, alerts.length, ...bsfMapAlerts(realDevices));
+    window.BSF_GATEWAY_LAST_LOAD = Date.now();
+    return true;
+  } catch(error) {
+    console.warn('[BSF] gateway latest load failed:', error.message);
+    return false;
+  }
+};
+
 window.BSF_LOAD_GATEWAY_DATA = async function(limit){
   const gateway = await bsfWaitForGateway();
   if(!gateway) return false;
@@ -168,6 +192,8 @@ window.BSF_LOAD_GATEWAY_DATA = async function(limit){
       saveClientRawHistory(history);
     }
     alerts.splice(0, alerts.length, ...bsfMapAlerts(realDevices));
+    const lastMessage = messages[messages.length - 1];
+    window.BSF_GATEWAY_LAST_RECEIVED_AT = Number((lastMessage && (lastMessage.receivedAt || lastMessage.timestamp)) || 0);
     window.BSF_GATEWAY_LAST_LOAD = Date.now();
     return true;
   } catch(error) {

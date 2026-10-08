@@ -36,14 +36,24 @@ async function loadDataForCurrentRole(){
   return loaded;
 }
 
+async function loadLatestForCurrentRole(){
+  if(!window.BSF_LOAD_GATEWAY_LATEST) return false;
+  const changed = await window.BSF_LOAD_GATEWAY_LATEST();
+  if(changed && window.BSF_NOTIFICATIONS) window.BSF_NOTIFICATIONS.syncFromAlerts();
+  return changed;
+}
+
 function scheduleDataRefresh(){
   if(dataRefreshTimer) clearInterval(dataRefreshTimer);
-  const interval = currentRole === 'admin' ? 3 * 60 * 1000 : 10 * 60 * 1000;
+  const realtimePages = ['machines','locations','graphs','raw-data','reports','alerts'];
   dataRefreshTimer = setInterval(async function(){
-    await loadDataForCurrentRole();
+    const changed = await loadLatestForCurrentRole();
+    if(!changed) return;
+    if(document.querySelector('[id$="-modal"]')) return;
+    if(realtimePages.indexOf(currentPage) === -1) return;
     renderNav();
     navigate(currentPage);
-  }, interval);
+  }, 5000);
 }
 
 function logout(){
