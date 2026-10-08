@@ -69,7 +69,8 @@ src/services/     数据服务
 src/ui/           页面与界面
 src/styles/       样式
 scripts/          开发服务器与网关检查
-docs/             架构和接口说明
+docs/             架构、接口说明与开发红线
+docs/project-lessons-and-guardrails.md  已完成功能经验、踩坑记录和提交前检查清单
 ~~~
 
 ## 网关检查
