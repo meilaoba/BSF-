@@ -24,7 +24,7 @@ function mergeClientRawHistory(history, incoming){
   const map = new Map();
   history.concat(incoming).forEach(function(row){
     if(!row || !row.device || !row.recordedAt) return;
-    map.set(row.device + '@' + (row.receivedAtSeconds || row.recordedAt), row);
+    map.set(row.device + '@' + (row.sourceTimestampSeconds || row.receivedAtSeconds || row.recordedAt), row);
   });
   return Array.from(map.values()).sort(function(a,b){
     const aKey = Number(a.receivedAtSeconds) || String(a.recordedAt);
@@ -108,6 +108,7 @@ function bsfMapRawRows(messages){
     return {
       recordedAt:bsfFormatTime(message.receivedAt || message.timestamp),
       receivedAtSeconds:Number(message.receivedAt || message.timestamp || 0),
+      sourceTimestampSeconds:Number(message.timestamp || 0),
       device:device.deviceId,
       deviceState:bsfStatusFromDeviceState(device.deviceState).toUpperCase(),
       operatingStatus:data.OperatingStatus,
@@ -173,9 +174,18 @@ window.BSF_LOAD_GATEWAY_DATA = async function(limit){
   try {
     const latest = await gateway.latest().catch(function(){ return null; });
     const payload = await gateway.messages(2048);
-    const messages = bsfMessageList(payload);
+    let messages = bsfMessageList(payload);
     if(latest && latest.devices) messages.push(latest);
     if(!messages.length) return false;
+    const uniqueMessages = new Map();
+    messages.forEach(function(message){
+      const device = message && Array.isArray(message.devices) ? message.devices[0] : null;
+      if(!device) return;
+      const key = device.deviceId + '@' + (message.timestamp || message.receivedAt);
+      const existing = uniqueMessages.get(key);
+      if(!existing || Number(message.receivedAt || 0) >= Number(existing.receivedAt || 0)) uniqueMessages.set(key, message);
+    });
+    messages = Array.from(uniqueMessages.values());
     messages.sort(function(a,b){
       return Number(a.receivedAt || a.timestamp || 0) - Number(b.receivedAt || b.timestamp || 0);
     });
