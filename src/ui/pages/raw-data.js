@@ -92,6 +92,11 @@ function renderRawData(container){
   if(rawDataPage < 1) rawDataPage = 1;
   const startIndex = (rawDataPage - 1) * RAW_DATA_PAGE_SIZE;
   const pageRows = filteredRows.slice(startIndex, startIndex + RAW_DATA_PAGE_SIZE);
+  const displayRows = pageRows.map(function(row){
+    const safe = Object.assign({}, row);
+    ['recordedAt','device','deviceState','fermentState','weight','temperature','humidity','energy','co2','no2','h2s','signal'].forEach(function(key){ safe[key] = bsfEscapeHtml(row[key]); });
+    return safe;
+  });
   const rowSummary = filteredRows.length ? 'Showing ' + (startIndex + 1) + '-' + Math.min(startIndex + pageRows.length, filteredRows.length) + ' of ' + filteredRows.length + ' records' : 'No records';
   container.innerHTML = `
     <div style="margin-bottom:24px;">
@@ -139,7 +144,7 @@ function renderRawData(container){
             </tr>
           </thead>
           <tbody>
-            ${pageRows.map((row,i)=>`
+            ${displayRows.map((row,i)=>`
               <tr style="border-bottom:1px solid #334155;background:${i%2===0?'#1e293b':'#1a2332'};">
                 <td style="padding:10px 16px;color:#e2e8f0;white-space:nowrap;">${row.recordedAt}</td>
                 <td style="padding:10px 16px;color:#e2e8f0;font-weight:600;">${row.device}</td>

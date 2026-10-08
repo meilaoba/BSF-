@@ -34,6 +34,11 @@ function mergeClientRawHistory(history, incoming){
 }
 
 /* Gateway data bridge: maps bms_mos messages into legacy UI collections. */
+function bsfSafeIdentifier(value){
+  const cleaned = String(value === null || value === undefined ? '' : value).replace(/[^a-zA-Z0-9_.:-]/g, '_').slice(0, 128);
+  return cleaned || 'Unknown_Device';
+}
+
 function bsfFormatTime(sec){
   if(!sec) return '—';
   const d = new Date(sec * 1000);
@@ -73,8 +78,8 @@ function bsfMapDevices(messages){
   return Array.from(latest.values()).map(function(entry){
     const data = entry.device.deviceData || {};
     return {
-      id:entry.device.deviceId,
-      name:entry.device.deviceId,
+      id:bsfSafeIdentifier(entry.device.deviceId),
+      name:bsfSafeIdentifier(entry.device.deviceId),
       client:'Unassigned',
       lat:null,
       lng:null,
@@ -109,7 +114,7 @@ function bsfMapRawRows(messages){
       recordedAt:bsfFormatTime(message.receivedAt || message.timestamp),
       receivedAtSeconds:Number(message.receivedAt || message.timestamp || 0),
       sourceTimestampSeconds:Number(message.timestamp || 0),
-      device:device.deviceId,
+      device:bsfSafeIdentifier(device.deviceId),
       deviceState:bsfStatusFromDeviceState(device.deviceState).toUpperCase(),
       operatingStatus:data.OperatingStatus,
       fermentState:data.FermentState,

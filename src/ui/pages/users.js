@@ -2,6 +2,11 @@ let userRecords = [];
 
 function renderUsers(container){
   const users = isClientScopedRole() ? userRecords.filter(function(user){ return user.client === currentClient; }) : userRecords;
+  const safeUsers = users.map(function(user){
+    const safe = Object.assign({}, user);
+    ['name','email','role','client','machineId','status'].forEach(function(key){ safe[key] = bsfEscapeHtml(user[key]); });
+    return safe;
+  });
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">User Management</h2>
@@ -23,7 +28,7 @@ function renderUsers(container){
           <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Actions</th>
         </tr></thead>
         <tbody>
-          ${users.map((u,i)=>`
+          ${safeUsers.map((u,i)=>`
             <tr style="border-bottom:1px solid #334155;background:${i%2===0?'#1e293b':'#1a2332'};">
               <td style="padding:14px 20px;color:#f8fafc;font-weight:600;">${u.name}</td>
               <td style="padding:14px 20px;color:#94a3b8;">${u.email}</td>

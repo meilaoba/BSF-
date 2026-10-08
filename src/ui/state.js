@@ -15,6 +15,15 @@ const GOOGLE_MAPS_API_KEY = '';
 let locationsMap = null;
 let googleMapsLoading = null;
 
+function bsfEscapeHtml(value){
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function isClientScopedRole(){
   return currentRole === 'client-admin' || currentRole === 'user';
 }

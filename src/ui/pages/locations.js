@@ -69,13 +69,13 @@ function renderLocations(container){
   const locationDevices = scopedDevices();
   const clientScoped = isClientScopedRole();
   const clientNames = scopedClientNames();
-  const clientOptions = clientNames.map(function(client){ return '<option'+(clientScoped?' selected':'')+'>'+client+'</option>'; }).join('');
+  const clientOptions = clientNames.map(function(client){ return '<option'+(clientScoped?' selected':'')+'>'+bsfEscapeHtml(client)+'</option>'; }).join('');
   const positioned = locationDevices.filter(function(dev){ return Number.isFinite(dev.lat) && Number.isFinite(dev.lng); });
   const markerHtml = positioned.map(function(dev, i){
     const top = 25 + (i % 4) * 15;
     const left = 30 + (i % 5) * 12;
     const color = dev.status==='online' ? '#10b981' : dev.status==='running' ? '#3b82f6' : dev.status==='standby' ? '#f59e0b' : '#ef4444';
-    return '<div class="locations-static-marker" style="position:absolute;top:'+top+'%;left:'+left+'%;width:18px;height:18px;background:'+color+';border-radius:50%;box-shadow:0 0 0 6px rgba(16,185,129,0.2);border:3px solid #1e293b;cursor:pointer;" title="'+dev.id+' - '+dev.status.toUpperCase()+'"></div>';
+    return '<div class="locations-static-marker" style="position:absolute;top:'+top+'%;left:'+left+'%;width:18px;height:18px;background:'+color+';border-radius:50%;box-shadow:0 0 0 6px rgba(16,185,129,0.2);border:3px solid #1e293b;cursor:pointer;" title="'+bsfEscapeHtml(dev.id)+' - '+bsfEscapeHtml(dev.status.toUpperCase())+'"></div>';
   }).join('');
   const mapNotice = positioned.length ? '' : '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#64748b;"><div style="font-size:40px;margin-bottom:8px;">📍</div><p style="margin:0;font-size:13px;">GPS coordinates are not provided by device data</p></div>';
   container.innerHTML = `
@@ -108,15 +108,15 @@ function renderLocations(container){
         <div style="background:#1e293b;border-radius:12px;padding:16px;border:1px solid #334155;">
           <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
             <div>
-              <p style="margin:0;font-weight:700;color:#f8fafc;font-size:15px;">${dev.id}</p>
-              <p style="margin:4px 0 0;font-size:12px;color:#64748b;">${dev.name}</p>
+              <p style="margin:0;font-weight:700;color:#f8fafc;font-size:15px;">${bsfEscapeHtml(dev.id)}</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#64748b;">${bsfEscapeHtml(dev.name)}</p>
             </div>
-            <span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${dev.status==='online'?'rgba(16,185,129,0.15)':dev.status==='running'?'rgba(59,130,246,0.15)':dev.status==='standby'?'rgba(245,158,11,0.15)':'rgba(239,68,68,0.15)'};color:${dev.status==='online'?'#10b981':dev.status==='running'?'#3b82f6':dev.status==='standby'?'#f59e0b':'#ef4444'};">${dev.status.toUpperCase()}</span>
+            <span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${dev.status==='online'?'rgba(16,185,129,0.15)':dev.status==='running'?'rgba(59,130,246,0.15)':dev.status==='standby'?'rgba(245,158,11,0.15)':'rgba(239,68,68,0.15)'};color:${dev.status==='online'?'#10b981':dev.status==='running'?'#3b82f6':dev.status==='standby'?'#f59e0b':'#ef4444'};">${bsfEscapeHtml(dev.status.toUpperCase())}</span>
           </div>
-          <p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Lat:</span> ${dev.lat === null || dev.lat === undefined ? '—' : dev.lat}</p>
-          <p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Lng:</span> ${dev.lng === null || dev.lng === undefined ? '—' : dev.lng}</p>
-          <p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Client:</span> ${dev.client}</p>
-          <p style="margin:8px 0 0;font-size:12px;color:#64748b;">Last update: ${dev.lastUpdate}</p>
+          <p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Lat:</span> ${dev.lat === null || dev.lat === undefined ? '—' : bsfEscapeHtml(dev.lat)}</p>
+          <p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Lng:</span> ${dev.lng === null || dev.lng === undefined ? '—' : bsfEscapeHtml(dev.lng)}</p>
+          <p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Client:</span> ${bsfEscapeHtml(dev.client)}</p>
+          <p style="margin:8px 0 0;font-size:12px;color:#64748b;">Last update: ${bsfEscapeHtml(dev.lastUpdate)}</p>
         </div>
       `).join('')}
     </div>

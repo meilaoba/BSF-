@@ -1,4 +1,9 @@
 function renderAlerts(container){
+  const safeAlerts = filteredAlerts().map(function(alert){
+    const safe = Object.assign({}, alert);
+    ['type','status','device','location','time','value','threshold','level'].forEach(function(key){ safe[key] = bsfEscapeHtml(alert[key]); });
+    return safe;
+  });
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Alert Management</h2>
@@ -36,7 +41,7 @@ function renderAlerts(container){
       <div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;">
         <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 16px;text-transform:uppercase;letter-spacing:0.5px;">Alert History</h3>
         <div style="display:flex;flex-direction:column;gap:10px;">
-          ${filteredAlerts().map(a=>`
+          ${safeAlerts.map(a=>`
             <div style="padding:12px;background:#0f172a;border-radius:8px;border-left:3px solid ${a.level==='Critical'?'#ef4444':a.level==='Warning'?'#f59e0b':'#3b82f6'};">
               <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px;">
                 <span style="font-weight:600;color:#f8fafc;font-size:13px;">${a.type}</span>
