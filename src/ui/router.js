@@ -7,14 +7,48 @@ function syncLoginRole(){
 
 let dataRefreshTimer = null;
 
+function normalizeSessionRole(role){
+  const value = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if(value === 'master_admin' || value === 'admin') return 'admin';
+  if(value === 'client_admin') return 'client-admin';
+  if(value === 'user') return 'user';
+  return '';
+}
+
+function isLocalDevelopmentHost(){
+  return ['localhost', '127.0.0.1', '::1'].indexOf(window.location.hostname) >= 0;
+}
+
+async function authenticateLogin(email, password){
+  if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
+    const session = await window.BSF_API.login({ email: email, password: password });
+    const token = session && (session.token || session.accessToken);
+    if(token){
+      try { sessionStorage.setItem('bsf.delivery.sessionToken', String(token)); } catch (error) {}
+    }
+    window.BSF_SESSION = session || {};
+    const resolvedRole = normalizeSessionRole(session && (session.role || (session.user && session.user.role)));
+    if(!resolvedRole) throw new Error('Account role is not configured');
+    return { role: resolvedRole, username: (session.user && (session.user.email || session.user.name)) || email };
+  }
+  if(!isLocalDevelopmentHost()) throw new Error('Authentication service unavailable');
+  const demoRole = document.getElementById('role-select').value;
+  if(!demoRole) throw new Error('Please select a role');
+  return { role: demoRole, username: email };
+}
+
 async function login(){
-  currentRole = document.getElementById('role-select').value;
+  const loginName = (document.getElementById('login-username') || {}).value || '';
+  const password = (document.getElementById('login-password') || {}).value || '';
+  if(!loginName || !password){ alert('Email and password are required.'); return; }
+  let authenticated;
+  try { authenticated = await authenticateLogin(loginName, password); }
+  catch(error){ alert('Sign in failed: ' + error.message); return; }
+  currentRole = authenticated.role;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('main-app').style.display='block';
   const roleMeta = { admin:{label:'Master Admin'}, 'client-admin':{label:'Client Admin'}, user:{label:'User'} };
   const roleInfo = roleMeta[currentRole] || roleMeta.user;
-  const loginName = (document.getElementById('login-username') || {}).value || roleInfo.label;
-  currentUsername = loginName;
   document.getElementById('role-badge').textContent = roleInfo.label;
   document.getElementById('user-name').textContent = loginName;
   const initials = loginName.replace(/@.*/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || roleInfo.label.slice(0, 2).toUpperCase();
@@ -59,6 +93,8 @@ function scheduleDataRefresh(){
 function logout(){
   if(dataRefreshTimer) clearInterval(dataRefreshTimer);
   dataRefreshTimer = null;
+  try { sessionStorage.removeItem('bsf.delivery.sessionToken'); } catch (error) {}
+  window.BSF_SESSION = null;
   currentUsername = '';
   currentClient = '';
   currentMachineId = '';
@@ -102,8 +138,8 @@ function navigate(page){
 
 function card(title, value, unit, color){
   return `<div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;">
-    <p style="font-size:12px;color:#94a3b8;margin:0 0 8px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">${title}</p>
-    <p style="font-size:28px;font-weight:700;color:${color||'#f8fafc'};margin:0;">${value}<span style="font-size:14px;color:#64748b;margin-left:4px;font-weight:500;">${unit||''}</span></p>
+    <p style="font-size:12px;color:#94a3b8;margin:0 0 8px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">${bsfEscapeHtml(title)}</p>
+    <p style="font-size:28px;font-weight:700;color:${color||'#f8fafc'};margin:0;">${bsfEscapeHtml(value)}<span style="font-size:14px;color:#64748b;margin-left:4px;font-weight:500;">${bsfEscapeHtml(unit||'')}</span></p>
   </div>`;
 }
 
