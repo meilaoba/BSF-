@@ -24,10 +24,12 @@ function mergeClientRawHistory(history, incoming){
   const map = new Map();
   history.concat(incoming).forEach(function(row){
     if(!row || !row.device || !row.recordedAt) return;
-    map.set(row.device + '@' + row.recordedAt, row);
+    map.set(row.device + '@' + (row.receivedAtSeconds || row.recordedAt), row);
   });
   return Array.from(map.values()).sort(function(a,b){
-    return String(b.recordedAt).localeCompare(String(a.recordedAt));
+    const aKey = Number(a.receivedAtSeconds) || String(a.recordedAt);
+    const bKey = Number(b.receivedAtSeconds) || String(b.recordedAt);
+    return bKey > aKey ? 1 : bKey < aKey ? -1 : 0;
   }).slice(0, CLIENT_RAW_HISTORY_LIMIT);
 }
 
@@ -104,7 +106,8 @@ function bsfMapRawRows(messages){
     if(!device) return null;
     const data = device.deviceData || {};
     return {
-      recordedAt:bsfFormatTime(message.timestamp),
+      recordedAt:bsfFormatTime(message.receivedAt || message.timestamp),
+      receivedAtSeconds:Number(message.receivedAt || message.timestamp || 0),
       device:device.deviceId,
       deviceState:bsfStatusFromDeviceState(device.deviceState).toUpperCase(),
       operatingStatus:data.OperatingStatus,
@@ -144,12 +147,19 @@ window.BSF_LOAD_GATEWAY_DATA = async function(limit){
   const gateway = await bsfWaitForGateway();
   if(!gateway) return false;
   try {
-    const payload = await gateway.messages(limit || 100);
+    const latest = await gateway.latest().catch(function(){ return null; });
+    const payload = await gateway.messages(2048);
     const messages = bsfMessageList(payload);
+    if(latest && latest.devices) messages.push(latest);
     if(!messages.length) return false;
-    const realDevices = bsfMapDevices(messages);
+    messages.sort(function(a,b){
+      return Number(a.receivedAt || a.timestamp || 0) - Number(b.receivedAt || b.timestamp || 0);
+    });
+    const requested = Math.max(1, Number(limit) || 100);
+    const recentMessages = messages.slice(-requested).reverse();
+    const realDevices = bsfMapDevices(latest && latest.devices ? [latest] : recentMessages);
     devices.splice(0, devices.length, ...realDevices);
-    const mappedRows = bsfMapRawRows(messages);
+    const mappedRows = bsfMapRawRows(recentMessages);
     if(currentRole === 'admin'){
       rawDataRows.splice(0, rawDataRows.length, ...mappedRows);
     } else {
