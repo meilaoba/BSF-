@@ -7,6 +7,7 @@
   "scripts": {
     "check:gateway": "node scripts/gateway-check.mjs",
     "dev": "node scripts/dev-server.mjs",
-    "start": "node scripts/dev-server.mjs"
+    "start": "node scripts/dev-server.mjs",
+    "dev:lan": "node scripts/dev-server.mjs --lan"
   }
 }

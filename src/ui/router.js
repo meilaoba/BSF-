@@ -16,7 +16,12 @@ function normalizeSessionRole(role){
 }
 
 function isLocalDevelopmentHost(){
-  return ['localhost', '127.0.0.1', '::1'].indexOf(window.location.hostname) >= 0;
+  const host = window.location.hostname;
+  if(['localhost', '127.0.0.1', '::1'].indexOf(host) >= 0) return true;
+  if(/^10\./.test(host)) return true;
+  if(/^192\.168\./.test(host)) return true;
+  if(/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+  return /^[a-zA-Z0-9-]+\.local$/.test(host);
 }
 
 async function authenticateLogin(email, password){
@@ -31,6 +36,11 @@ async function authenticateLogin(email, password){
     if(!resolvedRole) throw new Error('Account role is not configured');
     return { role: resolvedRole, username: (session.user && (session.user.email || session.user.name)) || email };
   }
+  if(window.BSF_DEMO_MODE === true){
+    const demoRole = document.getElementById('role-select').value;
+    if(!demoRole) throw new Error('Please select a role');
+    return { role: demoRole, username: email };
+  }
   if(!isLocalDevelopmentHost()) throw new Error('Authentication service unavailable');
   const demoRole = document.getElementById('role-select').value;
   if(!demoRole) throw new Error('Please select a role');
@@ -40,7 +50,8 @@ async function authenticateLogin(email, password){
 async function login(){
   const loginName = (document.getElementById('login-username') || {}).value || '';
   const password = (document.getElementById('login-password') || {}).value || '';
-  if(!loginName || !password){ alert('Email and password are required.'); return; }
+  if(!loginName){ alert('Email is required.'); return; }
+  if(!password && window.BSF_DEMO_MODE !== true){ alert('Password is required.'); return; }
   let authenticated;
   try { authenticated = await authenticateLogin(loginName, password); }
   catch(error){ alert('Sign in failed: ' + error.message); return; }

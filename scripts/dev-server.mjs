@@ -8,6 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
 const workspaceRoot = path.resolve(appRoot, '..');
 const port = Number(process.env.PORT || 4180);
+const host = process.env.HOST || (process.argv.includes('--lan') ? '0.0.0.0' : '127.0.0.1');
 
 function lastPortFromLog(logText) {
   const matches = [...String(logText || '').matchAll(/API listening on http:\/\/127\.0\.0\.1:(\d+)/g)];
@@ -126,7 +127,7 @@ const server = http.createServer((req, res) => {
   sendFile(res, filePath);
 });
 
-server.listen(port, '127.0.0.1', () => {
-  console.log('BSF delivery server: http://127.0.0.1:' + port);
-  console.log('Gateway proxy: http://127.0.0.1:' + port + '/api/gateway -> ' + gatewayUrl);
+server.listen(port, host, () => {
+  console.log('BSF delivery server: http://' + host + ':' + port);
+  console.log('Gateway proxy: http://' + host + ':' + port + '/api/gateway -> ' + gatewayUrl);
 });
