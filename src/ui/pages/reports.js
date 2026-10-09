@@ -65,28 +65,115 @@ function reportFilterOptions(){
   return { clientOptions:clientOptions, deviceOptions:deviceOptions };
 }
 
+function reportFoodWasteValue(row){
+  const raw = row && (row.value !== undefined ? row.value : row.waste !== undefined ? row.waste : row.weight);
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function reportFoodWasteDateParts(row){
+  const raw = row && (row.date || row.timestamp || row.period || row.label);
+  if(typeof raw === 'number' && Number.isFinite(raw)){
+    const date = new Date(raw < 1000000000000 ? raw * 1000 : raw);
+    if(Number.isFinite(date.getTime())) return { year:date.getFullYear(), month:date.getMonth() + 1, day:date.getDate() };
+  }
+  const text = String(raw || '').trim();
+  const iso = text.match(/(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  if(iso) return { year:Number(iso[1]), month:Number(iso[2]), day:iso[3] ? Number(iso[3]) : null };
+  const selectedYear = Number(reportFilters.year) || new Date().getFullYear();
+  const yearMatch = text.match(/(\d{4})/);
+  const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const monthMatch = text.toLowerCase().match(/[a-z]+/);
+  const monthIndex = monthMatch ? monthNames.indexOf(monthMatch[0]) : -1;
+  if(monthIndex >= 0) return { year:yearMatch ? Number(yearMatch[1]) : selectedYear, month:monthIndex + 1, day:null };
+  if(reportFilters.period === 'monthly'){
+    const dayMatch = text.match(/^(\d{1,2})$/);
+    if(dayMatch) return { year:selectedYear, month:Number(reportFilters.month), day:Number(dayMatch[1]) };
+  }
+  return null;
+}
+
+function normalizedReportFoodWasteRows(includeMissing){
+  const range = reportPeriodRange();
+  const selectedYear = Number(range.start.slice(0, 4));
+  const selectedMonth = Number(range.start.slice(5, 7));
+  const buckets = new Map();
+  reportFoodWasteData.forEach(function(row){
+    const value = reportFoodWasteValue(row);
+    if(value === null) return;
+    const parts = reportFoodWasteDateParts(row);
+    if(!parts) return;
+    if(reportFilters.period === 'monthly'){
+      if(parts.year !== selectedYear || parts.month !== selectedMonth || !parts.day) return;
+      const key = reportPad(parts.day);
+      buckets.set(key, (buckets.get(key) || 0) + value);
+    } else {
+      if(parts.year !== selectedYear || !parts.month) return;
+      const key = reportPad(parts.month);
+      buckets.set(key, (buckets.get(key) || 0) + value);
+    }
+  });
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if(reportFilters.period === 'monthly'){
+    const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
+    const rows = [];
+    for(let day=1; day<=lastDay; day++){
+      const key = reportPad(day);
+      const hasValue = buckets.has(key);
+      if(hasValue || includeMissing) rows.push({ label:selectedYear + '-' + reportPad(selectedMonth) + '-' + key, xLabel:key, value:hasValue ? buckets.get(key) : null });
+    }
+    return rows;
+  }
+  const rows = [];
+  for(let month=1; month<=12; month++){
+    const key = reportPad(month);
+    const hasValue = buckets.has(key);
+    if(hasValue || includeMissing) rows.push({ label:selectedYear + '-' + key, xLabel:monthNames[month-1], value:hasValue ? buckets.get(key) : null });
+  }
+  return rows;
+}
+
 function buildReportFoodWasteSvg(rows){
-  const values = rows.map(function(row){ return Number(row.value !== undefined ? row.value : row.waste !== undefined ? row.waste : row.weight); }).filter(Number.isFinite);
-  if(!values.length) return '<div style="height:180px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;">No Food Waste API data</div>';
+  const validValues = rows.map(function(row){ return row.value; }).filter(Number.isFinite);
+  if(!validValues.length) return '<div style="height:180px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;">No Food Waste data for selected period</div>';
   const width = 1000, height = 180, left = 44, right = 20, top = 16, bottom = 30;
   const plotWidth = width - left - right, plotHeight = height - top - bottom;
-  const maxValue = Math.max.apply(null, values.concat([1]));
-  const step = plotWidth / rows.length;
-  const barWidth = Math.max(8, Math.min(52, step * 0.58));
-  const bars = rows.map(function(row, index){
-    const value = Number(row.value !== undefined ? row.value : row.waste !== undefined ? row.waste : row.weight);
-    const barHeight = Math.max(2, (value / maxValue) * plotHeight * 0.92);
-    const x = left + step * index + (step - barWidth) / 2;
-    const y = top + plotHeight - barHeight;
-    return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barWidth.toFixed(1) + '" height="' + barHeight.toFixed(1) + '" rx="3" fill="#3b82f6"><title>' + (row.label || row.period || row.date || '') + ': ' + value.toFixed(1) + ' KG</title></rect>';
+  const maxValue = Math.max.apply(null, validValues.concat([0]));
+  const scale = maxValue || 1;
+  const step = rows.length > 1 ? plotWidth / (rows.length - 1) : 0;
+  const points = rows.map(function(row, index){
+    if(!Number.isFinite(row.value)) return null;
+    const x = left + step * index;
+    const y = top + plotHeight - (row.value / scale) * plotHeight;
+    return { x:x, y:y, label:row.xLabel || row.label, value:row.value, index:index };
+  });
+  const segments = [];
+  let current = '';
+  points.forEach(function(point){
+    if(!point){ current = ''; return; }
+    current += (current ? ' L ' : ' M ') + point.x.toFixed(1) + ' ' + point.y.toFixed(1);
+    const next = points[point.index + 1];
+    if(!next){ segments.push(current); current = ''; }
+  });
+  const path = segments.map(function(segment){ return '<path d="' + segment.trim() + '" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>'; }).join('');
+  const dots = points.filter(Boolean).map(function(point){
+    return '<circle cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) + '" r="3.5" fill="#3b82f6"><title>' + point.label + ': ' + Number(point.value).toFixed(1) + ' KG</title></circle>';
   }).join('');
-  return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:180px;display:block;"><line x1="' + left + '" y1="' + (top+plotHeight) + '" x2="' + (left+plotWidth) + '" y2="' + (top+plotHeight) + '" stroke="#334155" stroke-width="1"/>' + bars + '</svg>';
+  const labelStep = Math.max(1, Math.ceil(rows.length / 12));
+  const labels = rows.map(function(row, index){
+    if(index % labelStep !== 0 && index !== rows.length - 1) return '';
+    const x = left + (rows.length > 1 ? step * index : 0);
+    return '<text x="' + x.toFixed(1) + '" y="' + (height - 8) + '" text-anchor="middle" fill="#64748b" font-size="11">' + (row.xLabel || row.label) + '</text>';
+  }).join('');
+  const grid = '<line x1="' + left + '" y1="' + (top + plotHeight) + '" x2="' + (left + plotWidth) + '" y2="' + (top + plotHeight) + '" stroke="#334155" stroke-width="1" />' +
+    '<line x1="' + left + '" y1="' + top + '" x2="' + left + '" y2="' + (top + plotHeight) + '" stroke="#334155" stroke-width="1" />';
+  return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:180px;display:block;">' + grid + path + dots + labels + '</svg>';
 }
 
 function renderReportFoodWasteChart(){
   const chart = document.getElementById('report-food-waste-chart');
   if(!chart) return;
-  chart.innerHTML = buildReportFoodWasteSvg(reportFoodWasteData);
+  chart.innerHTML = buildReportFoodWasteSvg(normalizedReportFoodWasteRows(true));
 }
 
 async function loadReportFoodWaste(){
@@ -123,6 +210,7 @@ function renderReports(container){
   const reportPeriod = range.start + ' - ' + range.end;
   const options = reportFilterOptions();
   const title = reportPeriodTitle() + ' Report';
+  const chartTitle = reportFilters.period === 'monthly' ? 'Daily Food Waste In (KG)' : 'Monthly Food Waste In (KG)';
 
   container.innerHTML = `
     <div style="margin-bottom:24px;">
@@ -150,7 +238,7 @@ function renderReports(container){
         ${card('Avg Humidity', avgHumidity, '%', '#0ea5e9')}
       </div>
       <div style="margin-bottom:24px;">
-        <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">Monthly Food Waste In (KG)</h3>
+        <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">${chartTitle}</h3>
         <div id="report-food-waste-chart" style="background:#0f172a;border-radius:8px;padding:12px;border:1px solid #334155;"></div>
       </div>
       <div style="margin-bottom:24px;">
@@ -193,11 +281,10 @@ function reportExportModel(){
   const reportDevice = reportFilters.device || 'All Devices';
   const reportPeriod = range.start + ' - ' + range.end;
   const title = reportPeriodTitle() + ' Report';
-  const foodWaste = reportFoodWasteData.map(function(row){
-    return { label:row.label || row.period || row.date || '', value:Number(row.value !== undefined ? row.value : row.waste !== undefined ? row.waste : row.weight) };
-  }).filter(function(row){ return row.label && Number.isFinite(row.value); });
+  const chartTitle = reportFilters.period === 'monthly' ? 'Daily Food Waste In (KG)' : 'Monthly Food Waste In (KG)';
+  const foodWaste = normalizedReportFoodWasteRows(false);
   const pdfTitle = (reportFilters.device ? 'Machine' : 'Client') + ' ' + reportPeriodTitle() + ' Report';
-  return { title:title, pdfTitle:pdfTitle, period:reportPeriod, client:reportClient, device:reportDevice, fertilizerValue:fertilizerValue, foodWaste:foodWaste };
+  return { title:title, pdfTitle:pdfTitle, chartTitle:chartTitle, period:reportPeriod, client:reportClient, device:reportDevice, fertilizerValue:fertilizerValue, foodWaste:foodWaste };
 }
 
 let reportExportToastTimer = null;
@@ -243,7 +330,7 @@ function csvCell(value){ return '"' + String(value === undefined || value === nu
 
 function exportReportCsv(){
   const model = reportExportModel();
-  const rows = [['Report',model.title],['Period',model.period],['Client',model.client],['Machine',model.device],[],['Metric','Value','Unit'],['Waste Collected','—','kg'],['GHG Reduced','—','kg CO₂e'],['Energy Consumed','—','kWh'],['Est. Fertilizer',model.fertilizerValue,'kg'],['Avg Container Temp','—','°C'],['Avg Humidity','—','%'],[],['Monthly Food Waste In (KG)']];
+  const rows = [['Report',model.title],['Period',model.period],['Client',model.client],['Machine',model.device],[],['Metric','Value','Unit'],['Waste Collected','—','kg'],['GHG Reduced','—','kg CO₂e'],['Energy Consumed','—','kWh'],['Est. Fertilizer',model.fertilizerValue,'kg'],['Avg Container Temp','—','°C'],['Avg Humidity','—','%'],[],[model.chartTitle]];
   model.foodWaste.forEach(function(row){ rows.push([row.label,row.value]); });
   downloadReportFile('bsf-report-' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv;charset=utf-8', '\uFEFF' + rows.map(function(row){ return row.map(csvCell).join(','); }).join('\r\n'));
   showReportExportToast('CSV 导出已开始');
@@ -254,7 +341,7 @@ function exportReportExcel(){
   const rows = [['Metric','Value','Unit'],['Waste Collected','—','kg'],['GHG Reduced','—','kg CO₂e'],['Energy Consumed','—','kWh'],['Est. Fertilizer',model.fertilizerValue,'kg'],['Avg Container Temp','—','°C'],['Avg Humidity','—','%']];
   const tableRows = rows.map(function(row){ return '<tr>' + row.map(function(cell){ return '<td>' + String(cell) + '</td>'; }).join('') + '</tr>'; }).join('');
   const foodRows = model.foodWaste.map(function(row){ return '<tr><td>' + row.label + '</td><td>' + row.value + '</td><td>KG</td></tr>'; }).join('');
-  const html = '<html><head><meta charset="UTF-8"></head><body><h2>' + model.title + '</h2><p>' + model.period + ' · ' + model.client + ' · ' + model.device + '</p><table border="1">' + tableRows + '</table><h3>Monthly Food Waste In (KG)</h3><table border="1"><tr><td>Period</td><td>Value</td><td>Unit</td></tr>' + foodRows + '</table></body></html>';
+  const html = '<html><head><meta charset="UTF-8"></head><body><h2>' + model.title + '</h2><p>' + model.period + ' · ' + model.client + ' · ' + model.device + '</p><table border="1">' + tableRows + '</table><h3>' + model.chartTitle + '</h3><table border="1"><tr><td>Period</td><td>Value</td><td>Unit</td></tr>' + foodRows + '</table></body></html>';
   downloadReportFile('bsf-report-' + new Date().toISOString().slice(0,10) + '.xls', 'application/vnd.ms-excel;charset=utf-8', '\uFEFF' + html);
   showReportExportToast('Excel 导出已开始');
 }
@@ -330,7 +417,7 @@ async function exportReportPdf(){
     }
     doc.setFont('helvetica','bold');
     doc.setFontSize(13);
-    doc.text('Monthly Food Waste In (KG)', margin, cursorY);
+    doc.text(model.chartTitle, margin, cursorY);
     drawTable(cursorY + 26, foodRows);
     const fileName = 'bsf-report-' + new Date().toISOString().slice(0,10) + '.pdf';
     if(typeof window.showSaveFilePicker === 'function'){
@@ -362,7 +449,7 @@ async function exportReportPdf(){
   }).join('');
   const printWindow = window.open('', '_blank');
   if(!printWindow){ showReportExportToast('浏览器阻止了打印窗口，请允许弹窗', 'error'); return; }
-  printWindow.document.write('<html><head><meta charset="UTF-8"><title>' + pdfTitle + '</title><style>@page{size:A4 portrait;margin:12mm;}body{font-family:Arial,sans-serif;color:#111;}h1{font-size:26px;}h2{font-size:18px;margin-top:40px;}table{border-collapse:collapse;width:58%;}th,td{border:1px solid #777;padding:10px 8px;text-align:left;}</style></head><body><h1>' + pdfTitle + '</h1><p>' + model.period + ' · ' + model.client + ' · ' + model.device + '</p><h2>Report Summary</h2><table>' + tableRows + '</table><h2>Monthly Food Waste In (KG)</h2><table><tr><th>Period</th><th>Value</th><th>Unit</th></tr>' + htmlFoodRows + '</table></body></html>');
+  printWindow.document.write('<html><head><meta charset="UTF-8"><title>' + pdfTitle + '</title><style>@page{size:A4 portrait;margin:12mm;}body{font-family:Arial,sans-serif;color:#111;}h1{font-size:26px;}h2{font-size:18px;margin-top:40px;}table{border-collapse:collapse;width:58%;}th,td{border:1px solid #777;padding:10px 8px;text-align:left;}</style></head><body><h1>' + pdfTitle + '</h1><p>' + model.period + ' · ' + model.client + ' · ' + model.device + '</p><h2>Report Summary</h2><table>' + tableRows + '</table><h2>' + model.chartTitle + '</h2><table><tr><th>Period</th><th>Value</th><th>Unit</th></tr>' + htmlFoodRows + '</table></body></html>');
   printWindow.document.close();
   printWindow.focus();
   showReportExportToast('PDF 组件未加载，已打开打印窗口作为备用');
