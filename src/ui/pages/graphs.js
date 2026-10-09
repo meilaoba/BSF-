@@ -66,6 +66,24 @@ function graphPeriodFilterMarkup(){
     '<select id="graph-period-filter" onchange="setGraphPeriod(this.value)" style="padding:8px 12px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:13px;cursor:pointer;">' + options + '</select></label></div>';
 }
 
+function graphAggregationPeriod(selectedPeriod){
+  if(currentRole !== 'client-admin') return selectedPeriod;
+  if(selectedPeriod === 'daily') return 'hourly';
+  if(selectedPeriod === 'monthly') return 'daily';
+  if(selectedPeriod === 'yearly') return 'monthly';
+  return selectedPeriod;
+}
+
+function graphAggregationLabel(dateText, period){
+  const text = String(dateText || '');
+  const date = text.slice(0, 10);
+  const hour = text.slice(11, 13);
+  if(period === 'hourly') return date + (hour ? ' ' + hour + ':00' : '');
+  if(period === 'daily') return date;
+  if(period === 'monthly') return date.slice(0, 7);
+  return date.slice(0, 4);
+}
+
 function aggregateGraphSeries(rows, key, period){
   const groups = new Map();
   rows.forEach(function(row){
@@ -73,7 +91,7 @@ function aggregateGraphSeries(rows, key, period){
     if(rawValue === null || rawValue === undefined || !Number.isFinite(Number(rawValue))) return;
     const dateText = String(row.date || '').slice(0, 10);
     if(!dateText) return;
-    const label = period === 'daily' ? dateText : period === 'monthly' ? dateText.slice(0, 7) : dateText.slice(0, 4);
+    const label = graphAggregationLabel(String(row.date || ''), period);
     const group = groups.get(label) || { label:label, sum:0, count:0 };
     group.sum += Number(rawValue);
     group.count += 1;
@@ -113,6 +131,40 @@ function buildBarChartSvg(rows, valueKey, color){
   return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:180px;display:block;">' + grid + bars + labels + '</svg>';
 }
 
+function buildLineChartSvg(rows, valueKey, color){
+  const pointsData = rows.map(function(row, index){
+    return { label:row.day || row.label || String(index + 1), value:Number(row[valueKey]), index:index };
+  });
+  const valid = pointsData.filter(function(row){ return Number.isFinite(row.value); });
+  if(!valid.length) return '<div style="height:180px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;">No data source</div>';
+  const width = 1000, height = 180, left = 44, right = 20, top = 16, bottom = 30;
+  const plotWidth = width - left - right, plotHeight = height - top - bottom;
+  const maxValue = Math.max.apply(null, valid.map(function(row){ return row.value; }).concat([1]));
+  const step = pointsData.length > 1 ? plotWidth / (pointsData.length - 1) : 0;
+  const points = pointsData.map(function(row){
+    if(!Number.isFinite(row.value)) return null;
+    return { x:left + step * row.index, y:top + plotHeight - (row.value / maxValue) * plotHeight, label:row.label, value:row.value, index:row.index };
+  });
+  const segments = [];
+  let current = '';
+  points.forEach(function(point){
+    if(!point){ current = ''; return; }
+    current += (current ? ' L ' : ' M ') + point.x.toFixed(1) + ' ' + point.y.toFixed(1);
+    const next = points[point.index + 1];
+    if(!next){ segments.push(current); current = ''; }
+  });
+  const path = segments.map(function(segment){ return '<path d="' + segment.trim() + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>'; }).join('');
+  const dots = points.filter(Boolean).map(function(point){ return '<circle cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) + '" r="3.5" fill="' + color + '"><title>' + graphEscape(point.label) + ': ' + point.value.toFixed(1) + '</title></circle>'; }).join('');
+  const labelStep = Math.max(1, Math.ceil(pointsData.length / 6));
+  const labels = pointsData.map(function(row, index){
+    const x = left + step * index;
+    return index % labelStep === 0 || index === pointsData.length - 1 ? '<text x="' + x.toFixed(1) + '" y="' + (height - 8) + '" text-anchor="middle" fill="#64748b" font-size="11">' + graphEscape(row.label) + '</text>' : '';
+  }).join('');
+  const grid = '<line x1="' + left + '" y1="' + (top + plotHeight) + '" x2="' + (left + plotWidth) + '" y2="' + (top + plotHeight) + '" stroke="#334155" stroke-width="1" />' +
+    '<line x1="' + left + '" y1="' + top + '" x2="' + left + '" y2="' + (top + plotHeight) + '" stroke="#334155" stroke-width="1" />';
+  return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:180px;display:block;">' + grid + path + dots + labels + '</svg>';
+}
+
 function foodWasteChartMarkup(){
   return '<div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;margin-bottom:16px;">' +
     '<div style="margin-bottom:16px;"><h3 id="food-waste-title" style="font-size:14px;font-weight:600;color:#94a3b8;margin:0;text-transform:uppercase;letter-spacing:0.5px;">' + graphPeriodLabel(graphPeriods.foodWaste) + ' Food Waste In (KG)</h3></div>' +
@@ -126,16 +178,23 @@ function renderFoodWasteChart(){
   const total = document.getElementById('food-waste-total');
   if(title) title.textContent = graphPeriodLabel(graphPeriods.foodWaste) + ' Food Waste In (KG)';
   if(!chart) return;
-  const series = foodWasteData.map(function(row){
-    return { day:row.label || row.period || row.date || '', value:Number(row.value !== undefined ? row.value : row.waste !== undefined ? row.waste : row.weight) };
-  }).filter(function(row){ return row.day && Number.isFinite(row.value); });
-  chart.innerHTML = buildBarChartSvg(series, 'value', '#3b82f6');
+  const rawSeries = foodWasteData.map(function(row){
+    return {
+      date:row.date || row.timestamp || row.period || row.label || '',
+      value:Number(row.value !== undefined ? row.value : row.waste !== undefined ? row.waste : row.weight)
+    };
+  }).filter(function(row){ return row.date && Number.isFinite(row.value); });
+  const foodWastePeriod = graphAggregationPeriod(graphPeriods.foodWaste);
+  const series = currentRole === 'client-admin'
+    ? aggregateGraphSeries(rawSeries, 'value', foodWastePeriod).map(function(row){ return { day:row.day, value:row.value }; })
+    : rawSeries.map(function(row){ return { day:row.date, value:row.value }; });
+  chart.innerHTML = currentRole === 'client-admin' ? buildLineChartSvg(series, 'value', '#3b82f6') : buildBarChartSvg(series, 'value', '#3b82f6');
   if(total) total.textContent = series.length ? 'Total: ' + series.reduce(function(a,b){ return a + b.value; }, 0).toFixed(1) + ' KG' : 'Total: —';
 }
 
 async function loadFoodWasteChart(){
   if(!window.BSF_API || !window.BSF_API_CONFIG || !window.BSF_API_CONFIG.enabled){ foodWasteData = []; renderFoodWasteChart(); return; }
-  try { const data = await window.BSF_API.getFoodWaste({period:graphPeriods.foodWaste, client:graphFilters.client, machine:graphFilters.machine, start:graphFilters.start, end:graphFilters.end}); foodWasteData = data && (data.items || data.list) ? (data.items || data.list) : (Array.isArray(data) ? data : []); }
+  try { const data = await window.BSF_API.getFoodWaste({period:graphPeriods.foodWaste, groupBy:graphAggregationPeriod(graphPeriods.foodWaste), client:graphFilters.client, machine:graphFilters.machine, start:graphFilters.start, end:graphFilters.end}); foodWasteData = data && (data.items || data.list) ? (data.items || data.list) : (Array.isArray(data) ? data : []); }
   catch(error){ foodWasteData = []; }
   renderFoodWasteChart();
 }
@@ -212,9 +271,12 @@ function renderGraphs(container){
   const chartData = graphFilteredRawRows().reverse().map(function(row,i){
     return { day:i+1, date:row.recordedAt, waste:null, temp:Number(row.temperature), energy:null, ghg:null, humidity:Number(row.humidity) };
   });
-  const ghgSeries = aggregateGraphSeries(chartData, 'ghg', graphPeriods.ghg);
-  const tempSeries = aggregateGraphSeries(chartData, 'temp', graphPeriods.temp);
-  const energySeries = aggregateGraphSeries(chartData, 'energy', graphPeriods.energy);
+  const ghgPeriod = graphAggregationPeriod(graphPeriods.ghg);
+  const tempPeriod = graphAggregationPeriod(graphPeriods.temp);
+  const energyPeriod = graphAggregationPeriod(graphPeriods.energy);
+  const ghgSeries = aggregateGraphSeries(chartData, 'ghg', ghgPeriod);
+  const tempSeries = aggregateGraphSeries(chartData, 'temp', tempPeriod);
+  const energySeries = aggregateGraphSeries(chartData, 'energy', energyPeriod);
 
   function lineChart(data, key, color, unit, chartId){
     const period = graphPeriods[chartId] || graphPeriods.foodWaste;
@@ -222,7 +284,7 @@ function renderGraphs(container){
     const avgValue = validValues.length ? (validValues.reduce(function(a,b){ return a+b; },0) / validValues.length).toFixed(1) : '—';
     return '<div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;margin-bottom:16px;">' +
       '<div style="margin-bottom:16px;"><h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0;text-transform:uppercase;letter-spacing:0.5px;">' + graphPeriodLabel(period) + ' ' + key + ' Trend' + (validValues.length ? '' : ' · No data source') + '</h3></div>' +
-      buildBarChartSvg(data, key, color) +
+      (currentRole === 'client-admin' ? buildLineChartSvg(data, key, color) : buildBarChartSvg(data, key, color)) +
       '<div style="display:flex;justify-content:space-between;margin-top:8px;"><span style="font-size:12px;color:#64748b;">Unit: ' + unit + '</span><span style="font-size:12px;color:#64748b;">Avg: ' + avgValue + ' ' + unit + '</span></div></div>';
   }
 
