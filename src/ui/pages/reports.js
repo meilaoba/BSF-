@@ -1,5 +1,15 @@
 let reportFilters = { client:'', device:'', period:'monthly', month:new Date().getMonth()+1, year:new Date().getFullYear() };
 let reportFoodWasteData = [];
+let reportYearManuallySelected = false;
+
+function syncReportCalendarYear(){
+  const currentYear = new Date().getFullYear();
+  if(!reportYearManuallySelected && Number(reportFilters.year) !== currentYear){
+    reportFilters.year = currentYear;
+    return true;
+  }
+  return false;
+}
 
 function reportPeriodTitle(){
   return reportFilters.period === 'yearly' ? 'Yearly' : 'Monthly';
@@ -187,11 +197,13 @@ async function loadReportFoodWaste(){
 
 function setReportFilter(key, value){
   reportFilters[key] = value;
+  if(key === 'year') reportYearManuallySelected = true;
   if(key === 'client') reportFilters.device = '';
   renderReports(document.getElementById('page-content'));
 }
 
 function renderReports(container){
+  syncReportCalendarYear();
   const range = reportPeriodRange();
   const rangeStart = new Date(range.start + 'T00:00:00');
   const rangeEnd = new Date(range.end + 'T00:00:00');
@@ -455,3 +467,9 @@ async function exportReportPdf(){
   showReportExportToast('PDF 组件未加载，已打开打印窗口作为备用');
   setTimeout(function(){ printWindow.print(); }, 500);
 }
+
+setInterval(function(){
+  if(syncReportCalendarYear() && currentPage === 'reports'){
+    renderReports(document.getElementById('page-content'));
+  }
+}, 60000);
