@@ -4,6 +4,7 @@ let currentUsername = '';
 let currentClient = '';
 let currentMachineId = '';
 let machineFilters = { client: '', device: '' };
+let locationFilters = { client: '', status: '', search: '' };
 let rawDataFilters = { client: '', device: '', start: '', end: '' };
 let rawDataPage = 1;
 const RAW_DATA_PAGE_SIZE = 30;
@@ -13,6 +14,7 @@ let machineThresholds = {};
 let alertNotifications = [];
 const GOOGLE_MAPS_API_KEY = '';
 let locationsMap = null;
+let locationsMarkers = [];
 let googleMapsLoading = null;
 
 function bsfEscapeHtml(value){
@@ -88,6 +90,7 @@ function applyClientScopeToState(){
   if(!isClientScopedRole()) return;
   const machineId = refreshMachineScope();
   machineFilters.client = client; machineFilters.device = machineId;
+  locationFilters.client = client;
   rawDataFilters.client = client; rawDataFilters.device = machineId;
   alertFilters.client = client; alertFilters.machine = machineId;
   apiFilters.client = client; apiFilters.machine = machineId;
