@@ -88,17 +88,31 @@ async function loadLatestForCurrentRole(){
   return changed;
 }
 
+async function refreshRealtimePage(){
+  const realtimePages = ['machines','locations','graphs','raw-data','reports','alerts'];
+  if(document.querySelector('[id$="-modal"]')) return;
+  if(realtimePages.indexOf(currentPage) === -1) return;
+  renderNav();
+  navigate(currentPage);
+}
+
 function scheduleDataRefresh(){
   if(dataRefreshTimer) clearInterval(dataRefreshTimer);
-  const realtimePages = ['machines','locations','graphs','raw-data','reports','alerts'];
+
+  if(currentRole === 'admin'){
+    // Master Admin checks for new device data every 5 seconds and renders when a new MQTT record arrives.
+    dataRefreshTimer = setInterval(async function(){
+      const changed = await loadLatestForCurrentRole();
+      if(changed) await refreshRealtimePage();
+    }, 5000);
+    return;
+  }
+
+  // Client Admin and User refresh the page every 10 minutes and show the nearest latest record.
   dataRefreshTimer = setInterval(async function(){
-    const changed = await loadLatestForCurrentRole();
-    if(!changed) return;
-    if(document.querySelector('[id$="-modal"]')) return;
-    if(realtimePages.indexOf(currentPage) === -1) return;
-    renderNav();
-    navigate(currentPage);
-  }, 5000);
+    await loadLatestForCurrentRole();
+    await refreshRealtimePage();
+  }, 10 * 60 * 1000);
 }
 
 function logout(){
