@@ -160,7 +160,7 @@ npm run migrate
 systemctl status bsf-backend bsf-notification-worker
 
 # 全量自检（会创建临时数据并在结束时删除）
-./scripts/smoke-test.sh
+bash scripts/smoke-test.sh
 ~~~
 
 `/etc/bsf-backend.env` 保存数据库密码与厂商密钥，权限为 `600`，**不会上传到 GitHub**。

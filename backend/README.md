@@ -117,3 +117,16 @@ curl -s -X POST localhost:3000/api/v1/notifications/test/email \
 The second call returns `providerConfigured: false` and the job stays in
 `waiting_config`. Once credentials are added, either restart the worker or call
 `POST /api/v1/notifications/jobs/retry {"allWaitingConfig":true}`.
+## Smoke test
+
+`scripts/smoke-test.sh` walks every endpoint that can be verified without
+vendor credentials and prints a pass/fail summary. Run it after any change:
+
+```bash
+sudo bash -c 'set -a; . /etc/bsf-backend.env; set +a; cd /var/www/bsf-backend && bash scripts/smoke-test.sh'
+```
+
+It creates a throwaway client, machine and recipients, triggers both a high and
+a low temperature breach, checks that deduplication works, confirms that no job
+is reported as `sent` while credentials are blank, and then deletes its own
+records. Pass `--keep` to inspect the data afterwards.
