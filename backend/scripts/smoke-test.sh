@@ -184,8 +184,10 @@ check "reports provider not configured" '"providerConfigured":false' "$TESTMAIL"
 # ---------------------------------------------------------------------------
 if [ "$KEEP" -eq 0 ] && [ -n "${DATABASE_URL:-}" ]; then
   psql "$DATABASE_URL" -q -v ON_ERROR_STOP=1 >/dev/null <<SQL
-DELETE FROM notification_logs  WHERE job_id IN (SELECT id FROM notification_jobs WHERE client_id = '$CID');
-DELETE FROM notification_jobs  WHERE client_id = '$CID';
+DELETE FROM notification_logs  WHERE job_id IN (
+         SELECT id FROM notification_jobs
+          WHERE client_id = '$CID' OR to_address = 'smoke@example.com');
+DELETE FROM notification_jobs  WHERE client_id = '$CID' OR to_address = 'smoke@example.com';
 DELETE FROM notification_recipients WHERE client_id = '$CID';
 DELETE FROM alert_thresholds   WHERE machine_id = '$MID';
 DELETE FROM machines           WHERE id = '$MID';
