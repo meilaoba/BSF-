@@ -43,13 +43,20 @@ function graphAnchorDate(){
 function graphPeriodRange(){
   const anchor = graphAnchorDate();
   const date = new Date(anchor + 'T00:00:00');
-  const year = Number.isFinite(date.getTime()) ? date.getFullYear() : new Date().getFullYear();
-  const month = Number.isFinite(date.getTime()) ? date.getMonth() + 1 : new Date().getMonth() + 1;
+  const now = new Date();
+  const year = Number.isFinite(date.getTime()) ? date.getFullYear() : now.getFullYear();
+  const month = Number.isFinite(date.getTime()) ? date.getMonth() + 1 : now.getMonth() + 1;
   const pad = function(value){ return String(value).padStart(2, '0'); };
-  if(graphPeriods.foodWaste === 'daily') return { start:anchor, end:anchor, year:year, month:month };
-  if(graphPeriods.foodWaste === 'yearly') return { start:year + '-01-01', end:year + '-12-31', year:year, month:month };
+  const today = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+  const cap = function(end){ return end < today ? end : today; };
+  if(graphPeriods.foodWaste === 'daily') return { start:anchor, end:anchor, dataEnd:cap(anchor), year:year, month:month };
+  if(graphPeriods.foodWaste === 'yearly'){
+    const end = year + '-12-31';
+    return { start:year + '-01-01', end:end, dataEnd:cap(end), year:year, month:month };
+  }
   const lastDay = new Date(year, month, 0).getDate();
-  return { start:year + '-' + pad(month) + '-01', end:year + '-' + pad(month) + '-' + pad(lastDay), year:year, month:month };
+  const end = year + '-' + pad(month) + '-' + pad(lastDay);
+  return { start:year + '-' + pad(month) + '-01', end:end, dataEnd:cap(end), year:year, month:month };
 }
 
 function graphFilteredRawRows(){
@@ -59,7 +66,9 @@ function graphFilteredRawRows(){
   return rows.filter(function(row){
     if(!visibleIds.has(row.device)) return false;
     const dateText = String(row.recordedAt || '').slice(0,10);
-    if(!dateText || dateText < range.start || dateText > range.end) return false;
+    if(!dateText || dateText < range.start || dateText > range.dataEnd) return false;
+    const rowTime = new Date(String(row.recordedAt || '').replace(' ', 'T')).getTime();
+    if(Number.isFinite(rowTime) && rowTime > Date.now()) return false;
     if(graphFilters.machine && row.device !== graphFilters.machine) return false;
     if(graphFilters.client){
       const device = devices.find(function(item){ return item.id === row.device; });
@@ -169,23 +178,29 @@ function buildBarChartSvg(rows, valueKey, color){
 }
 
 function buildLineChartSvg(rows, valueKey, color){
-  const pointsData = rows.map(function(row){
-    return { label:row.day || row.label || '', value:Number(row[valueKey]) };
-  }).filter(function(row){ return row.label && Number.isFinite(row.value); });
-  if(!pointsData.length) return '<div style="height:180px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;">No data source</div>';
+  const pointsData = rows.map(function(row, index){
+    return { label:row.day || row.label || String(index + 1), value:Number(row[valueKey]), index:index };
+  });
+  const valid = pointsData.filter(function(row){ return Number.isFinite(row.value); });
+  if(!valid.length) return '<div style="height:180px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;">No data source</div>';
   const width = 1000, height = 180, left = 44, right = 20, top = 16, bottom = 30;
   const plotWidth = width - left - right, plotHeight = height - top - bottom;
-  const maxValue = Math.max.apply(null, pointsData.map(function(row){ return row.value; }).concat([1]));
+  const maxValue = Math.max.apply(null, valid.map(function(row){ return row.value; }).concat([1]));
   const step = pointsData.length > 1 ? plotWidth / (pointsData.length - 1) : 0;
-  const path = pointsData.map(function(point, index){
-    return (index ? ' L ' : ' M ') + (left + step * index).toFixed(1) + ' ' + (top + plotHeight - (point.value / maxValue) * plotHeight).toFixed(1);
-  }).join('');
-  const line = '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>';
-  const dots = pointsData.map(function(point, index){
-    const x = left + step * index;
-    const y = top + plotHeight - (point.value / maxValue) * plotHeight;
-    return '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3.5" fill="' + color + '"><title>' + graphEscape(point.label) + ': ' + point.value.toFixed(1) + '</title></circle>';
-  }).join('');
+  const points = pointsData.map(function(row){
+    if(!Number.isFinite(row.value)) return null;
+    return { x:left + step * row.index, y:top + plotHeight - (row.value / maxValue) * plotHeight, label:row.label, value:row.value, index:row.index };
+  });
+  const segments = [];
+  let current = '';
+  points.forEach(function(point){
+    if(!point){ current = ''; return; }
+    current += (current ? ' L ' : ' M ') + point.x.toFixed(1) + ' ' + point.y.toFixed(1);
+    const next = points[point.index + 1];
+    if(!next){ segments.push(current); current = ''; }
+  });
+  const path = segments.map(function(segment){ return '<path d="' + segment.trim() + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>'; }).join('');
+  const dots = points.filter(Boolean).map(function(point){ return '<circle cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) + '" r="3.5" fill="' + color + '"><title>' + graphEscape(point.label) + ': ' + point.value.toFixed(1) + '</title></circle>'; }).join('');
   const labelStep = Math.max(1, Math.ceil(pointsData.length / 6));
   const labels = pointsData.map(function(row, index){
     const x = left + step * index;
@@ -193,7 +208,7 @@ function buildLineChartSvg(rows, valueKey, color){
   }).join('');
   const grid = '<line x1="' + left + '" y1="' + (top + plotHeight) + '" x2="' + (left + plotWidth) + '" y2="' + (top + plotHeight) + '" stroke="#334155" stroke-width="1" />' +
     '<line x1="' + left + '" y1="' + top + '" x2="' + left + '" y2="' + (top + plotHeight) + '" stroke="#334155" stroke-width="1" />';
-  return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:180px;display:block;">' + grid + line + dots + labels + '</svg>';
+  return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:180px;display:block;">' + grid + path + dots + labels + '</svg>';
 }
 
 function foodWasteChartMarkup(){
