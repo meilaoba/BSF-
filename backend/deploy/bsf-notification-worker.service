@@ -1,0 +1,35 @@
+[Unit]
+Description=BSF platform notification worker
+Documentation=file:/var/www/bsf-backend/README.md
+After=network-online.target postgresql.service bsf-backend.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/bsf-backend
+EnvironmentFile=/etc/bsf-backend.env
+ExecStart=/usr/bin/node src/worker.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bsf-notification-worker
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/var/www/bsf-backend
+
+[Install]
+WantedBy=multi-user.target

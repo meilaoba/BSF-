@@ -6,3 +6,9 @@ bms_mos.log
 data/
 runtime-config.local.json
 *.log
+
+# backend build artefacts and secrets
+backend/node_modules/
+backend/.env
+backend/.env.*
+backend/coverage/

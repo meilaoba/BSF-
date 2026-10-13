@@ -1,0 +1,37 @@
+[Unit]
+Description=BSF platform HTTP API
+Documentation=file:/var/www/bsf-backend/README.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/bsf-backend
+EnvironmentFile=/etc/bsf-backend.env
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bsf-backend
+
+# Hardening: the API only needs to talk to localhost PostgreSQL and the
+# outbound HTTPS APIs of the mail / messaging vendors.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/var/www/bsf-backend
+
+[Install]
+WantedBy=multi-user.target
