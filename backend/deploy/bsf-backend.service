@@ -30,7 +30,8 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 RestrictRealtime=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
+# NOTE: MemoryDenyWriteExecute is intentionally NOT set: V8 needs
+# writable+executable mappings for its JIT and node fails to start with it.
 ReadWritePaths=/var/www/bsf-backend
 
 [Install]
