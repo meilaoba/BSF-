@@ -32,21 +32,41 @@ function ensureGraphDateFilters(){
   if(graphFilters.start && graphFilters.end && graphFilters.start > graphFilters.end) graphFilters.end = graphFilters.start;
 }
 
+function graphAnchorDate(){
+  const candidates = [graphFilters.end, graphFilters.start]
+    .concat((window.BSF_GRAPH_HISTORY_ROWS || rawDataRows).map(function(row){ return String(row.recordedAt || '').slice(0,10); }))
+    .filter(Boolean)
+    .sort();
+  return candidates.length ? candidates[candidates.length - 1] : new Date().toISOString().slice(0,10);
+}
+
+function graphPeriodRange(){
+  const anchor = graphAnchorDate();
+  const date = new Date(anchor + 'T00:00:00');
+  const year = Number.isFinite(date.getTime()) ? date.getFullYear() : new Date().getFullYear();
+  const month = Number.isFinite(date.getTime()) ? date.getMonth() + 1 : new Date().getMonth() + 1;
+  const pad = function(value){ return String(value).padStart(2, '0'); };
+  if(graphPeriods.foodWaste === 'daily') return { start:anchor, end:anchor, year:year, month:month };
+  if(graphPeriods.foodWaste === 'yearly') return { start:year + '-01-01', end:year + '-12-31', year:year, month:month };
+  const lastDay = new Date(year, month, 0).getDate();
+  return { start:year + '-' + pad(month) + '-01', end:year + '-' + pad(month) + '-' + pad(lastDay), year:year, month:month };
+}
+
 function graphFilteredRawRows(){
-  ensureGraphDateFilters();
+  const rows = (window.BSF_GRAPH_HISTORY_ROWS && window.BSF_GRAPH_HISTORY_ROWS.length) ? window.BSF_GRAPH_HISTORY_ROWS : rawDataRows;
+  const range = graphPeriodRange();
   const visibleIds = new Set(scopedDevices().map(function(device){ return device.id; }));
-  return rawDataRows.filter(function(row){
+  return rows.filter(function(row){
     if(!visibleIds.has(row.device)) return false;
     const dateText = String(row.recordedAt || '').slice(0,10);
-    if(graphFilters.start && dateText < graphFilters.start) return false;
-    if(graphFilters.end && dateText > graphFilters.end) return false;
+    if(!dateText || dateText < range.start || dateText > range.end) return false;
     if(graphFilters.machine && row.device !== graphFilters.machine) return false;
     if(graphFilters.client){
       const device = devices.find(function(item){ return item.id === row.device; });
       if(!device || device.client !== graphFilters.client) return false;
     }
     return true;
-  }).slice(0,100);
+  });
 }
 
 function graphClientOptions(){
@@ -67,11 +87,10 @@ function graphPeriodFilterMarkup(){
 }
 
 function graphAggregationPeriod(selectedPeriod){
-  if(currentRole !== 'client-admin') return selectedPeriod;
   if(selectedPeriod === 'daily') return 'hourly';
   if(selectedPeriod === 'monthly') return 'daily';
   if(selectedPeriod === 'yearly') return 'monthly';
-  return selectedPeriod;
+  return 'daily';
 }
 
 function graphAggregationLabel(dateText, period){
@@ -84,22 +103,40 @@ function graphAggregationLabel(dateText, period){
   return date.slice(0, 4);
 }
 
+function graphBucketLabels(period){
+  const range = graphPeriodRange();
+  const pad = function(value){ return String(value).padStart(2, '0'); };
+  if(period === 'hourly'){
+    const labels = [];
+    for(let hour=0; hour<24; hour++) labels.push(range.start + ' ' + pad(hour) + ':00');
+    return labels;
+  }
+  if(period === 'daily'){
+    const lastDay = new Date(range.year, range.month, 0).getDate();
+    const labels = [];
+    for(let day=1; day<=lastDay; day++) labels.push(range.year + '-' + pad(range.month) + '-' + pad(day));
+    return labels;
+  }
+  const labels = [];
+  for(let month=1; month<=12; month++) labels.push(range.year + '-' + pad(month));
+  return labels;
+}
+
 function aggregateGraphSeries(rows, key, period){
   const groups = new Map();
   rows.forEach(function(row){
     const rawValue = row[key];
     if(rawValue === null || rawValue === undefined || !Number.isFinite(Number(rawValue))) return;
-    const dateText = String(row.date || '').slice(0, 10);
-    if(!dateText) return;
     const label = graphAggregationLabel(String(row.date || ''), period);
-    const group = groups.get(label) || { label:label, sum:0, count:0 };
+    const group = groups.get(label) || { sum:0, count:0 };
     group.sum += Number(rawValue);
     group.count += 1;
     groups.set(label, group);
   });
-  return Array.from(groups.values()).sort(function(a,b){ return a.label.localeCompare(b.label); }).map(function(group){
-    const item = { day:group.label };
-    item[key] = group.sum / group.count;
+  return graphBucketLabels(period).map(function(label){
+    const group = groups.get(label);
+    const item = { day:label };
+    item[key] = group ? group.sum / group.count : null;
     return item;
   });
 }
@@ -185,11 +222,10 @@ function renderFoodWasteChart(){
     };
   }).filter(function(row){ return row.date && Number.isFinite(row.value); });
   const foodWastePeriod = graphAggregationPeriod(graphPeriods.foodWaste);
-  const series = currentRole === 'client-admin'
-    ? aggregateGraphSeries(rawSeries, 'value', foodWastePeriod).map(function(row){ return { day:row.day, value:row.value }; })
-    : rawSeries.map(function(row){ return { day:row.date, value:row.value }; });
-  chart.innerHTML = currentRole === 'client-admin' ? buildLineChartSvg(series, 'value', '#3b82f6') : buildBarChartSvg(series, 'value', '#3b82f6');
-  if(total) total.textContent = series.length ? 'Total: ' + series.reduce(function(a,b){ return a + b.value; }, 0).toFixed(1) + ' KG' : 'Total: —';
+  const series = aggregateGraphSeries(rawSeries, 'value', foodWastePeriod).map(function(row){ return { day:row.day, value:row.value }; });
+  const validSeries = series.filter(function(row){ return Number.isFinite(row.value); });
+  chart.innerHTML = buildLineChartSvg(series, 'value', '#3b82f6');
+  if(total) total.textContent = validSeries.length ? 'Total: ' + validSeries.reduce(function(a,b){ return a + b.value; }, 0).toFixed(1) + ' KG' : 'Total: —';
 }
 
 async function loadFoodWasteChart(){
@@ -284,7 +320,7 @@ function renderGraphs(container){
     const avgValue = validValues.length ? (validValues.reduce(function(a,b){ return a+b; },0) / validValues.length).toFixed(1) : '—';
     return '<div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;margin-bottom:16px;">' +
       '<div style="margin-bottom:16px;"><h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0;text-transform:uppercase;letter-spacing:0.5px;">' + graphPeriodLabel(period) + ' ' + key + ' Trend' + (validValues.length ? '' : ' · No data source') + '</h3></div>' +
-      (currentRole === 'client-admin' ? buildLineChartSvg(data, key, color) : buildBarChartSvg(data, key, color)) +
+      buildLineChartSvg(data, key, color) +
       '<div style="display:flex;justify-content:space-between;margin-top:8px;"><span style="font-size:12px;color:#64748b;">Unit: ' + unit + '</span><span style="font-size:12px;color:#64748b;">Avg: ' + avgValue + ' ' + unit + '</span></div></div>';
   }
 

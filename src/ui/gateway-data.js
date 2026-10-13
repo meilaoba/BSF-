@@ -161,6 +161,7 @@ window.BSF_LOAD_GATEWAY_LATEST = async function(){
     const realDevices = bsfMapDevices([latest]);
     devices.splice(0, devices.length, ...realDevices);
     const mappedRows = bsfMapRawRows([latest]);
+    window.BSF_GRAPH_HISTORY_ROWS = mergeClientRawHistory(window.BSF_GRAPH_HISTORY_ROWS || [], mappedRows);
     const mergedRows = mergeClientRawHistory(rawDataRows, mappedRows);
     rawDataRows.splice(0, rawDataRows.length, ...mergedRows);
     if(currentRole !== 'admin') saveClientRawHistory(mergedRows);
@@ -194,6 +195,7 @@ window.BSF_LOAD_GATEWAY_DATA = async function(limit){
     messages.sort(function(a,b){
       return Number(a.receivedAt || a.timestamp || 0) - Number(b.receivedAt || b.timestamp || 0);
     });
+    window.BSF_GRAPH_HISTORY_ROWS = bsfMapRawRows(messages.slice().reverse());
     const requested = Math.max(1, Number(limit) || 100);
     const recentMessages = messages.slice(-requested).reverse();
     const realDevices = bsfMapDevices(latest && latest.devices ? [latest] : recentMessages);
