@@ -179,6 +179,19 @@ echo "[13] test-send endpoint never claims a delivery"
 TESTMAIL=$(curl -s -X POST "$API/notifications/test/email" "${auth[@]}" -d '{"to":"smoke@example.com"}')
 check "reports provider not configured" '"providerConfigured":false' "$TESTMAIL"
 
+echo
+echo "[14] regression guard: the dashboard's own /api/gateway bridge is still reachable"
+# The dashboard server also owns paths under /api/. A reverse-proxy rule that
+# is broader than /api/v1/ silently swallows /api/gateway/... and returns 404,
+# which blanks the live device data on every page. Only meaningful when a
+# proxy sits in front of the API.
+if curl -s -o /dev/null --max-time 5 http://127.0.0.1/api/gateway/health 2>/dev/null; then
+  GW_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1/api/gateway/health)
+  check "dashboard gateway bridge reachable through the proxy" "200" "$GW_CODE"
+else
+  echo "  SKIP  no reverse proxy on port 80 (expected on a development machine)"
+fi
+
 # ---------------------------------------------------------------------------
 # Clean up the throwaway records unless --keep was requested.
 # ---------------------------------------------------------------------------
