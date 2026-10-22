@@ -62,11 +62,17 @@ sudo systemctl enable --now bsf-backend bsf-notification-worker
 
 ## API
 
-All write endpoints accept `x-api-key: <INTERNAL_API_KEY>` when that variable is
-set. Read endpoints are open to the reverse proxy.
+Write endpoints accept either a Master Admin session or
+`x-api-key: <INTERNAL_API_KEY>` for service-to-service calls. With
+`AUTH_REQUIRED=true`, every API route except health/login requires a valid
+session; tenant roles are scoped by the backend.
 
 | Method | Path | Purpose |
 | ------ | ---- | ------- |
+| POST | `/api/v1/auth/login` | Vendor login; sets the BSF session cookie |
+| GET | `/api/v1/auth/me` | Current authenticated user and role |
+| POST | `/api/v1/auth/logout` | Revoke the current session |
+| POST | `/api/v1/auth/refresh` | Reserved until the vendor provides a refresh endpoint |
 | GET | `/api/v1/health` | service + database + queue + provider status |
 | GET | `/api/v1/meta/providers` | is Email / WhatsApp configured yet |
 | GET | `/api/v1/notifications/logs` | delivery history |
@@ -84,6 +90,27 @@ set. Read endpoints are open to the reverse proxy.
 | GET/PUT | `/api/v1/alert-thresholds` | per-machine temperature limits |
 | GET | `/api/v1/audit-logs` | change history |
 
+### Vendor login and session security
+
+The browser never calls the vendor login API directly. The backend:
+
+1. receives `{ "userName": "...", "password": "..." }`;
+2. hashes the password as 32-character uppercase MD5;
+3. calls `VENDOR_LOGIN_URL` from the server;
+4. maps vendor `type` 1/2/3 to `master_admin` / `client_admin` / `user`;
+5. stores vendor tokens encrypted with AES-256-GCM;
+6. sets an opaque `HttpOnly` session cookie and a separate CSRF cookie.
+
+The raw vendor token is never returned to the browser. State-changing requests
+must include the `X-CSRF-Token` header, and repeated login failures are rate
+limited and written to the audit log. The same-origin `/api/gateway/` MQTT
+bridge also requires a valid BSF session; unauthenticated device-data requests
+are rejected.
+
+Required environment values are documented in `.env.example`. Generate a key
+with `openssl rand -base64 32`. `AUTH_COOKIE_SECURE=true` requires HTTPS; do not
+disable it on a production site.
+
 ### Data scoping rules
 
 - **Master Admin** — no filter, sees every client and machine.
@@ -91,9 +118,9 @@ set. Read endpoints are open to the reverse proxy.
   is removed from the UI.
 - **User** — `machineId` is fixed to their single machine.
 
-The API accepts `clientId` / `machineId` filters so the frontend can render
-these views. The session layer being added later MUST overwrite those values
-from the authenticated principal; the browser must never be trusted for them.
+The API accepts `clientId` / `machineId` filters for Master Admin views. For
+Client Admin and User sessions, the backend overwrites those values from the
+authenticated principal; browser-supplied scope is never trusted.
 
 ## Alert rule
 

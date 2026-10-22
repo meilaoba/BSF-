@@ -9,6 +9,9 @@ export function createBackendApi(options = {}) {
 
   return {
     login(data) { return http.post('/auth/login', data); },
+    logout() { return http.post('/auth/logout', {}); },
+    getSession() { return http.get('/auth/me'); },
+    refreshSession() { return http.post('/auth/refresh', {}); },
     getProfile() { return http.get('/auth/profile'); },
     changePassword(data) { return http.post('/auth/change-password', data); },
 

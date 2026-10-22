@@ -87,6 +87,10 @@ npm run check:gateway
 后端负责 Email / WhatsApp 通知、客户与设备资料、告警规则与审计日志。
 前端只负责界面，**所有需要长期保存的数据都由后端提供接口**。
 
+登录统一由后端代理厂商接口处理：前端只提交用户名和密码，后端完成 MD5、
+角色映射、Token 加密、HttpOnly 会话 Cookie、CSRF 校验和登录失败限流。
+厂商 Token 不会保存到浏览器；`/api/gateway/` 设备数据接口同样要求有效登录会话。
+
 ~~~text
 backend/
 ├─ src/server.js          HTTP API（Node 内置 http，无框架依赖）
@@ -144,8 +148,8 @@ GET  /api/v1/audit-logs                   操作审计
 - **Client Admin**：只属于一个客户，界面不提供 Client 筛选。
 - **User**：只关联一台设备。
 
-后端接受 `clientId` / `machineId` 参数实现上述范围过滤；
-**后续接入登录会话后，必须由后端根据登录身份覆盖这两个参数，不能信任浏览器传入的值。**
+后端接受 `clientId` / `machineId` 参数实现上述范围过滤；Client Admin 与 User
+登录后，后端会用会话中的客户/设备范围覆盖浏览器传入的参数。
 
 ### 部署与自检
 

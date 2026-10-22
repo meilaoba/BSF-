@@ -7,10 +7,7 @@ export function createBsfApp(overrides = {}) {
   const runtime = resolveRuntimeConfig(overrides);
   const backend = createBackendApi({
     baseUrl: runtime.apiBaseUrl,
-    timeoutMs: runtime.requestTimeoutMs,
-    getToken: () => {
-      try { return sessionStorage.getItem('bsf.delivery.sessionToken') || ''; } catch (error) { return ''; }
-    }
+    timeoutMs: runtime.requestTimeoutMs
   });
   const gateway = createGatewayApi({
     baseUrl: runtime.gatewayBaseUrl,

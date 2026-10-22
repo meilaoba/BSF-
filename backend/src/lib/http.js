@@ -101,8 +101,9 @@ export function applyCors(req, res, allowedOrigins) {
     res.setHeader('Access-Control-Allow-Origin', allowAll ? '*' : origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key, Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key, x-csrf-token, Authorization');
     res.setHeader('Access-Control-Max-Age', '600');
+    if (!allowAll) res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
 }
 

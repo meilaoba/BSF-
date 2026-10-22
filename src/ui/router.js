@@ -15,54 +15,38 @@ function normalizeSessionRole(role){
   return '';
 }
 
-function isLocalDevelopmentHost(){
-  const host = window.location.hostname;
-  if(['localhost', '127.0.0.1', '::1'].indexOf(host) >= 0) return true;
-  if(/^10\./.test(host)) return true;
-  if(/^192\.168\./.test(host)) return true;
-  if(/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
-  return /^[a-zA-Z0-9-]+\.local$/.test(host);
-}
-
-async function authenticateLogin(email, password){
-  if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
-    const session = await window.BSF_API.login({ email: email, password: password });
-    const token = session && (session.token || session.accessToken);
-    if(token){
-      try { sessionStorage.setItem('bsf.delivery.sessionToken', String(token)); } catch (error) {}
-    }
+async function authenticateLogin(userName, password){
+  if(window.BSF_AUTH_CONFIG && window.BSF_AUTH_CONFIG.enabled){
+    const session = await window.BSF_API.login({ userName: userName, password: password });
     window.BSF_SESSION = session || {};
-    const resolvedRole = normalizeSessionRole(session && (session.role || (session.user && session.user.role)));
+    const resolvedRole = normalizeSessionRole(session && session.user && session.user.role);
     if(!resolvedRole) throw new Error('Account role is not configured');
-    return { role: resolvedRole, username: (session.user && (session.user.email || session.user.name)) || email };
+    window.BSF_USER_PROFILE = session.user;
+    window.BSF_CURRENT_USER = session.user;
+    return {
+      role: resolvedRole,
+      username: session.user.userName || session.user.fullName || userName,
+      user: session.user
+    };
   }
   if(window.BSF_DEMO_MODE === true){
     const demoRole = document.getElementById('role-select').value;
     if(!demoRole) throw new Error('Please select a role');
-    return { role: demoRole, username: email };
+    return { role: demoRole, username: userName };
   }
-  if(!isLocalDevelopmentHost()) throw new Error('Authentication service unavailable');
-  const demoRole = document.getElementById('role-select').value;
-  if(!demoRole) throw new Error('Please select a role');
-  return { role: demoRole, username: email };
+  throw new Error('Authentication service unavailable');
 }
 
-async function login(){
-  const loginName = (document.getElementById('login-username') || {}).value || '';
-  const password = (document.getElementById('login-password') || {}).value || '';
-  if(!loginName){ alert('Email is required.'); return; }
-  if(!password && window.BSF_DEMO_MODE !== true){ alert('Password is required.'); return; }
-  let authenticated;
-  try { authenticated = await authenticateLogin(loginName, password); }
-  catch(error){ alert('Sign in failed: ' + error.message); return; }
+async function enterAuthenticatedApp(authenticated){
   currentRole = authenticated.role;
+  currentUsername = authenticated.username;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('main-app').style.display='block';
   const roleMeta = { admin:{label:'Master Admin'}, 'client-admin':{label:'Client Admin'}, user:{label:'User'} };
   const roleInfo = roleMeta[currentRole] || roleMeta.user;
   document.getElementById('role-badge').textContent = roleInfo.label;
-  document.getElementById('user-name').textContent = loginName;
-  const initials = loginName.replace(/@.*/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || roleInfo.label.slice(0, 2).toUpperCase();
+  document.getElementById('user-name').textContent = authenticated.username;
+  const initials = authenticated.username.replace(/@.*/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || roleInfo.label.slice(0, 2).toUpperCase();
   document.getElementById('user-avatar').textContent = initials;
   if(typeof applyStoredAccountProfile === 'function') applyStoredAccountProfile();
   renderNav();
@@ -70,6 +54,17 @@ async function login(){
   applyClientScopeToState();
   scheduleDataRefresh();
   navigate('machines');
+}
+
+async function login(){
+  const loginName = (document.getElementById('login-username') || {}).value || '';
+  const password = (document.getElementById('login-password') || {}).value || '';
+  if(!loginName){ alert('Username is required.'); return; }
+  if(!password && window.BSF_DEMO_MODE !== true){ alert('Password is required.'); return; }
+  let authenticated;
+  try { authenticated = await authenticateLogin(loginName, password); }
+  catch(error){ alert('Sign in failed: ' + error.message); return; }
+  await enterAuthenticatedApp(authenticated);
 }
 
 async function loadDataForCurrentRole(){
@@ -115,16 +110,40 @@ function scheduleDataRefresh(){
   }, 10 * 60 * 1000);
 }
 
-function logout(){
+async function logout(){
   if(dataRefreshTimer) clearInterval(dataRefreshTimer);
   dataRefreshTimer = null;
+  if(window.BSF_AUTH_CONFIG && window.BSF_AUTH_CONFIG.enabled && window.BSF_API){
+    try { await window.BSF_API.logout(); } catch (error) {}
+  }
   try { sessionStorage.removeItem('bsf.delivery.sessionToken'); } catch (error) {}
   window.BSF_SESSION = null;
+  window.BSF_USER_PROFILE = null;
+  window.BSF_CURRENT_USER = null;
   currentUsername = '';
   currentClient = '';
   currentMachineId = '';
   document.getElementById('main-app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
+}
+
+
+async function restoreAuthenticatedSession(){
+  if(!window.BSF_AUTH_CONFIG || !window.BSF_AUTH_CONFIG.enabled || !window.BSF_API) return;
+  try {
+    const session = await window.BSF_API.getSession();
+    if(!session || !session.user) return;
+    window.BSF_SESSION = session;
+    window.BSF_USER_PROFILE = session.user;
+    window.BSF_CURRENT_USER = session.user;
+    const resolvedRole = normalizeSessionRole(session.user.role);
+    if(!resolvedRole) throw new Error('Account role is not configured');
+    await enterAuthenticatedApp({
+      role: resolvedRole,
+      username: session.user.userName || session.user.fullName || 'User',
+      user: session.user
+    });
+  } catch (error) {}
 }
 
 function renderNav(){
@@ -177,3 +196,9 @@ function card(title, value, unit, color){
    2. 设置 API_CONFIG.enabled = true
    3. 页面通过 BSF_API.* 获取或保存数据
    ========================================================= */
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ restoreAuthenticatedSession(); }, { once:true });
+} else {
+  setTimeout(function(){ restoreAuthenticatedSession(); }, 0);
+}

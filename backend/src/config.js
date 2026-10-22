@@ -1,4 +1,7 @@
 import process from 'node:process';
+import { validateEncryptionKey } from './lib/crypto.js';
+
+const nodeEnv = String(process.env.NODE_ENV || 'development').trim();
 
 function str(name, fallback = '') {
   const v = process.env[name];
@@ -6,7 +9,9 @@ function str(name, fallback = '') {
 }
 
 function num(name, fallback) {
-  const v = Number(str(name));
+  const raw = str(name);
+  if (raw === '') return fallback;
+  const v = Number(raw);
   return Number.isFinite(v) ? v : fallback;
 }
 
@@ -24,7 +29,7 @@ function list(name) {
 }
 
 export const config = {
-  env: str('NODE_ENV', 'development'),
+  env: nodeEnv,
   host: str('HOST', '127.0.0.1'),
   port: num('PORT', 3000),
   databaseUrl: str('DATABASE_URL'),
@@ -61,6 +66,26 @@ export const config = {
     tempHighC: num('ALERT_TEMP_HIGH_C', 58),
     tempLowC: num('ALERT_TEMP_LOW_C', 12),
   },
+
+  auth: {
+    // The vendor remains the source of truth for credentials and roles.
+    enabled: bool('VENDOR_AUTH_ENABLED', false),
+    required: bool('AUTH_REQUIRED', nodeEnv === 'production'),
+    vendor: {
+      loginUrl: str('VENDOR_LOGIN_URL', 'https://iot.creekscomposter.com:8888/user/login'),
+      requestFormat: str('VENDOR_LOGIN_FORMAT', 'json').toLowerCase(),
+      timeoutMs: num('VENDOR_AUTH_TIMEOUT_MS', 10000),
+    },
+    sessionTtlSeconds: num('AUTH_SESSION_TTL_SECONDS', 8 * 60 * 60),
+    cookieName: str('AUTH_SESSION_COOKIE', 'bsf_session'),
+    csrfCookieName: str('AUTH_CSRF_COOKIE', 'bsf_csrf'),
+    cookieSecure: bool('AUTH_COOKIE_SECURE', nodeEnv === 'production'),
+    tokenEncryptionKey: str('AUTH_TOKEN_ENCRYPTION_KEY'),
+    loginMaxAttempts: num('AUTH_LOGIN_MAX_ATTEMPTS', 5),
+    loginWindowSeconds: num('AUTH_LOGIN_WINDOW_SECONDS', 15 * 60),
+    loginLockSeconds: num('AUTH_LOGIN_LOCK_SECONDS', 15 * 60),
+    ipMaxAttempts: num('AUTH_IP_MAX_ATTEMPTS', 30),
+  },
 };
 
 export const isProduction = config.env === 'production';
@@ -68,4 +93,22 @@ export const isProduction = config.env === 'production';
 if (!config.databaseUrl) {
   // Fail fast: the API and the worker are useless without a database.
   throw new Error('DATABASE_URL is not set. Load /etc/bsf-backend.env before starting.');
+}
+
+if (config.auth.required && !config.auth.enabled) {
+  throw new Error('AUTH_REQUIRED=true requires VENDOR_AUTH_ENABLED=true.');
+}
+
+if (config.auth.enabled) {
+  if (!config.auth.tokenEncryptionKey) {
+    throw new Error('AUTH_TOKEN_ENCRYPTION_KEY is required when vendor authentication is enabled.');
+  }
+  try {
+    validateEncryptionKey(config.auth.tokenEncryptionKey);
+  } catch (err) {
+    throw new Error(`Invalid AUTH_TOKEN_ENCRYPTION_KEY: ${err.message}`);
+  }
+  if (!['json', 'form'].includes(config.auth.vendor.requestFormat)) {
+    throw new Error('VENDOR_LOGIN_FORMAT must be `json` or `form`.');
+  }
 }

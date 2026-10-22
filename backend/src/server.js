@@ -3,12 +3,22 @@ import process from 'node:process';
 import { config, isProduction } from './config.js';
 import { closePool, healthCheck } from './db.js';
 import { Router, applyCors, sendError, sendJson } from './lib/http.js';
-import { AppError } from './lib/errors.js';
+import { AppError, UnauthorizedError } from './lib/errors.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerNotificationRoutes } from './routes/notifications.js';
 import { registerDirectoryRoutes } from './routes/directory.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { hasValidApiKey } from './middleware/auth.js';
+import {
+  applyDataScope,
+  authorizeApiPath,
+  enforceCsrf,
+  getSessionFromRequest,
+  isPublicApiPath,
+} from './middleware/session.js';
 
 const router = new Router();
+registerAuthRoutes(router);
 registerHealthRoutes(router);
 registerNotificationRoutes(router);
 registerDirectoryRoutes(router);
@@ -31,6 +41,10 @@ const server = http.createServer(async (req, res) => {
         service: 'bsf-backend',
         version: '0.1.0',
         endpoints: [
+          'POST /api/v1/auth/login',
+          'GET  /api/v1/auth/me',
+          'POST /api/v1/auth/logout',
+          'POST /api/v1/auth/refresh',
           'GET  /api/v1/health',
           'GET  /api/v1/ping',
           'GET  /api/v1/meta/providers',
@@ -67,6 +81,20 @@ const server = http.createServer(async (req, res) => {
         ],
       });
       return;
+    }
+
+    const isApiV1 = url.pathname === '/api/v1' || url.pathname.startsWith('/api/v1/');
+    const serviceRequest = hasValidApiKey(req);
+    if (isApiV1 && !isPublicApiPath(url.pathname) && !serviceRequest) {
+      const session = await getSessionFromRequest(req);
+      if (session) {
+        req.auth = session;
+        authorizeApiPath(req, url.pathname, session);
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) enforceCsrf(req, session);
+        applyDataScope(req, session);
+      } else if (config.auth.required) {
+        throw new UnauthorizedError('Authentication required');
+      }
     }
 
     const route = router.match(req.method, url.pathname);

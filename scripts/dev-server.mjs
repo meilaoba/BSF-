@@ -25,6 +25,8 @@ function resolveGatewayUrl() {
 }
 
 const gatewayUrl = resolveGatewayUrl();
+const backendUrl = String(process.env.BSF_BACKEND_URL || 'http://127.0.0.1:3000').replace(/\/+$/, '');
+const gatewayAuthRequired = process.env.BSF_GATEWAY_AUTH_REQUIRED !== 'false';
 
 const gatewayRateLimit = new Map();
 const GATEWAY_RATE_WINDOW_MS = 60 * 1000;
@@ -78,10 +80,45 @@ function sendFile(res, filePath) {
   });
 }
 
-function proxyGateway(req, res, incomingUrl) {
+async function hasBackendSession(req) {
+  if (!gatewayAuthRequired) return { allowed: true };
+  const target = new URL('/api/v1/auth/me', backendUrl);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(target, {
+      headers: {
+        cookie: req.headers.cookie || '',
+        origin: req.headers.origin || ('http://' + (req.headers.host || '127.0.0.1')),
+        'x-forwarded-host': req.headers.host || '',
+        'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'http'
+      },
+      signal: controller.signal
+    });
+    return response.ok ? { allowed: true } : { allowed: false, status: 401 };
+  } catch {
+    return { allowed: false, status: 503 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function proxyGateway(req, res, incomingUrl) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, securityHeaders()));
     res.end(JSON.stringify({ code: 405, message: 'Method Not Allowed', data: null }));
+    return;
+  }
+  const authorization = await hasBackendSession(req);
+  if (!authorization.allowed) {
+    res.writeHead(authorization.status || 401, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, securityHeaders()));
+    res.end(JSON.stringify({
+      ok: false,
+      error: {
+        code: authorization.status === 503 ? 'AUTH_SERVICE_UNAVAILABLE' : 'UNAUTHORIZED',
+        message: authorization.status === 503 ? 'Authentication service is unavailable' : 'Authentication required'
+      }
+    }));
     return;
   }
   if (isGatewayRateLimited(req)) {
@@ -110,10 +147,45 @@ function proxyGateway(req, res, incomingUrl) {
   req.pipe(proxyReq);
 }
 
+function proxyBackend(req, res, incomingUrl) {
+  const target = new URL(incomingUrl.pathname + incomingUrl.search, backendUrl);
+  const client = target.protocol === 'https:' ? https : http;
+  const forwardedFor = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+  const proxyReq = client.request(target, {
+    method: req.method,
+    headers: Object.assign({}, req.headers, {
+      host: target.host,
+      origin: req.headers.origin || ('http://' + (req.headers.host || '127.0.0.1')),
+      'x-forwarded-host': req.headers.host || '',
+      'x-forwarded-for': forwardedFor,
+      'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'http'
+    }),
+    timeout: 15000
+  }, (proxyRes) => {
+    const headers = Object.assign({}, proxyRes.headers, securityHeaders());
+    res.writeHead(proxyRes.statusCode || 502, headers);
+    proxyRes.pipe(res);
+  });
+  proxyReq.on('timeout', () => proxyReq.destroy(new Error('Backend timeout')));
+  proxyReq.on('error', () => {
+    if (res.headersSent) return;
+    res.writeHead(502, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, securityHeaders()));
+    res.end(JSON.stringify({ ok:false, error:{ code:'BACKEND_UNAVAILABLE', message:'Backend service is unavailable' } }));
+  });
+  req.pipe(proxyReq);
+}
+
 const server = http.createServer((req, res) => {
   const incomingUrl = new URL(req.url || '/', 'http://127.0.0.1');
   if (incomingUrl.pathname.startsWith('/api/gateway/')) {
-    proxyGateway(req, res, incomingUrl);
+    proxyGateway(req, res, incomingUrl).catch(() => {
+      if (!res.headersSent) res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok:false, error:{ code:'AUTH_SERVICE_UNAVAILABLE', message:'Authentication service is unavailable' } }));
+    });
+    return;
+  }
+  if (incomingUrl.pathname === '/api/v1' || incomingUrl.pathname.startsWith('/api/v1/')) {
+    proxyBackend(req, res, incomingUrl);
     return;
   }
 
@@ -130,4 +202,6 @@ const server = http.createServer((req, res) => {
 server.listen(port, host, () => {
   console.log('BSF delivery server: http://' + host + ':' + port);
   console.log('Gateway proxy: http://' + host + ':' + port + '/api/gateway -> ' + gatewayUrl);
+  console.log('Gateway authentication: ' + (gatewayAuthRequired ? 'required' : 'disabled'));
+  console.log('Backend proxy: http://' + host + ':' + port + '/api/v1 -> ' + backendUrl);
 });

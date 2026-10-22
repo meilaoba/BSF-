@@ -25,8 +25,14 @@ export class NotFoundError extends AppError {
 }
 
 export class UnauthorizedError extends AppError {
-  constructor(message = 'Invalid or missing API key') {
+  constructor(message = 'Authentication required') {
     super('UNAUTHORIZED', message, { status: 401 });
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor(message = 'You do not have permission to perform this action') {
+    super('FORBIDDEN', message, { status: 403 });
   }
 }
 
