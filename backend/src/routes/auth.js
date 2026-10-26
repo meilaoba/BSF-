@@ -1,7 +1,14 @@
 import { config } from '../config.js';
 import { audit, query } from '../db.js';
 import { AppError, ForbiddenError, ValidationError } from '../lib/errors.js';
-import { clientIp, readJsonBody, sendJson, sendOk } from '../lib/http.js';
+import {
+  clientIp,
+  isHttpsRequest,
+  isOriginAllowed,
+  readJsonBody,
+  sendJson,
+  sendOk,
+} from '../lib/http.js';
 import { requireString } from '../lib/validate.js';
 import { loginWithVendor } from '../providers/vendor-auth.js';
 import {
@@ -99,14 +106,11 @@ function pruneLoginState() {
 
 function assertTrustedOrigin(req) {
   const origin = req.headers.origin;
-  if (!origin || config.corsAllowedOrigins.includes('*')) return;
-  if (config.corsAllowedOrigins.includes(origin)) return;
-
-  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
-  const host = forwardedHost || req.headers.host;
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
-  const protocol = forwardedProto || (req.socket?.encrypted ? 'https' : 'http');
-  if (host && origin === `${protocol}://${host}`) return;
+  if (!origin) return;
+  if (config.env !== 'production' && config.corsAllowedOrigins.includes('*')) return;
+  if (isOriginAllowed(origin, config.corsAllowedOrigins, {
+    allowLocalhost: config.env !== 'production',
+  })) return;
   throw new ForbiddenError('Untrusted request origin');
 }
 
@@ -186,8 +190,7 @@ export function registerAuthRoutes(router) {
     if (!config.auth.enabled) {
       throw new AppError('AUTH_NOT_CONFIGURED', 'Authentication is not configured', { status: 503 });
     }
-    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
-    if (config.auth.cookieSecure && req.socket?.encrypted !== true && forwardedProto !== 'https') {
+    if (config.auth.cookieSecure && !isHttpsRequest(req)) {
       throw new AppError('HTTPS_REQUIRED', 'Secure sign-in requires HTTPS', { status: 503 });
     }
 

@@ -26,6 +26,18 @@ function bsfEscapeHtml(value){
     .replace(/'/g, '&#39;');
 }
 
+function bsfSafeImageUrl(value){
+  const raw = String(value === null || value === undefined ? '' : value).trim();
+  if(!raw) return '';
+  if(/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(raw)) return raw;
+  try {
+    const url = new URL(raw, window.location.origin);
+    const localHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]';
+    if(url.protocol === 'https:' || (localHost && url.protocol === 'http:')) return url.href;
+  } catch(error) {}
+  return '';
+}
+
 function isClientScopedRole(){
   return currentRole === 'client-admin' || currentRole === 'user';
 }

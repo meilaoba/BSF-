@@ -35,8 +35,9 @@ function accountCurrentProfile(){
 
 function accountAvatarMarkup(profile, size, id){
   const style = 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:linear-gradient(135deg,#3b82f6,#2563eb);font-weight:700;font-size:' + Math.round(size * 0.34) + 'px;color:#fff;';
-  if(profile.avatar) return '<div id="' + (id || '') + '" style="' + style + '"><img src="' + profile.avatar + '" alt="Avatar" style="width:100%;height:100%;object-fit:cover;" /></div>';
-  return '<div id="' + (id || '') + '" style="' + style + '">' + accountInitials(profile.displayName, profile.email) + '</div>';
+  const avatar = bsfSafeImageUrl(profile.avatar);
+  if(avatar) return '<div id="' + bsfEscapeHtml(id || '') + '" style="' + style + '"><img src="' + bsfEscapeHtml(avatar) + '" alt="Avatar" style="width:100%;height:100%;object-fit:cover;" /></div>';
+  return '<div id="' + bsfEscapeHtml(id || '') + '" style="' + style + '">' + accountInitials(profile.displayName, profile.email) + '</div>';
 }
 
 function applyStoredAccountProfile(){
@@ -45,8 +46,9 @@ function applyStoredAccountProfile(){
   const headerAvatar = document.getElementById('user-avatar');
   if(headerName) headerName.textContent = profile.displayName;
   if(headerAvatar){
-    headerAvatar.innerHTML = profile.avatar
-      ? '<img src="' + profile.avatar + '" alt="Avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />'
+    const avatar = bsfSafeImageUrl(profile.avatar);
+    headerAvatar.innerHTML = avatar
+      ? '<img src="' + bsfEscapeHtml(avatar) + '" alt="Avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />'
       : accountInitials(profile.displayName, profile.email);
   }
 }
@@ -74,15 +76,15 @@ function renderAccount(container){
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
           <div id="account-avatar-preview">${accountAvatarMarkup(profile, 72, '')}</div>
           <div style="display:flex;flex-direction:column;gap:8px;">
-            <label style="padding:8px 14px;background:#334155;border-radius:8px;color:#e2e8f0;font-size:12px;font-weight:600;cursor:pointer;text-align:center;">Upload Photo<input type="file" accept="image/*" onchange="handleAccountAvatarSelect(event)" style="display:none;" /></label>
+            <label style="padding:8px 14px;background:#334155;border-radius:8px;color:#e2e8f0;font-size:12px;font-weight:600;cursor:pointer;text-align:center;">Upload Photo<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onchange="handleAccountAvatarSelect(event)" style="display:none;" /></label>
             ${profile.avatar ? '<button onclick="removeAccountAvatar()" style="padding:7px 14px;background:#7f1d1d;border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Remove Photo</button>' : ''}
             <span style="color:#64748b;font-size:11px;">JPG / PNG, maximum 1 MB</span>
           </div>
         </div>
         <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Display Name</label>
-        <input id="account-display-name" type="text" value="${profile.displayName.replace(/"/g,'&quot;')}" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" />
+        <input id="account-display-name" type="text" value="${bsfEscapeHtml(profile.displayName)}" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" />
         <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Email</label>
-        <input type="text" value="${profile.email.replace(/"/g,'&quot;')}" readonly style="width:100%;box-sizing:border-box;padding:10px 14px;background:#111827;border:1px solid #334155;border-radius:8px;color:#94a3b8;font-size:14px;margin-bottom:14px;" />
+        <input type="text" value="${bsfEscapeHtml(profile.email)}" readonly style="width:100%;box-sizing:border-box;padding:10px 14px;background:#111827;border:1px solid #334155;border-radius:8px;color:#94a3b8;font-size:14px;margin-bottom:14px;" />
         <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Role</label>
         <input type="text" value="${roleLabel}" readonly style="width:100%;box-sizing:border-box;padding:10px 14px;background:#111827;border:1px solid #334155;border-radius:8px;color:#94a3b8;font-size:14px;" />
         <button onclick="saveAccountProfile()" style="width:100%;margin-top:18px;padding:11px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:13px;cursor:pointer;">Save Profile</button>
@@ -107,10 +109,16 @@ function handleAccountAvatarSelect(event){
   const file = event && event.target && event.target.files ? event.target.files[0] : null;
   if(!file) return;
   if(file.size > 1024 * 1024){ accountToast('Image must be 1 MB or smaller', 'error'); event.target.value = ''; return; }
+  if(!['image/png','image/jpeg','image/webp','image/gif'].includes(String(file.type || '').toLowerCase())){
+    accountToast('Use a PNG, JPG, WebP or GIF image', 'error');
+    event.target.value = '';
+    return;
+  }
   const reader = new FileReader();
   reader.onload = async function(){
     const profile = accountLocalProfile();
-    profile.avatar = String(reader.result || '');
+    profile.avatar = bsfSafeImageUrl(reader.result);
+    if(!profile.avatar){ accountToast('This image format is not allowed', 'error'); return; }
     if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
       try { await window.BSF_API.updateAccount({ avatar:profile.avatar }); }
       catch(error){ accountToast('Avatar update failed: ' + error.message, 'error'); return; }

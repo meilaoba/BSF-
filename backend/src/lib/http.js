@@ -1,4 +1,6 @@
 import { Readable } from 'node:stream';
+import { isIP } from 'node:net';
+import { config } from '../config.js';
 
 const MAX_BODY_BYTES = 256 * 1024; // 256 KB is plenty for JSON API calls.
 
@@ -7,6 +9,10 @@ export const SECURITY_HEADERS = {
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'no-referrer',
   'Cross-Origin-Resource-Policy': 'same-site',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(self)',
+  'X-Permitted-Cross-Domain-Policies': 'none',
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
   'Cache-Control': 'no-store',
 };
 
@@ -82,12 +88,65 @@ export async function readJsonBody(req) {
   }
 }
 
+function firstHeaderValue(value) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === 'string' ? raw.split(',')[0].trim() : '';
+}
+
+function validIp(value) {
+  const candidate = String(value || '').trim();
+  return isIP(candidate) ? candidate : '';
+}
+
 export function clientIp(req) {
-  const fwd = req.headers['x-forwarded-for'];
-  if (typeof fwd === 'string' && fwd.length > 0) {
-    return fwd.split(',')[0].trim().slice(0, 64);
+  const remoteAddress = validIp(req.socket?.remoteAddress);
+
+  // X-Real-IP is trusted only when the service is explicitly configured to
+  // run behind a local reverse proxy. Nginx overwrites this header; it never
+  // forwards a client-supplied value. X-Forwarded-For is intentionally ignored
+  // because clients can append spoofed entries to it.
+  if (config.trustProxy) {
+    const proxiedAddress = validIp(firstHeaderValue(req.headers['x-real-ip']));
+    if (proxiedAddress) return proxiedAddress;
   }
-  return (req.socket?.remoteAddress || '').slice(0, 64);
+
+  return remoteAddress || 'unknown';
+}
+
+export function isHttpsRequest(req) {
+  if (req.socket?.encrypted === true) return true;
+  if (!config.trustProxy) return false;
+  return firstHeaderValue(req.headers['x-forwarded-proto']).toLowerCase() === 'https';
+}
+
+export function normalizeOrigin(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    if (!['http:', 'https:'].includes(url.protocol)
+      || url.username
+      || url.password
+      || url.pathname !== '/'
+      || url.search
+      || url.hash) return '';
+    return url.origin;
+  } catch {
+    return '';
+  }
+}
+
+export function isOriginAllowed(origin, allowedOrigins, { allowLocalhost = false } = {}) {
+  const normalized = normalizeOrigin(origin);
+  if (!normalized) return false;
+  if (allowedOrigins.includes(normalized)) return true;
+  if (!allowLocalhost) return false;
+
+  try {
+    const url = new URL(normalized);
+    return url.protocol === 'http:'
+      && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 export function applyCors(req, res, allowedOrigins) {
@@ -95,7 +154,7 @@ export function applyCors(req, res, allowedOrigins) {
   if (!origin) return;
 
   const allowAll = allowedOrigins.includes('*');
-  const isAllowed = allowAll || allowedOrigins.includes(origin);
+  const isAllowed = allowAll || isOriginAllowed(origin, allowedOrigins);
 
   if (isAllowed) {
     res.setHeader('Access-Control-Allow-Origin', allowAll ? '*' : origin);

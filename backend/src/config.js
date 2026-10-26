@@ -2,6 +2,7 @@ import process from 'node:process';
 import { validateEncryptionKey } from './lib/crypto.js';
 
 const nodeEnv = String(process.env.NODE_ENV || 'development').trim();
+const productionMode = nodeEnv === 'production';
 
 function str(name, fallback = '') {
   const v = process.env[name];
@@ -28,13 +29,47 @@ function list(name) {
     .filter(Boolean);
 }
 
+function normalizeOrigin(raw, label) {
+  if (!raw) return '';
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${label} must be a complete origin such as https://example.com`);
+  }
+  if (!['http:', 'https:'].includes(url.protocol)
+    || url.username
+    || url.password
+    || url.search
+    || url.hash
+    || url.pathname !== '/') {
+    throw new Error(`${label} must contain only scheme and host (no path, query, credentials or fragment)`);
+  }
+  return url.origin;
+}
+
+function originList(name) {
+  return [...new Set(list(name).map((origin) => (
+    origin === '*' ? origin : normalizeOrigin(origin, name)
+  )))];
+}
+
+const publicOrigin = normalizeOrigin(str('PUBLIC_ORIGIN'), 'PUBLIC_ORIGIN');
+const corsAllowedOrigins = [...new Set([
+  ...originList('CORS_ALLOWED_ORIGINS'),
+  ...(publicOrigin ? [publicOrigin] : []),
+])];
+
 export const config = {
   env: nodeEnv,
   host: str('HOST', '127.0.0.1'),
   port: num('PORT', 3000),
   databaseUrl: str('DATABASE_URL'),
   internalApiKey: str('INTERNAL_API_KEY'),
-  corsAllowedOrigins: list('CORS_ALLOWED_ORIGINS'),
+  publicOrigin,
+  corsAllowedOrigins,
+  trustProxy: bool('TRUST_PROXY', productionMode),
+  requireHttps: bool('REQUIRE_HTTPS', productionMode),
   providerTimeoutMs: num('PROVIDER_TIMEOUT_MS', 15000),
 
   email: {
@@ -70,7 +105,7 @@ export const config = {
   auth: {
     // The vendor remains the source of truth for credentials and roles.
     enabled: bool('VENDOR_AUTH_ENABLED', false),
-    required: bool('AUTH_REQUIRED', nodeEnv === 'production'),
+    required: bool('AUTH_REQUIRED', productionMode),
     vendor: {
       loginUrl: str('VENDOR_LOGIN_URL', 'https://iot.creekscomposter.com:8888/user/login'),
       requestFormat: str('VENDOR_LOGIN_FORMAT', 'json').toLowerCase(),
@@ -79,7 +114,7 @@ export const config = {
     sessionTtlSeconds: num('AUTH_SESSION_TTL_SECONDS', 8 * 60 * 60),
     cookieName: str('AUTH_SESSION_COOKIE', 'bsf_session'),
     csrfCookieName: str('AUTH_CSRF_COOKIE', 'bsf_csrf'),
-    cookieSecure: bool('AUTH_COOKIE_SECURE', nodeEnv === 'production'),
+    cookieSecure: bool('AUTH_COOKIE_SECURE', productionMode),
     tokenEncryptionKey: str('AUTH_TOKEN_ENCRYPTION_KEY'),
     loginMaxAttempts: num('AUTH_LOGIN_MAX_ATTEMPTS', 5),
     loginWindowSeconds: num('AUTH_LOGIN_WINDOW_SECONDS', 15 * 60),
@@ -97,6 +132,43 @@ if (!config.databaseUrl) {
 
 if (config.auth.required && !config.auth.enabled) {
   throw new Error('AUTH_REQUIRED=true requires VENDOR_AUTH_ENABLED=true.');
+}
+
+if (config.requireHttps && !config.auth.cookieSecure) {
+  throw new Error('REQUIRE_HTTPS=true requires AUTH_COOKIE_SECURE=true.');
+}
+
+if (isProduction) {
+  if (!['127.0.0.1', '::1', 'localhost'].includes(config.host)) {
+    throw new Error('HOST must be a loopback address in production; expose the service through Nginx only.');
+  }
+  if (!config.publicOrigin) {
+    throw new Error('PUBLIC_ORIGIN is required in production.');
+  }
+  if (!config.publicOrigin.startsWith('https://')) {
+    throw new Error('PUBLIC_ORIGIN must use HTTPS in production.');
+  }
+  if (!config.trustProxy) {
+    throw new Error('TRUST_PROXY must be true in production when running behind Nginx.');
+  }
+  if (!config.requireHttps) {
+    throw new Error('REQUIRE_HTTPS must be true in production.');
+  }
+  if (config.corsAllowedOrigins.includes('*')) {
+    throw new Error('CORS_ALLOWED_ORIGINS must not contain * in production.');
+  }
+  if (config.corsAllowedOrigins.some((origin) => !origin.startsWith('https://'))) {
+    throw new Error('Every CORS_ALLOWED_ORIGINS entry must use HTTPS in production.');
+  }
+  if (!config.auth.required) {
+    throw new Error('AUTH_REQUIRED must be true in production.');
+  }
+  if (!config.auth.cookieSecure) {
+    throw new Error('AUTH_COOKIE_SECURE must be true in production.');
+  }
+  if (config.internalApiKey.length < 24) {
+    throw new Error('INTERNAL_API_KEY must be at least 24 characters in production.');
+  }
 }
 
 if (config.auth.enabled) {

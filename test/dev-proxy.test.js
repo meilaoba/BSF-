@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
+let lastLoginHeaders = null;
 
 async function freePort() {
   const server = net.createServer();
@@ -28,6 +29,7 @@ const mockBackend = http.createServer(async (req, res) => {
       : { ok: false, error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }));
     return;
   }
+  lastLoginHeaders = req.headers;
   const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   assert.equal(body.userName, 'admin');
   res.setHeader('Set-Cookie', [
@@ -75,7 +77,10 @@ test('frontend proxy forwards login and preserves session cookies', async () => 
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Origin: `http://127.0.0.1:${frontendPort}`
+      Origin: `http://127.0.0.1:${frontendPort}`,
+      'X-Real-IP': '203.0.113.99',
+      'X-Forwarded-For': '198.51.100.20',
+      'X-Forwarded-Proto': 'https'
     },
     body: JSON.stringify({ userName: 'admin', password: '123456' })
   });
@@ -86,6 +91,9 @@ test('frontend proxy forwards login and preserves session cookies', async () => 
   assert.ok(cookies.some((value) => value.includes('bsf_csrf=csrf-test')));
   const body = await response.json();
   assert.equal(body.data.user.role, 'master_admin');
+  assert.equal(lastLoginHeaders['x-real-ip'], '127.0.0.1');
+  assert.equal(lastLoginHeaders['x-forwarded-for'], '127.0.0.1');
+  assert.equal(lastLoginHeaders['x-forwarded-proto'], 'http');
 });
 
 test('gateway rejects unauthenticated clients and accepts a valid session', async () => {

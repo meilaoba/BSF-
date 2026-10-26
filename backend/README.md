@@ -73,7 +73,8 @@ session; tenant roles are scoped by the backend.
 | GET | `/api/v1/auth/me` | Current authenticated user and role |
 | POST | `/api/v1/auth/logout` | Revoke the current session |
 | POST | `/api/v1/auth/refresh` | Reserved until the vendor provides a refresh endpoint |
-| GET | `/api/v1/health` | service + database + queue + provider status |
+| GET | `/api/v1/health` | minimal public readiness status |
+| GET | `/api/v1/internal/health` | detailed status (service key or Master Admin) |
 | GET | `/api/v1/meta/providers` | is Email / WhatsApp configured yet |
 | GET | `/api/v1/notifications/logs` | delivery history |
 | GET | `/api/v1/notifications/jobs` | queue contents |
@@ -110,6 +111,11 @@ are rejected.
 Required environment values are documented in `.env.example`. Generate a key
 with `openssl rand -base64 32`. `AUTH_COOKIE_SECURE=true` requires HTTPS; do not
 disable it on a production site.
+
+Production must run behind the Nginx TLS template in `deploy/nginx-tls-site.conf`.
+Set `PUBLIC_ORIGIN`, `TRUST_PROXY=true` and `REQUIRE_HTTPS=true`; startup fails
+closed when HTTPS, secure cookies, authentication or a strong internal API key
+are not configured. The full migration checklist is in `../docs/security-deployment.md`.
 
 ### Data scoping rules
 

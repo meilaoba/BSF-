@@ -454,14 +454,14 @@ async function exportReportPdf(){
   }
 
   const tableRows = rows.map(function(row){
-    return '<tr>' + row.map(function(cell){ return '<td>' + String(cell) + '</td>'; }).join('') + '</tr>';
+    return '<tr>' + row.map(function(cell){ return '<td>' + bsfEscapeHtml(cell) + '</td>'; }).join('') + '</tr>';
   }).join('');
   const htmlFoodRows = foodRows.slice(1).map(function(row){
-    return '<tr><td>' + row[0] + '</td><td>' + row[1] + '</td><td>' + row[2] + '</td></tr>';
+    return '<tr><td>' + bsfEscapeHtml(row[0]) + '</td><td>' + bsfEscapeHtml(row[1]) + '</td><td>' + bsfEscapeHtml(row[2]) + '</td></tr>';
   }).join('');
   const printWindow = window.open('', '_blank');
   if(!printWindow){ showReportExportToast('浏览器阻止了打印窗口，请允许弹窗', 'error'); return; }
-  printWindow.document.write('<html><head><meta charset="UTF-8"><title>' + pdfTitle + '</title><style>@page{size:A4 portrait;margin:12mm;}body{font-family:Arial,sans-serif;color:#111;}h1{font-size:26px;}h2{font-size:18px;margin-top:40px;}table{border-collapse:collapse;width:58%;}th,td{border:1px solid #777;padding:10px 8px;text-align:left;}</style></head><body><h1>' + pdfTitle + '</h1><p>' + model.period + ' · ' + model.client + ' · ' + model.device + '</p><h2>Report Summary</h2><table>' + tableRows + '</table><h2>' + model.chartTitle + '</h2><table><tr><th>Period</th><th>Value</th><th>Unit</th></tr>' + htmlFoodRows + '</table></body></html>');
+  printWindow.document.write('<html><head><meta charset="UTF-8"><title>' + bsfEscapeHtml(pdfTitle) + '</title><style>@page{size:A4 portrait;margin:12mm;}body{font-family:Arial,sans-serif;color:#111;}h1{font-size:26px;}h2{font-size:18px;margin-top:40px;}table{border-collapse:collapse;width:58%;}th,td{border:1px solid #777;padding:10px 8px;text-align:left;}</style></head><body><h1>' + bsfEscapeHtml(pdfTitle) + '</h1><p>' + bsfEscapeHtml(model.period) + ' · ' + bsfEscapeHtml(model.client) + ' · ' + bsfEscapeHtml(model.device) + '</p><h2>Report Summary</h2><table>' + tableRows + '</table><h2>' + bsfEscapeHtml(model.chartTitle) + '</h2><table><tr><th>Period</th><th>Value</th><th>Unit</th></tr>' + htmlFoodRows + '</table></body></html>');
   printWindow.document.close();
   printWindow.focus();
   showReportExportToast('PDF 组件未加载，已打开打印窗口作为备用');

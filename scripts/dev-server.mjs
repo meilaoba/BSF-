@@ -27,6 +27,7 @@ function resolveGatewayUrl() {
 const gatewayUrl = resolveGatewayUrl();
 const backendUrl = String(process.env.BSF_BACKEND_URL || 'http://127.0.0.1:3000').replace(/\/+$/, '');
 const gatewayAuthRequired = process.env.BSF_GATEWAY_AUTH_REQUIRED !== 'false';
+const trustProxy = process.env.BSF_TRUST_PROXY === 'true';
 
 const gatewayRateLimit = new Map();
 const GATEWAY_RATE_WINDOW_MS = 60 * 1000;
@@ -40,7 +41,8 @@ function securityHeaders() {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(self)',
     'Cross-Origin-Opener-Policy': 'same-origin',
-    'Cross-Origin-Resource-Policy': 'same-origin'
+    'Cross-Origin-Resource-Policy': 'same-origin',
+    'X-Permitted-Cross-Domain-Policies': 'none'
   };
 }
 
@@ -83,15 +85,20 @@ function sendFile(res, filePath) {
 async function hasBackendSession(req) {
   if (!gatewayAuthRequired) return { allowed: true };
   const target = new URL('/api/v1/auth/me', backendUrl);
+  const remoteAddress = req.socket?.remoteAddress || '';
+  const forwardedProto = trustProxy
+    ? String(req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim()
+    : 'http';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
     const response = await fetch(target, {
       headers: {
         cookie: req.headers.cookie || '',
-        origin: req.headers.origin || ('http://' + (req.headers.host || '127.0.0.1')),
-        'x-forwarded-host': req.headers.host || '',
-        'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'http'
+        origin: req.headers.origin || (forwardedProto + '://' + (req.headers.host || '127.0.0.1')),
+        'x-real-ip': remoteAddress,
+        'x-forwarded-for': remoteAddress,
+        'x-forwarded-proto': forwardedProto
       },
       signal: controller.signal
     });
@@ -150,15 +157,18 @@ async function proxyGateway(req, res, incomingUrl) {
 function proxyBackend(req, res, incomingUrl) {
   const target = new URL(incomingUrl.pathname + incomingUrl.search, backendUrl);
   const client = target.protocol === 'https:' ? https : http;
-  const forwardedFor = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+  const remoteAddress = req.socket?.remoteAddress || '';
+  const forwardedProto = trustProxy
+    ? String(req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim()
+    : 'http';
   const proxyReq = client.request(target, {
     method: req.method,
     headers: Object.assign({}, req.headers, {
       host: target.host,
-      origin: req.headers.origin || ('http://' + (req.headers.host || '127.0.0.1')),
-      'x-forwarded-host': req.headers.host || '',
-      'x-forwarded-for': forwardedFor,
-      'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'http'
+      origin: req.headers.origin || (forwardedProto + '://' + (req.headers.host || '127.0.0.1')),
+      'x-real-ip': remoteAddress,
+      'x-forwarded-for': remoteAddress,
+      'x-forwarded-proto': forwardedProto
     }),
     timeout: 15000
   }, (proxyRes) => {

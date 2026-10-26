@@ -2,7 +2,14 @@ import http from 'node:http';
 import process from 'node:process';
 import { config, isProduction } from './config.js';
 import { closePool, healthCheck } from './db.js';
-import { Router, applyCors, sendError, sendJson } from './lib/http.js';
+import {
+  Router,
+  applyCors,
+  isHttpsRequest,
+  isOriginAllowed,
+  sendError,
+  sendJson,
+} from './lib/http.js';
 import { AppError, UnauthorizedError } from './lib/errors.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerNotificationRoutes } from './routes/notifications.js';
@@ -30,7 +37,27 @@ const server = http.createServer(async (req, res) => {
   try {
     applyCors(req, res, config.corsAllowedOrigins);
 
+    if (config.requireHttps && !isHttpsRequest(req)) {
+      sendJson(res, 426, {
+        ok: false,
+        error: {
+          code: 'HTTPS_REQUIRED',
+          message: 'This service is available over HTTPS only',
+        },
+      }, { Upgrade: 'TLS/1.2, HTTP/1.1', Connection: 'close' });
+      return;
+    }
+
     if (req.method === 'OPTIONS') {
+      const origin = req.headers.origin;
+      const wildcardAllowed = config.env !== 'production' && config.corsAllowedOrigins.includes('*');
+      if (origin && !wildcardAllowed && !isOriginAllowed(origin, config.corsAllowedOrigins)) {
+        sendJson(res, 403, {
+          ok: false,
+          error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed' },
+        });
+        return;
+      }
       res.writeHead(204).end();
       return;
     }
@@ -40,45 +67,7 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         service: 'bsf-backend',
         version: '0.1.0',
-        endpoints: [
-          'POST /api/v1/auth/login',
-          'GET  /api/v1/auth/me',
-          'POST /api/v1/auth/logout',
-          'POST /api/v1/auth/refresh',
-          'GET  /api/v1/health',
-          'GET  /api/v1/ping',
-          'GET  /api/v1/meta/providers',
-          'GET  /api/v1/notifications/providers',
-          'GET  /api/v1/notifications/stats',
-          'GET  /api/v1/notifications/logs',
-          'GET  /api/v1/notifications/jobs',
-          'POST /api/v1/notifications/send',
-          'POST /api/v1/notifications/test/email',
-          'POST /api/v1/notifications/test/whatsapp',
-          'POST /api/v1/notifications/jobs/retry',
-          'POST /api/v1/notifications/process',
-          'POST /api/v1/alerts/temperature',
-          'GET  /api/v1/clients',
-          'POST /api/v1/clients',
-          'PUT  /api/v1/clients',
-          'DELETE /api/v1/clients?id=',
-          'GET  /api/v1/machines',
-          'POST /api/v1/machines',
-          'PUT  /api/v1/machines',
-          'DELETE /api/v1/machines?id=',
-          'GET  /api/v1/users',
-          'POST /api/v1/users',
-          'PUT  /api/v1/users',
-          'DELETE /api/v1/users?id=',
-          'GET  /api/v1/notification-recipients',
-          'POST /api/v1/notification-recipients',
-          'DELETE /api/v1/notification-recipients?id=',
-          'GET  /api/v1/notification-preferences',
-          'PUT  /api/v1/notification-preferences',
-          'GET  /api/v1/alert-thresholds',
-          'PUT  /api/v1/alert-thresholds',
-          'GET  /api/v1/audit-logs',
-        ],
+        health: '/api/v1/health',
       });
       return;
     }

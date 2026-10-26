@@ -91,6 +91,10 @@ npm run check:gateway
 角色映射、Token 加密、HttpOnly 会话 Cookie、CSRF 校验和登录失败限流。
 厂商 Token 不会保存到浏览器；`/api/gateway/` 设备数据接口同样要求有效登录会话。
 
+生产环境使用 Nginx 终止 HTTPS，Node 前端与后端只监听 `127.0.0.1`。完整的域名、
+证书、环境变量、systemd 与上线验收步骤见
+[`docs/security-deployment.md`](docs/security-deployment.md)。本地 HTTP 演示仍然可用。
+
 ~~~text
 backend/
 ├─ src/server.js          HTTP API（Node 内置 http，无框架依赖）

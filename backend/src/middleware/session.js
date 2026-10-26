@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { query } from '../db.js';
 import { ForbiddenError, UnauthorizedError } from '../lib/errors.js';
+import { clientIp } from '../lib/http.js';
 import {
   constantTimeEqual,
   encryptSecret,
@@ -98,7 +99,7 @@ export async function createSession({ user, vendorTokens, req }) {
   const csrfHash = sha256Hex(csrfToken);
   const ttl = Math.max(300, Math.min(Number(config.auth.sessionTtlSeconds) || 28800, 86400));
   const userAgent = String(req.headers['user-agent'] || '').slice(0, 500);
-  const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim().slice(0, 64);
+  const ip = clientIp(req);
 
   // Opportunistic cleanup keeps the session table bounded without another
   // long-running worker. Expired sessions are never accepted even before this.
@@ -188,7 +189,6 @@ export function isPublicApiPath(pathname) {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
   return path === '/api/v1/health'
     || path === '/api/v1/ping'
-    || path === '/api/v1/meta/providers'
     || path === '/api/v1/auth/login';
 }
 
@@ -196,24 +196,27 @@ export function authorizeApiPath(req, pathname, session) {
   if (!session) return;
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
   const role = session.user.role;
+  const isPathOrChild = (base) => path === base || path.startsWith(`${base}/`);
 
   if (path === '/api/v1/auth/me' || path === '/api/v1/auth/logout') return;
 
-  if (path === '/api/v1/clients' || path === '/api/v1/audit-logs') {
+  if (isPathOrChild('/api/v1/clients') || isPathOrChild('/api/v1/audit-logs')) {
     if (role !== 'master_admin') throw new ForbiddenError();
     return;
   }
 
-  if (path === '/api/v1/users') {
+  if (isPathOrChild('/api/v1/users')) {
     if (!['master_admin', 'client_admin'].includes(role)) throw new ForbiddenError();
     return;
   }
 
   // These endpoints have no client/machine scope in the existing schema yet,
   // so fail closed rather than exposing global notification data to tenants.
-  if (path === '/api/v1/alert-thresholds'
-    || path === '/api/v1/notification-preferences'
-    || path.startsWith('/api/v1/notifications/')) {
+  if (isPathOrChild('/api/v1/alert-thresholds')
+    || isPathOrChild('/api/v1/notification-preferences')
+    || isPathOrChild('/api/v1/notification-recipients')
+    || isPathOrChild('/api/v1/notifications')
+    || isPathOrChild('/api/v1/alerts/temperature')) {
     if (role !== 'master_admin') throw new ForbiddenError();
   }
 }
