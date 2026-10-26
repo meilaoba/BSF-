@@ -5,12 +5,14 @@ import {
   clampLimit,
   clampOffset,
   optionalBool,
+  optionalDisplayText,
   optionalEmail,
   optionalInt,
   optionalNumber,
   optionalPhone,
   optionalString,
   optionalUuid,
+  requireDisplayText,
   requireEmail,
   requireEnum,
   requirePhone,
@@ -101,14 +103,14 @@ export function registerDirectoryRoutes(router) {
        VALUES ($1,$2,$3,$4,$5,$6,$7)
        RETURNING *`,
       [
-        requireString(body.name, 'name', { max: 200 }),
-        optionalString(body.code, 'code', { max: 60 }),
+        requireDisplayText(body.name, 'name', { max: 200 }),
+        optionalDisplayText(body.code, 'code', { max: 60 }),
         optionalEmail(body.contactEmail, 'contactEmail'),
         optionalPhone(body.contactPhone, 'contactPhone'),
-        optionalString(body.address, 'address', { max: 500 }),
-        optionalString(body.region, 'region', { max: 80 }),
+        optionalDisplayText(body.address, 'address', { max: 500 }),
+        optionalDisplayText(body.region, 'region', { max: 80 }),
         JSON.stringify(body.metadata ?? {}),
-        optionalString(body.vendorDeviceId, 'vendorDeviceId', { max: 160 }),
+        optionalDisplayText(body.vendorDeviceId, 'vendorDeviceId', { max: 160 }),
       ]
     );
 
@@ -145,12 +147,12 @@ export function registerDirectoryRoutes(router) {
         RETURNING *`,
       [
         clientId,
-        optionalString(body.name, 'name', { max: 200 }),
-        optionalString(body.code, 'code', { max: 60 }),
+        optionalDisplayText(body.name, 'name', { max: 200 }),
+        optionalDisplayText(body.code, 'code', { max: 60 }),
         optionalEmail(body.contactEmail, 'contactEmail'),
         optionalPhone(body.contactPhone, 'contactPhone'),
-        optionalString(body.address, 'address', { max: 500 }),
-        optionalString(body.region, 'region', { max: 80 }),
+        optionalDisplayText(body.address, 'address', { max: 500 }),
+        optionalDisplayText(body.region, 'region', { max: 80 }),
         body.status ? requireEnum(body.status, 'status', ['active', 'inactive', 'archived']) : null,
       ]
     );
@@ -248,17 +250,17 @@ export function registerDirectoryRoutes(router) {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9,'active'), $10, $11)
        RETURNING *`,
       [
-        requireString(body.serial, 'serial', { max: 64 }),
-        optionalString(body.deviceId, 'deviceId', { max: 64 }),
-        optionalString(body.name, 'name', { max: 200 }),
+        requireDisplayText(body.serial, 'serial', { max: 64 }),
+        optionalDisplayText(body.deviceId, 'deviceId', { max: 64 }),
+        optionalDisplayText(body.name, 'name', { max: 200 }),
         optionalUuid(body.clientId, 'clientId'),
-        optionalString(body.location, 'location', { max: 300 }),
+        optionalDisplayText(body.location, 'location', { max: 300 }),
         optionalNumber(body.latitude, 'latitude'),
         optionalNumber(body.longitude, 'longitude'),
-        optionalString(body.region, 'region', { max: 80 }),
+        optionalDisplayText(body.region, 'region', { max: 80 }),
         body.status ? requireEnum(body.status, 'status', ['active', 'inactive', 'maintenance', 'retired']) : null,
         JSON.stringify(body.metadata ?? {}),
-        optionalString(body.vendorDeviceId, 'vendorDeviceId', { max: 160 }),
+        optionalDisplayText(body.vendorDeviceId, 'vendorDeviceId', { max: 160 }),
       ]
     );
 
@@ -301,16 +303,16 @@ export function registerDirectoryRoutes(router) {
           RETURNING *`,
         [
           machineId,
-          optionalString(body.serial, 'serial', { max: 64 }),
-          optionalString(body.deviceId, 'deviceId', { max: 64 }),
-          optionalString(body.name, 'name', { max: 200 }),
+          optionalDisplayText(body.serial, 'serial', { max: 64 }),
+          optionalDisplayText(body.deviceId, 'deviceId', { max: 64 }),
+          optionalDisplayText(body.name, 'name', { max: 200 }),
           body.clientId === undefined ? before.rows[0].client_id : optionalUuid(body.clientId, 'clientId'),
-          optionalString(body.location, 'location', { max: 300 }),
+          optionalDisplayText(body.location, 'location', { max: 300 }),
           optionalNumber(body.latitude, 'latitude'),
           optionalNumber(body.longitude, 'longitude'),
-          optionalString(body.region, 'region', { max: 80 }),
+          optionalDisplayText(body.region, 'region', { max: 80 }),
           body.status ? requireEnum(body.status, 'status', ['active', 'inactive', 'maintenance', 'retired']) : null,
-          optionalString(body.vendorDeviceId, 'vendorDeviceId', { max: 160 }),
+          optionalDisplayText(body.vendorDeviceId, 'vendorDeviceId', { max: 160 }),
         ]
       );
 
@@ -458,7 +460,7 @@ export function registerDirectoryRoutes(router) {
       [
         email,
         phone,
-        optionalString(body.fullName, 'fullName', { max: 200 }),
+        optionalDisplayText(body.fullName, 'fullName', { max: 200 }),
         role,
         clientId,
         machineId,
@@ -523,7 +525,7 @@ export function registerDirectoryRoutes(router) {
         userId,
         optionalEmail(body.email, 'email'),
         optionalPhone(body.phone, 'phone'),
-        optionalString(body.fullName, 'fullName', { max: 200 }),
+        optionalDisplayText(body.fullName, 'fullName', { max: 200 }),
         role,
         clientId,
         machineId,
@@ -613,7 +615,7 @@ export function registerDirectoryRoutes(router) {
         optionalUuid(body.userId, 'userId'),
         channel,
         address,
-        optionalString(body.name, 'name', { max: 200 }),
+        optionalDisplayText(body.name, 'name', { max: 200 }),
         optionalBool(body.verified, 'verified'),
         optionalBool(body.enabled, 'enabled'),
       ]

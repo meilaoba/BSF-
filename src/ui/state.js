@@ -26,6 +26,27 @@ function bsfEscapeHtml(value){
     .replace(/'/g, '&#39;');
 }
 
+function bsfReplaceSelectOptions(select, items){
+  if(!select) return;
+  const fragment = document.createDocumentFragment();
+  (items || []).forEach(function(item){
+    const option = document.createElement('option');
+    const value = item && typeof item === 'object' ? item.value : item;
+    const label = item && typeof item === 'object' ? item.label : item;
+    option.value = String(value === null || value === undefined ? '' : value);
+    option.textContent = String(label === null || label === undefined ? value ?? '' : label);
+    option.selected = !!(item && typeof item === 'object' && item.selected);
+    fragment.appendChild(option);
+  });
+  select.replaceChildren(fragment);
+}
+
+function bsfSpreadsheetSafeText(value){
+  const text = String(value === null || value === undefined ? '' : value);
+  if(typeof value === 'string' && /^[\t\r\n ]*[=+\-@]/.test(text)) return "'" + text;
+  return text;
+}
+
 function bsfSafeImageUrl(value){
   const raw = String(value === null || value === undefined ? '' : value).trim();
   if(!raw) return '';
@@ -124,7 +145,7 @@ function clientScopeName(){
 
 function clientScopeBadge(){
   if(!isClientScopedRole()) return '';
-  return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-left:3px solid #10b981;border-radius:8px;color:#e2e8f0;font-size:13px;min-width:210px;"><span style="color:#94a3b8;font-weight:600;">Current Client</span><strong style="color:#10b981;">' + clientScopeName() + '</strong></div>';
+  return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-left:3px solid #10b981;border-radius:8px;color:#e2e8f0;font-size:13px;min-width:210px;"><span style="color:#94a3b8;font-weight:600;">Current Client</span><strong style="color:#10b981;">' + bsfEscapeHtml(clientScopeName()) + '</strong></div>';
 }
 
 const navItems = {

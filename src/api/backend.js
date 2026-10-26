@@ -23,6 +23,7 @@ export function createBackendApi(options = {}) {
 
     getMachines(params) { return http.get('/machines', params); },
     getVendorDevices(params) { return http.get('/vendor-devices', params); },
+    getVendorHistory(params) { return http.get('/vendor-devices/history', params); },
     getMachineMetrics(id, params) { return http.get('/machines/' + encodeURIComponent(id) + '/metrics', params); },
     updateMachine(id, data) { return http.put('/machines/' + encodeURIComponent(id), data); },
     deactivateMachine(id) { return http.post('/machines/' + encodeURIComponent(id) + '/deactivate'); },

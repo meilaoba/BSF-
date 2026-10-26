@@ -72,13 +72,29 @@ function bsfRawState(status){
   return String(status || 'offline').replace(/^./, function(letter){ return letter.toUpperCase(); });
 }
 
-function bsfStatusLabel(value){
+function bsfOperatingStatusLabel(value){
   const number = bsfNumber(value);
-  if(number === 1) return 'Running';
-  if(number === 2) return 'Standby';
-  if(number === 3) return 'Stopped';
+  if(number === 0) return 'Power off';
+  if(number === 1) return 'Standby';
+  if(number === 2) return 'Running';
   if(value === undefined || value === null || value === '') return '\u2014';
   return String(value);
+}
+
+function bsfFermentStateLabel(value){
+  const number = bsfNumber(value);
+  if(number === 0) return 'Stopped';
+  if(number === 1) return 'Running';
+  if(value === undefined || value === null || value === '') return '\u2014';
+  return String(value);
+}
+
+function bsfOperatingStateFromCode(value){
+  const number = bsfNumber(value);
+  if(number === 0) return 'offline';
+  if(number === 1) return 'standby';
+  if(number === 2) return 'running';
+  return null;
 }
 
 function bsfReadTelemetry(data){
@@ -91,9 +107,9 @@ function bsfReadTelemetry(data){
     totalDischargeKg: bsfNumber(bsfField(data, ['TotalDischarge', 'totalDischarge', 'total_discharge_kg', 'OtalUnloadingWeight'])),
     runTimeMin: bsfNumber(bsfField(data, ['RunTime', 'runTime', 'run_time_min'])),
     operatingStatusCode: bsfNumber(bsfField(data, ['OperatingStatus', 'operatingStatus', 'operating_status_code'])),
-    operatingStatus: bsfStatusLabel(bsfField(data, ['OperatingStatus', 'operatingStatus', 'operating_status'])),
+    operatingStatus: bsfOperatingStatusLabel(bsfField(data, ['OperatingStatus', 'operatingStatus', 'operating_status'])),
     fermentStateCode: bsfNumber(bsfField(data, ['FermentState', 'fermentState', 'ferment_state_code'])),
-    fermentState: bsfStatusLabel(bsfField(data, ['FermentState', 'fermentState', 'ferment_state'])),
+    fermentState: bsfFermentStateLabel(bsfField(data, ['FermentState', 'fermentState', 'ferment_state'])),
     fermentRunTimeMin: bsfNumber(bsfField(data, ['FermentRunTime', 'fermentRunTime', 'ferment_run_time_min'])),
     feedCode: bsfNumber(bsfField(data, ['Feed', 'feed', 'feed_code'])),
     shredderCode: bsfNumber(bsfField(data, ['Shredder', 'shredder', 'shredder_code'])),
@@ -128,7 +144,7 @@ function bsfResolveStatus(machine, vendor, reading, stored){
   if(onlineCode === 0) return 'offline';
   const deviceState = bsfField(stored, ['device_state', 'deviceState']);
   if(deviceState !== undefined) return bsfStatusFromDeviceState(deviceState);
-  if(reading.operatingStatusCode !== null) return bsfStatusFromDeviceState(reading.operatingStatusCode);
+  if(reading.operatingStatusCode !== null) return bsfOperatingStateFromCode(reading.operatingStatusCode) || 'online';
   return onlineCode === 1 ? 'online' : 'online';
 }
 
@@ -400,6 +416,80 @@ function bsfSnapshotFingerprint(deviceList, rows){
   });
 }
 
+function bsfHistoryRecordedAt(value, groupBy){
+  let text = String(value || '').trim();
+  if(groupBy === 'month' && /^\d{4}-\d{2}$/.test(text)) text += '-01 00:00';
+  if(groupBy === 'hour' && /^\d{4}-\d{2}-\d{2} \d{2}$/.test(text)) text += ':00';
+  return text;
+}
+
+function bsfHistoryRow(item, device, groupBy){
+  const rawRecordedAt = bsfHistoryRecordedAt(bsfField(item, ['recordedAt', 'recorded_at', 'time', 'timestamp']), groupBy);
+  const recordedAt = bsfDate(rawRecordedAt);
+  if(!recordedAt) return null;
+  const temperature = bsfNumber(bsfField(item, ['temperature', 'CabinTemp', 'cabinTemp']));
+  const humidity = bsfNumber(bsfField(item, ['humidity', 'Humidity']));
+  return {
+    recordedAt:bsfFormatTime(recordedAt),
+    receivedAtSeconds:bsfEpochSeconds(recordedAt),
+    sourceTimestampSeconds:bsfEpochSeconds(recordedAt),
+    device:device.id,
+    deviceState:bsfRawState(device.status),
+    operatingStatus:device.operatingStatus || '\u2014',
+    fermentState:device.fermentState || '\u2014',
+    feed:'\u2014',
+    shredder:'\u2014',
+    mixingMotor:'\u2014',
+    fan:'\u2014',
+    zipper:'\u2014',
+    weight:'\u2014',
+    temperature:bsfDisplay(temperature),
+    humidity:bsfDisplay(humidity),
+    energy:'\u2014',
+    solarPower:'\u2014',
+    co2:'\u2014',
+    no2:'\u2014',
+    h2s:'\u2014',
+    gps:'\u2014',
+    network:'Vendor history',
+    signal:device.signal ?? 0,
+    vendorDeviceId:device.vendorDeviceId || '',
+    history:true,
+    volatile:false
+  };
+}
+
+function bsfMergeRows(baseRows, extraRows){
+  const rows = new Map();
+  baseRows.forEach(function(row){
+    if(row && row.device && row.recordedAt) rows.set(row.device + '@' + (row.sourceTimestampSeconds || row.recordedAt), row);
+  });
+  extraRows.forEach(function(row){
+    if(row && row.device && row.recordedAt) rows.set(row.device + '@' + (row.sourceTimestampSeconds || row.recordedAt), row);
+  });
+  return Array.from(rows.values()).sort(function(a, b){
+    return (b.sourceTimestampSeconds || 0) - (a.sourceTimestampSeconds || 0);
+  });
+}
+
+async function bsfLoadVendorHistory(options){
+  const api = await bsfWaitForBackendApi();
+  if(!api || typeof api.getVendorHistory !== 'function') throw new Error('History API is unavailable');
+  const device = options && options.device;
+  if(!device || !device.id) throw new Error('A device is required');
+  const response = await api.getVendorHistory({
+    deviceId:device.vendorDeviceId || device.id,
+    start:options.start,
+    end:options.end,
+    groupBy:options.groupBy || 'raw'
+  });
+  const items = bsfList(response, 'items');
+  return items.map(function(item){ return bsfHistoryRow(item, device, options.groupBy || 'raw'); }).filter(Boolean);
+}
+
+window.BSF_LOAD_VENDOR_HISTORY = bsfLoadVendorHistory;
+window.BSF_MERGE_ROWS = bsfMergeRows;
+
 async function bsfLoadBackendData(limit){
   const snapshot = await bsfFetchSnapshot(limit);
   const fingerprint = bsfSnapshotFingerprint(snapshot.devices, snapshot.rows);
@@ -436,5 +526,7 @@ window.BSF_LOAD_BACKEND_LATEST = async function(){
 window.BSF_BACKEND_DATA = {
   formatTime:bsfFormatTime,
   readTelemetry:bsfReadTelemetry,
-  buildSnapshot:bsfBuildSnapshot
+  buildSnapshot:bsfBuildSnapshot,
+  historyRow:bsfHistoryRow,
+  mergeRows:bsfMergeRows
 };

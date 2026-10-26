@@ -66,15 +66,14 @@ function reportFilterOptions(){
   const clients = scopedClientNames();
   const clientScoped = isClientScopedRole();
   const clientOptions = (clientScoped ? '' : '<option value="">All Clients</option>') + clients.map(function(client){
-    return '<option value="' + client + '"' + (reportFilters.client===client?' selected':'') + '>' + client + '</option>';
+    return '<option value="' + bsfEscapeHtml(client) + '"' + (reportFilters.client===client?' selected':'') + '>' + bsfEscapeHtml(client) + '</option>';
   }).join('');
   const availableDevices = scopedDevices();
   const deviceOptions = (isUserRole() ? '' : '<option value="">All Devices</option>') + availableDevices.map(function(dev){
-    return '<option value="' + dev.id + '"' + (reportFilters.device===dev.id?' selected':'') + '>' + dev.id + '</option>';
+    return '<option value="' + bsfEscapeHtml(dev.id) + '"' + (reportFilters.device===dev.id?' selected':'') + '>' + bsfEscapeHtml(dev.id) + '</option>';
   }).join('');
   return { clientOptions:clientOptions, deviceOptions:deviceOptions };
 }
-
 function reportFoodWasteValue(row){
   const raw = row && (row.value !== undefined ? row.value : row.waste !== undefined ? row.waste : row.weight);
   const value = Number(raw);
@@ -338,7 +337,13 @@ function downloadReportDataUrl(filename, dataUrl){
   link.remove();
 }
 
-function csvCell(value){ return '"' + String(value === undefined || value === null ? '' : value).replace(/"/g, '""') + '"'; }
+function csvCell(value){
+  return '"' + bsfSpreadsheetSafeText(value).replace(/"/g, '""') + '"';
+}
+
+function excelCell(value){
+  return '<td>' + bsfEscapeHtml(bsfSpreadsheetSafeText(value)) + '</td>';
+}
 
 function exportReportCsv(){
   const model = reportExportModel();
@@ -351,13 +356,12 @@ function exportReportCsv(){
 function exportReportExcel(){
   const model = reportExportModel();
   const rows = [['Metric','Value','Unit'],['Waste Collected','—','kg'],['GHG Reduced','—','kg CO₂e'],['Energy Consumed','—','kWh'],['Est. Fertilizer',model.fertilizerValue,'kg'],['Avg Container Temp','—','°C'],['Avg Humidity','—','%']];
-  const tableRows = rows.map(function(row){ return '<tr>' + row.map(function(cell){ return '<td>' + String(cell) + '</td>'; }).join('') + '</tr>'; }).join('');
-  const foodRows = model.foodWaste.map(function(row){ return '<tr><td>' + row.label + '</td><td>' + row.value + '</td><td>KG</td></tr>'; }).join('');
-  const html = '<html><head><meta charset="UTF-8"></head><body><h2>' + model.title + '</h2><p>' + model.period + ' · ' + model.client + ' · ' + model.device + '</p><table border="1">' + tableRows + '</table><h3>' + model.chartTitle + '</h3><table border="1"><tr><td>Period</td><td>Value</td><td>Unit</td></tr>' + foodRows + '</table></body></html>';
+  const tableRows = rows.map(function(row){ return '<tr>' + row.map(excelCell).join('') + '</tr>'; }).join('');
+  const foodRows = model.foodWaste.map(function(row){ return '<tr>' + excelCell(row.label) + excelCell(row.value) + excelCell('KG') + '</tr>'; }).join('');
+  const html = '<html><head><meta charset="UTF-8"></head><body><h2>' + bsfEscapeHtml(model.title) + '</h2><p>' + bsfEscapeHtml(model.period) + ' · ' + bsfEscapeHtml(model.client) + ' · ' + bsfEscapeHtml(model.device) + '</p><table border="1">' + tableRows + '</table><h3>' + bsfEscapeHtml(model.chartTitle) + '</h3><table border="1"><tr><td>Period</td><td>Value</td><td>Unit</td></tr>' + foodRows + '</table></body></html>';
   downloadReportFile('bsf-report-' + new Date().toISOString().slice(0,10) + '.xls', 'application/vnd.ms-excel;charset=utf-8', '\uFEFF' + html);
   showReportExportToast('Excel 导出已开始');
 }
-
 async function exportReportPdf(){
   const model = reportExportModel();
   const pdfTitle = model.pdfTitle || model.title;

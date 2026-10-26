@@ -23,6 +23,24 @@ export function optionalString(value, field, { max = 2000 } = {}) {
   return v === '' ? null : v;
 }
 
+const DISPLAY_TEXT_DISALLOWED_RE = /[<>\u0000-\u001f\u007f]/;
+
+function assertSafeDisplayText(value, field) {
+  if (DISPLAY_TEXT_DISALLOWED_RE.test(value)) {
+    throw new ValidationError(`\`${field}\` contains unsupported markup or control characters`, { field });
+  }
+  return value;
+}
+
+export function requireDisplayText(value, field, options = {}) {
+  return assertSafeDisplayText(requireString(value, field, options), field);
+}
+
+export function optionalDisplayText(value, field, options = {}) {
+  const normalized = optionalString(value, field, options);
+  return normalized === null ? null : assertSafeDisplayText(normalized, field);
+}
+
 export function requireEnum(value, field, allowed) {
   if (!allowed.includes(value)) {
     throw new ValidationError(`\`${field}\` must be one of: ${allowed.join(', ')}`, { field });

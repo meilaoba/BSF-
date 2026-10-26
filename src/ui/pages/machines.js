@@ -49,12 +49,12 @@ function renderMachines(container){
       <p style="color:#64748b;font-size:14px;margin:0;">Real-time monitoring of all connected kitchen waste units</p>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;align-items:flex-end;">
-      ${clientScoped ? clientScopeBadge() : '<label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Client Filter<select onchange="machineFilters.client=this.value;machineFilters.device=\'\';renderMachines(document.getElementById(\'page-content\'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"><option value="" ' + (machineFilters.client===''?'selected':'') + '>All Clients</option>' + clients.map(function(client){ return '<option value="'+client+'" '+(machineFilters.client===client?'selected':'')+'>'+client+'</option>'; }).join('') + '</select></label>'}
+      ${clientScoped ? clientScopeBadge() : '<label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Client Filter<select onchange="machineFilters.client=this.value;machineFilters.device=\'\';renderMachines(document.getElementById(\'page-content\'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"><option value="" ' + (machineFilters.client===''?'selected':'') + '>All Clients</option>' + clients.map(function(client){ return '<option value="'+machinePreviewEscape(client)+'" '+(machineFilters.client===client?'selected':'')+'>'+machinePreviewEscape(client)+'</option>'; }).join('') + '</select></label>'}
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
         Machine
         <select ${isUserRole()?'disabled':''} onchange="machineFilters.device=this.value;renderMachines(document.getElementById('page-content'));" style="padding:10px 16px;background:${isUserRole()?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${isUserRole()?'#94a3b8':'#e2e8f0'};font-size:14px;min-width:220px;cursor:${isUserRole()?'not-allowed':'pointer'};">
           ${isUserRole() ? '' : '<option value="" ' + (machineFilters.device===''?'selected':'') + '>All Machines</option>'}
-          ${clientDevices.map(dev=>`<option value="${dev.id}" ${machineFilters.device===dev.id?'selected':''}>${dev.id} - ${dev.name}</option>`).join('')}
+          ${clientDevices.map(dev=>`<option value="${machinePreviewEscape(dev.id)}" ${machineFilters.device===dev.id?'selected':''}>${machinePreviewEscape(dev.id)} - ${machinePreviewEscape(dev.name)}</option>`).join('')}
         </select>
       </label>
       <div style="display:flex;gap:8px;align-items:center;padding-bottom:11px;">
@@ -83,12 +83,12 @@ function renderMachines(container){
           ${filteredDevices.length ? filteredDevices.map(dev=>`
             <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:#0f172a;border-radius:8px;border:1px solid #334155;">
               <div>
-                <p style="margin:0;font-weight:600;color:#f8fafc;font-size:14px;">${dev.id}</p>
-                <p style="margin:4px 0 0;font-size:12px;color:#64748b;">${dev.name}</p>
+                <p style="margin:0;font-weight:600;color:#f8fafc;font-size:14px;">${machinePreviewEscape(dev.id)}</p>
+                <p style="margin:4px 0 0;font-size:12px;color:#64748b;">${machinePreviewEscape(dev.name)}</p>
               </div>
               <div style="text-align:right;">
-                <span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${dev.status==='online'?'rgba(16,185,129,0.15)':dev.status==='running'?'rgba(59,130,246,0.15)':dev.status==='standby'?'rgba(245,158,11,0.15)':'rgba(239,68,68,0.15)'};color:${dev.status==='online'?'#10b981':dev.status==='running'?'#3b82f6':dev.status==='standby'?'#f59e0b':'#ef4444'};">${dev.status.toUpperCase()}</span>
-                <p style="margin:4px 0 0;font-size:11px;color:#64748b;">${dev.network} · ${dev.signal}%</p>
+                <span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${dev.status==='online'?'rgba(16,185,129,0.15)':dev.status==='running'?'rgba(59,130,246,0.15)':dev.status==='standby'?'rgba(245,158,11,0.15)':'rgba(239,68,68,0.15)'};color:${dev.status==='online'?'#10b981':dev.status==='running'?'#3b82f6':dev.status==='standby'?'#f59e0b':'#ef4444'};">${machinePreviewEscape(String(dev.status || '').toUpperCase())}</span>
+                <p style="margin:4px 0 0;font-size:11px;color:#64748b;">${machinePreviewEscape(dev.network)} · ${machinePreviewEscape(dev.signal)}%</p>
               </div>
             </div>
           `).join('') : '<div style="padding:20px;text-align:center;color:#64748b;font-size:13px;">No devices available</div>'}

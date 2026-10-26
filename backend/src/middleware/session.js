@@ -264,6 +264,19 @@ export function applyDataScope(req, session) {
   if (role === 'master_admin') return;
 
   const url = new URL(req.url || '/', 'http://localhost');
+  const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname;
+
+  // Session introspection and vendor proxying are already authorized by the
+  // signed-in session/vendor token. They must remain usable before a vendor
+  // account has been explicitly mapped to a local Client/Machine.
+  if (path === '/api/v1/auth/me'
+    || path === '/api/v1/auth/logout'
+    || path === '/api/v1/auth/refresh'
+    || path === '/api/v1/vendor-devices'
+    || path === '/api/v1/vendor-devices/history') {
+    return;
+  }
+
   if (role === 'client_admin') {
     if (!session.user.clientId) throw new ForbiddenError('Account is not linked to a client');
     url.searchParams.set('clientId', session.user.clientId);

@@ -97,7 +97,11 @@ function populateAlertFilters(){
   const clients = scopedClientNames();
   if(clientSelect){
     const scoped = isClientScopedRole();
-    clientSelect.innerHTML = (scoped ? '' : '<option value="">All Clients</option>') + clients.map(function(client){ return '<option value="'+client+'"'+(alertFilters.client===client?' selected':'')+'>'+client+'</option>'; }).join('');
+    const options = scoped ? [] : [{ value:'', label:'All Clients', selected:alertFilters.client === '' }];
+    clients.forEach(function(client){
+      options.push({ value:client, label:client, selected:alertFilters.client === client });
+    });
+    bsfReplaceSelectOptions(clientSelect, options);
     clientSelect.disabled = scoped;
     clientSelect.style.background = scoped ? '#111827' : '#1e293b';
     clientSelect.style.color = scoped ? '#94a3b8' : '#e2e8f0';
@@ -106,7 +110,11 @@ function populateAlertFilters(){
   const list = scopedDevices();
   if(machineSelect){
     const userRole = isUserRole();
-    machineSelect.innerHTML = (userRole ? '' : '<option value="">All Machines</option>') + list.map(function(dev){ return '<option value="'+dev.id+'"'+(alertFilters.machine===dev.id?' selected':'')+'>'+dev.id+'</option>'; }).join('');
+    const options = userRole ? [] : [{ value:'', label:'All Machines', selected:alertFilters.machine === '' }];
+    list.forEach(function(dev){
+      options.push({ value:dev.id, label:dev.id, selected:alertFilters.machine === dev.id });
+    });
+    bsfReplaceSelectOptions(machineSelect, options);
     machineSelect.disabled = userRole;
     machineSelect.style.background = userRole ? '#111827' : '#1e293b';
     machineSelect.style.color = userRole ? '#94a3b8' : '#e2e8f0';

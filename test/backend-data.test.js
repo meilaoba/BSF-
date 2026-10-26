@@ -47,6 +47,9 @@ test('maps vendor API values onto an explicitly linked machine without auto-assi
   assert.equal(snapshot.devices[0].backendId, '11111111-1111-4111-8111-111111111111');
   assert.equal(snapshot.devices[0].containerTemp, 45.5);
   assert.equal(snapshot.devices[0].realTimeWeight, 8.2);
+  assert.equal(snapshot.devices[0].operatingStatus, 'Standby');
+  assert.equal(snapshot.devices[0].fermentState, 'Running');
+  assert.equal(snapshot.devices[0].status, 'standby');
   assert.equal(snapshot.devices[0].network, 'Vendor API');
   assert.equal(snapshot.rows.length, 1);
 });
@@ -96,4 +99,47 @@ test('deduplicates a stored and live row with the same device timestamp', () => 
 
   assert.equal(snapshot.rows.length, 1);
   assert.equal(snapshot.rows[0].network, 'Vendor API');
+});
+
+test('maps vendor history points without inventing fields the vendor did not return', () => {
+  const historyRow = sandbox.window.BSF_BACKEND_DATA.historyRow;
+  const row = historyRow(
+    { recordedAt: '2026-10-10', temperature: 43.2, humidity: 55 },
+    { id: 'KW-100', status: 'standby', operatingStatus: 'Standby', fermentState: 'Running', vendorDeviceId: 'vendor-100' },
+    'day'
+  );
+  assert.equal(row.device, 'KW-100');
+  assert.equal(row.temperature, 43.2);
+  assert.equal(row.humidity, 55);
+  assert.equal(row.weight, '—');
+  assert.equal(row.energy, '—');
+  assert.equal(row.history, true);
+});
+
+test('merges history and live rows by device and timestamp with live data taking precedence', () => {
+  const mergeRows = sandbox.window.BSF_BACKEND_DATA.mergeRows;
+  const history = [{
+    device: 'KW-100',
+    recordedAt: '2026-10-10 10:00:00',
+    sourceTimestampSeconds: 1791626400,
+    temperature: '43.2',
+    weight: '—'
+  }];
+  const live = [{
+    device: 'KW-100',
+    recordedAt: '2026-10-10 10:00:00',
+    sourceTimestampSeconds: 1791626400,
+    temperature: '43.2',
+    weight: '12.4'
+  }, {
+    device: 'KW-100',
+    recordedAt: '2026-10-10 11:00:00',
+    sourceTimestampSeconds: 1791630000,
+    temperature: '44.1',
+    weight: '12.8'
+  }];
+  const merged = mergeRows(history, live);
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].recordedAt, '2026-10-10 11:00:00');
+  assert.equal(merged.find((row) => row.recordedAt === '2026-10-10 10:00:00').weight, '12.4');
 });

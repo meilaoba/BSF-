@@ -9,16 +9,11 @@ function persistNotificationReadIds(ids){
   try { localStorage.setItem(NOTIFICATION_READ_KEY, JSON.stringify(ids)); } catch(e) {}
 }
 
-function notificationEscape(value){
-  return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, function(ch){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
-  });
-}
 
 function notificationItemFromAlert(alert, index){
   const id = alert.id || ('alert-' + index + '-' + (alert.time || '') + '-' + (alert.type || ''));
   return {
-    id:id,
+    id:String(id),
     title:alert.type || 'Alert',
     detail:(alert.device || 'Device') + ' · ' + (alert.value || '—'),
     time:alert.time || '',
@@ -73,23 +68,62 @@ function renderNotificationBadge(){
   badge.style.display = count ? 'flex' : 'none';
 }
 
+function notificationText(tagName, text, cssText){
+  const element = document.createElement(tagName);
+  element.textContent = String(text === null || text === undefined ? '' : text);
+  if(cssText) element.style.cssText = cssText;
+  return element;
+}
+
 function renderNotificationPanel(){
   const panel = ensureNotificationPanel();
   if(!panel) return;
+  panel.replaceChildren();
   const unread = notificationRecords.filter(function(item){ return !item.read; }).length;
-  let html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #334155;"><div><b style="color:#f8fafc;font-size:14px;">Notifications</b><span style="margin-left:8px;color:#64748b;font-size:12px;">' + unread + ' unread</span></div>';
-  if(unread) html += '<button onclick="markAllNotificationsRead()" style="background:none;border:none;color:#10b981;font-size:12px;cursor:pointer;">Mark all read</button>';
-  html += '</div>';
-  if(!notificationRecords.length){
-    html += '<div style="padding:30px 16px;text-align:center;color:#64748b;font-size:13px;">No notifications</div>';
-  } else {
-    html += notificationRecords.map(function(item){
-      return '<div onclick="openNotification(\'' + String(item.id).replace(/'/g, "\\'") + '\')" style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid #334155;cursor:pointer;background:' + (item.read ? '#1e293b' : 'rgba(16,185,129,.06)') + ';"><span style="width:8px;height:8px;margin-top:6px;border-radius:50%;background:' + (item.read ? '#475569' : '#ef4444') + ';flex:none;"></span><div style="min-width:0;"><div style="font-size:13px;font-weight:600;color:#f8fafc;">' + notificationEscape(item.title) + '</div><div style="font-size:12px;color:#94a3b8;margin-top:4px;">' + notificationEscape(item.detail) + '</div><div style="font-size:11px;color:#64748b;margin-top:4px;">' + notificationEscape(item.time) + '</div></div></div>';
-    }).join('');
-  }
-  panel.innerHTML = html;
-}
 
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #334155;';
+  const heading = document.createElement('div');
+  heading.appendChild(notificationText('b', 'Notifications', 'color:#f8fafc;font-size:14px;'));
+  heading.appendChild(notificationText('span', unread + ' unread', 'margin-left:8px;color:#64748b;font-size:12px;'));
+  header.appendChild(heading);
+  if(unread){
+    const markAll = notificationText('button', 'Mark all read', 'background:none;border:none;color:#10b981;font-size:12px;cursor:pointer;');
+    markAll.type = 'button';
+    markAll.addEventListener('click', markAllNotificationsRead);
+    header.appendChild(markAll);
+  }
+  panel.appendChild(header);
+
+  if(!notificationRecords.length){
+    panel.appendChild(notificationText('div', 'No notifications', 'padding:30px 16px;text-align:center;color:#64748b;font-size:13px;'));
+    return;
+  }
+
+  notificationRecords.forEach(function(item){
+    const row = document.createElement('div');
+    row.tabIndex = 0;
+    row.setAttribute('role', 'button');
+    row.style.cssText = 'display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid #334155;cursor:pointer;background:' + (item.read ? '#1e293b' : 'rgba(16,185,129,.06)') + ';';
+    const dot = document.createElement('span');
+    dot.style.cssText = 'width:8px;height:8px;margin-top:6px;border-radius:50%;background:' + (item.read ? '#475569' : '#ef4444') + ';flex:none;';
+    row.appendChild(dot);
+    const body = document.createElement('div');
+    body.style.cssText = 'min-width:0;';
+    body.appendChild(notificationText('div', item.title, 'font-size:13px;font-weight:600;color:#f8fafc;'));
+    body.appendChild(notificationText('div', item.detail, 'font-size:12px;color:#94a3b8;margin-top:4px;'));
+    body.appendChild(notificationText('div', item.time, 'font-size:11px;color:#64748b;margin-top:4px;'));
+    row.appendChild(body);
+    const activate = function(event){
+      if(event && event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+      if(event && event.type === 'keydown') event.preventDefault();
+      openNotification(item.id);
+    };
+    row.addEventListener('click', activate);
+    row.addEventListener('keydown', activate);
+    panel.appendChild(row);
+  });
+}
 function toggleNotificationPanel(event){
   if(event) event.stopPropagation();
   const panel = ensureNotificationPanel();
@@ -98,7 +132,7 @@ function toggleNotificationPanel(event){
 }
 
 function openNotification(id){
-  const item = notificationRecords.find(function(record){ return record.id === id; });
+  const item = notificationRecords.find(function(record){ return String(record.id) === String(id); });
   if(item && !item.read){
     item.read = true;
     const ids = notificationReadIds();

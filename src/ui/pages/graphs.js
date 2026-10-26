@@ -3,6 +3,121 @@ let graphFilters = { client:'', machine:'', start:'', end:'' };
 let graphFilterMessage = '';
 let foodWasteData = [];
 
+let graphHistoryRows = [];
+let graphHistoryLoading = false;
+let graphHistoryError = '';
+let graphHistoryRequestKey = '';
+let graphHistoryCompletedKey = '';
+const graphHistoryCache = new Map();
+const GRAPH_HISTORY_TTL_MS = 5 * 60 * 1000;
+
+function graphHistoryGroupBy(){
+  const period = graphAggregationPeriod(graphPeriods.foodWaste);
+  return period === 'hourly' ? 'hour' : period === 'monthly' ? 'month' : 'day';
+}
+function graphHistoryTargets(){
+  return scopedDevices().filter(function(device){
+    if(graphFilters.client && device.client !== graphFilters.client) return false;
+    if(graphFilters.machine && device.id !== graphFilters.machine) return false;
+    return Boolean(device.vendorDeviceId);
+  });
+}
+function graphHistoryRange(){
+  const range = graphPeriodRange();
+  return { start:range.start, end:range.dataEnd || range.end };
+}
+function graphHistoryCacheKey(device, range, groupBy){
+  return String(device.vendorDeviceId || device.id) + '|' + range.start + '|' + range.end + '|' + groupBy;
+}
+function graphHistoryViewKey(){
+  const range = graphHistoryRange();
+  const groupBy = graphHistoryGroupBy();
+  return graphHistoryTargets().map(function(device){ return graphHistoryCacheKey(device, range, groupBy); }).sort().join(',');
+}
+function graphHistoryStatusMarkup(){
+  let message = '';
+  let color = '#64748b';
+  if(graphHistoryLoading){
+    message = 'Loading vendor history...';
+  } else if(graphHistoryError){
+    message = graphHistoryError;
+    color = '#f59e0b';
+  } else if(graphHistoryCompletedKey){
+    message = graphHistoryRows.length + ' vendor history point' + (graphHistoryRows.length === 1 ? '' : 's') + ' loaded';
+  }
+  return '<p id="graph-history-status" style="min-height:18px;margin:-6px 0 12px;color:' + color + ';font-size:12px;">' + graphEscape(message) + (graphHistoryError ? ' <button onclick="retryGraphHistory()" style="margin-left:8px;padding:2px 8px;background:#334155;border:1px solid #475569;border-radius:5px;color:#e2e8f0;cursor:pointer;font-size:11px;">Retry</button>' : '') + '</p>';
+}
+function retryGraphHistory(){
+  graphHistoryCompletedKey = '';
+  graphHistoryError = '';
+  graphLoadHistory();
+}
+async function graphLoadHistory(){
+  if(!window.BSF_LOAD_VENDOR_HISTORY) return;
+  const targets = graphHistoryTargets();
+  const range = graphHistoryRange();
+  const groupBy = graphHistoryGroupBy();
+  const key = graphHistoryViewKey();
+  if(key === graphHistoryCompletedKey && !graphHistoryError) return;
+  if(graphHistoryLoading && key === graphHistoryRequestKey) return;
+  if(!targets.length){
+    graphHistoryRows = [];
+    window.BSF_DEVICE_HISTORY_ROWS = [];
+    graphHistoryCompletedKey = key;
+    graphHistoryError = '';
+    return;
+  }
+
+  graphHistoryLoading = true;
+  graphHistoryRequestKey = key;
+  graphHistoryError = '';
+  const status = document.getElementById('graph-history-status');
+  if(status) status.textContent = 'Loading vendor history...';
+
+  const collected = [];
+  const failures = [];
+  const pending = [];
+  targets.forEach(function(device){
+    const cacheKey = graphHistoryCacheKey(device, range, groupBy);
+    const cached = graphHistoryCache.get(cacheKey);
+    if(cached && Date.now() - cached.savedAt < GRAPH_HISTORY_TTL_MS){
+      collected.push.apply(collected, cached.rows);
+    } else {
+      pending.push({ device:device, cacheKey:cacheKey });
+    }
+  });
+
+  let cursor = 0;
+  async function worker(){
+    while(cursor < pending.length){
+      const item = pending[cursor++];
+      try {
+        const rows = await window.BSF_LOAD_VENDOR_HISTORY({ device:item.device, start:range.start, end:range.end, groupBy:groupBy });
+        graphHistoryCache.set(item.cacheKey, { savedAt:Date.now(), rows:rows });
+        collected.push.apply(collected, rows);
+      } catch(error) {
+        const stale = graphHistoryCache.get(item.cacheKey);
+        if(stale) collected.push.apply(collected, stale.rows);
+        failures.push(item.device.id);
+      }
+    }
+  }
+
+  try {
+    await Promise.all(Array.from({ length:Math.min(3, pending.length) }, worker));
+    graphHistoryRows = window.BSF_MERGE_ROWS(collected, []);
+    window.BSF_DEVICE_HISTORY_ROWS = graphHistoryRows;
+    graphHistoryCompletedKey = key;
+    graphHistoryError = failures.length ? 'Historical data is unavailable for ' + failures.length + ' machine' + (failures.length === 1 ? '' : 's') + '.' : '';
+  } finally {
+    graphHistoryLoading = false;
+  }
+
+  if(currentPage === 'graphs' && graphHistoryViewKey() === key){
+    renderGraphs(document.getElementById('page-content'));
+  }
+}
+
 function graphPeriodLabel(period){
   return period === 'daily' ? 'Daily' : period === 'yearly' ? 'Yearly' : 'Monthly';
 }
@@ -60,7 +175,8 @@ function graphPeriodRange(){
 }
 
 function graphFilteredRawRows(){
-  const rows = (window.BSF_GRAPH_HISTORY_ROWS && window.BSF_GRAPH_HISTORY_ROWS.length) ? window.BSF_GRAPH_HISTORY_ROWS : rawDataRows;
+  const historyRows = graphHistoryCompletedKey === graphHistoryViewKey() ? (window.BSF_DEVICE_HISTORY_ROWS || []) : [];
+  const rows = historyRows.length ? historyRows : ((window.BSF_GRAPH_HISTORY_ROWS && window.BSF_GRAPH_HISTORY_ROWS.length) ? window.BSF_GRAPH_HISTORY_ROWS : rawDataRows);
   const range = graphPeriodRange();
   const visibleIds = new Set(scopedDevices().map(function(device){ return device.id; }));
   return rows.filter(function(row){
@@ -364,6 +480,7 @@ function renderGraphs(container){
       <button onclick="applyGraphFilters()" style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Apply</button>
     </div>
     <p id="graph-date-validation" style="min-height:18px;margin:0 0 12px;color:${graphFilterMessage ? '#f59e0b' : 'transparent'};font-size:12px;">${graphFilterMessage || '.'}</p>
+    ${graphHistoryStatusMarkup()}
     ${graphPeriodFilterMarkup()}
     ${foodWasteChartMarkup()}
     ${lineChart(ghgSeries, 'ghg', '#10b981', 'kg CO₂e', 'ghg')}
@@ -372,4 +489,5 @@ function renderGraphs(container){
       : lineChart(tempSeries, 'temp', '#f97316', '°C', 'temp')}
   `;
   loadFoodWasteChart();
+  setTimeout(graphLoadHistory, 0);
 }

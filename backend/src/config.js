@@ -109,6 +109,11 @@ export const config = {
     vendor: {
       loginUrl: str('VENDOR_LOGIN_URL', 'https://iot.creekscomposter.com:8888/user/login'),
       deviceListUrl: str('VENDOR_DEVICE_LIST_URL', 'https://iot.creekscomposter.com:8888/emDevice/queryListData'),
+      realtimeEnabled: bool('VENDOR_REALTIME_ENABLED', true),
+      realtimeUrl: str('VENDOR_REALTIME_WS_URL', 'wss://iot.creekscomposter.com:8888/ws'),
+      realtimeTimeoutMs: num('VENDOR_REALTIME_TIMEOUT_MS', 4000),
+      historyUrl: str('VENDOR_HISTORY_URL', 'https://iot.creekscomposter.com:8888/historyData/temperatureHumidityCurve'),
+      historyTimeoutMs: num('VENDOR_HISTORY_TIMEOUT_MS', 15000),
       requestFormat: str('VENDOR_LOGIN_FORMAT', 'json').toLowerCase(),
       timeoutMs: num('VENDOR_AUTH_TIMEOUT_MS', 10000),
       deviceTimeoutMs: num('VENDOR_DEVICE_TIMEOUT_MS', 15000),

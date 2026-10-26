@@ -11,9 +11,29 @@ const host = process.env.HOST || (process.argv.includes('--lan') ? '0.0.0.0' : '
 const backendUrl = String(process.env.BSF_BACKEND_URL || 'http://127.0.0.1:3000').replace(/\/+$/, '');
 const trustProxy = process.env.BSF_TRUST_PROXY === 'true';
 
+const publicFilePaths = new Set([
+  '/index.html',
+  '/src/main.js',
+  '/src/app.js'
+]);
+const publicDirectoryPrefixes = [
+  '/src/api/',
+  '/src/config/',
+  '/src/services/',
+  '/src/styles/',
+  '/src/ui/',
+  '/src/utils/',
+  '/src/vendor/'
+];
+const publicExtensions = new Set([
+  '.css', '.gif', '.html', '.ico', '.jpeg', '.jpg', '.js', '.png',
+  '.svg', '.webp', '.woff', '.woff2'
+]);
+
 function securityHeaders() {
+  const googleMapsSources = 'https://maps.googleapis.com https://maps.gstatic.com https://*.googleapis.com https://*.gstatic.com';
   return {
-    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://127.0.0.1:* http://localhost:* https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; worker-src 'self' blob:",
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: " + googleMapsSources + "; connect-src 'self' http://127.0.0.1:* http://localhost:* https://maps.googleapis.com https://maps.gstatic.com; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; worker-src 'self' blob:",
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
@@ -32,19 +52,56 @@ const contentTypes = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
-  '.webp': 'image/webp'
+  '.webp': 'image/webp',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2'
 };
 
-function sendFile(res, filePath) {
+
+function sendStaticError(res, status, message, method) {
+  res.writeHead(status, Object.assign({ 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }, securityHeaders()));
+  if (method === 'HEAD') res.end();
+  else res.end(message);
+}
+
+function sendFile(res, filePath, method) {
   fs.stat(filePath, (error, stat) => {
     if (error || !stat.isFile()) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Not found');
+      sendStaticError(res, 404, 'Not found', method);
       return;
     }
-    res.writeHead(200, Object.assign({ 'Content-Type': contentTypes[path.extname(filePath)] || 'application/octet-stream', 'Cache-Control': 'no-store' }, securityHeaders()));
+    const headers = Object.assign({
+      'Content-Type': contentTypes[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+      'Content-Length': String(stat.size),
+      'Cache-Control': 'no-store'
+    }, securityHeaders());
+    res.writeHead(200, headers);
+    if (method === 'HEAD') {
+      res.end();
+      return;
+    }
     fs.createReadStream(filePath).pipe(res);
   });
+}
+
+function resolvePublicPath(pathname) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  if (!decoded.startsWith('/') || decoded.includes('\0') || decoded.includes('\\')) return null;
+  if (path.posix.normalize(decoded) !== decoded) return null;
+  if (decoded.split('/').some((segment) => segment.startsWith('.') && segment !== '')) return null;
+  if (decoded === '/') decoded = '/index.html';
+  if (!publicFilePaths.has(decoded) && !publicDirectoryPrefixes.some((prefix) => decoded.startsWith(prefix))) return null;
+  if (!publicExtensions.has(path.extname(decoded).toLowerCase())) return null;
+  return decoded;
 }
 
 function proxyBackend(req, res, incomingUrl) {
@@ -85,14 +142,23 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  const relative = incomingUrl.pathname === '/' ? '/index.html' : incomingUrl.pathname;
-  const filePath = path.resolve(appRoot, '.' + relative);
-  if (!filePath.startsWith(appRoot + path.sep)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('Forbidden');
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    sendStaticError(res, 405, 'Method not allowed', req.method);
     return;
   }
-  sendFile(res, filePath);
+
+  const publicPath = resolvePublicPath(incomingUrl.pathname);
+  if (!publicPath) {
+    sendStaticError(res, 404, 'Not found', req.method);
+    return;
+  }
+
+  const filePath = path.resolve(appRoot, '.' + publicPath);
+  if (!filePath.startsWith(appRoot + path.sep)) {
+    sendStaticError(res, 404, 'Not found', req.method);
+    return;
+  }
+  sendFile(res, filePath, req.method);
 });
 
 server.listen(port, host, () => {

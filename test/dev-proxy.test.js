@@ -99,3 +99,28 @@ test('retired device transport endpoint is no longer exposed', async () => {
   const response = await fetch(`http://127.0.0.1:${frontendPort}/api/gateway/health`);
   assert.equal(response.status, 404);
 });
+test('static server exposes an explicit frontend allowlist only', async () => {
+  const blockedPaths = [
+    '/.git/HEAD',
+    '/.git/packed-refs',
+    '/backend/src/config.js',
+    '/backend/.env.example',
+    '/README.md',
+    '/package.json',
+    '/src/pages/README.md'
+  ];
+  for (const pathname of blockedPaths) {
+    const response = await fetch(`http://127.0.0.1:${frontendPort}${pathname}`);
+    assert.equal(response.status, 404, pathname);
+  }
+
+  for (const pathname of ['/', '/index.html', '/src/main.js', '/src/ui/state.js', '/src/styles/app.css']) {
+    const response = await fetch(`http://127.0.0.1:${frontendPort}${pathname}`);
+    assert.equal(response.status, 200, pathname);
+  }
+
+  const response = await fetch(`http://127.0.0.1:${frontendPort}/`);
+  const csp = response.headers.get('content-security-policy') || '';
+  assert.match(csp, /img-src[^;]*https:\/\/\*\.googleapis\.com/);
+  assert.doesNotMatch(csp, /(?:img-src|connect-src)[^;]*\shttps:(?:\s|;)/);
+});

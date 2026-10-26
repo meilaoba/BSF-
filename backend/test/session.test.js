@@ -10,7 +10,7 @@ process.env.AUTH_COOKIE_SECURE = 'false';
 const { sha256Hex } = await import('../src/lib/crypto.js');
 const { config } = await import('../src/config.js');
 const { clientIp, isHttpsRequest } = await import('../src/lib/http.js');
-const { authCookies, authorizeApiPath, enforceCsrf, parseCookies, publicUser } = await import('../src/middleware/session.js');
+const { applyDataScope, authCookies, authorizeApiPath, enforceCsrf, parseCookies, publicUser } = await import('../src/middleware/session.js');
 
 test('session and CSRF cookies are HttpOnly/SameSite protected', () => {
   const cookies = authCookies('session-token', 'csrf-token', 600);
@@ -72,6 +72,35 @@ test('tenant roles cannot bypass master-only routes with a child path', () => {
       path
     );
   }
+});
+
+test('unlinked accounts can inspect their session and vendor-scoped devices', () => {
+  const session = { user: { role: 'client_admin', clientId: null, machineId: null } };
+
+  for (const path of [
+    '/api/v1/auth/me',
+    '/api/v1/auth/logout',
+    '/api/v1/auth/refresh',
+    '/api/v1/vendor-devices?pageNum=1&pageSize=100',
+    '/api/v1/vendor-devices/history?deviceId=52&start=2026-10-01&end=2026-10-02&groupBy=day',
+  ]) {
+    const req = { url: path };
+    assert.doesNotThrow(() => applyDataScope(req, session), path);
+    assert.equal(req.url, path);
+  }
+
+  assert.throws(
+    () => applyDataScope({ url: '/api/v1/machines?limit=1000' }, session),
+    (err) => err.code === 'FORBIDDEN' && /not linked to a client/.test(err.message)
+  );
+});
+
+test('linked tenant scopes local data to the authenticated client', () => {
+  const req = { url: '/api/v1/machines?clientId=forged&limit=1000' };
+  applyDataScope(req, { user: { role: 'client_admin', clientId: 'trusted-client', machineId: null } });
+  const url = new URL(req.url, 'http://localhost');
+  assert.equal(url.searchParams.get('clientId'), 'trusted-client');
+  assert.equal(url.searchParams.get('limit'), '1000');
 });
 
 test('client IP ignores spoofed forwarding headers unless the proxy is trusted', () => {

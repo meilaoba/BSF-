@@ -45,7 +45,7 @@ function clientAssignMachine(deviceId, clientName){
 function clientMachineChips(deviceIds){
   if(!deviceIds.length) return '<span style="color:#64748b;">No machines linked</span>';
   return deviceIds.map(function(deviceId){
-    return '<button onclick="openMachineAccount(\'' + clientEscape(deviceId) + '\')" style="padding:4px 9px;margin:2px;background:#0f172a;border:1px solid #475569;border-radius:12px;color:#e2e8f0;font-size:11px;cursor:pointer;">' + clientEscape(deviceId) + '</button>';
+    return '<button type="button" data-machine-id="' + clientEscape(deviceId) + '" style="padding:4px 9px;margin:2px;background:#0f172a;border:1px solid #475569;border-radius:12px;color:#e2e8f0;font-size:11px;cursor:pointer;">' + clientEscape(deviceId) + '</button>';
   }).join('');
 }
 
@@ -85,6 +85,9 @@ function renderClients(container){
       </table>
     </div>
   `;
+  container.querySelectorAll('[data-machine-id]').forEach(function(button){
+    button.addEventListener('click', function(){ openMachineAccount(button.dataset.machineId); });
+  });
 }
 
 function openClientModal(index){

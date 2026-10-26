@@ -148,7 +148,7 @@ export function registerNotificationRoutes(router) {
     const { job, deduplicated } = await enqueueNotification({
       channel,
       to,
-      toName: optionalString(body.toName, 'toName', { max: 200 }),
+      toName: optionalDisplayText(body.toName, 'toName', { max: 200 }),
       kind: body.kind ? String(body.kind).slice(0, 40) : 'manual',
       severity,
       code: optionalString(body.templateCode, 'templateCode', { max: 80 }),
@@ -198,7 +198,7 @@ export function registerNotificationRoutes(router) {
     const { job, deduplicated } = await enqueueNotification({
       channel,
       to,
-      toName: optionalString(body.toName, 'toName', { max: 200 }),
+      toName: optionalDisplayText(body.toName, 'toName', { max: 200 }),
       kind: 'test',
       code: 'test_message',
       variables: { occurred_at: new Date().toISOString() },
