@@ -4,10 +4,10 @@
 
 ~~~text
 设备
-  → MQTT Broker
-  → bms_mos.exe / 正式数据服务
-  → 后端 API 与历史数据库
-  → HTTP API / WebSocket
+  → 厂家 REST API
+  → BSF 后端（认证、标准化、持久化）
+  → PostgreSQL
+  → HTTP API
   → 结构化 Web 前端
 ~~~
 
@@ -18,38 +18,22 @@
 - 页面和原版样式
 - Client / Machine Filter
 - 图表和列表显示
-- 调用后端 API
-- 调用本地网关 API（开发联调）
+- 调用同源 `/api/v1` 后端接口
 - 错误和空数据状态
 
 前端不负责：
 
-- 保存 MQTT 密码
-- 直接连接 MQTT TCP
-- 保存一年历史数据
+- 保存厂家 Token
+- 直接连接厂家系统或设备网络
+- 保存历史数据
 - 绕过后端做权限判断
 
-## 运行模式
+## 数据流
 
-### 1. 本机联调模式
-
-页面从 bms_mos.exe 的本地 HTTP API 读取实时数据：
-
-~~~text
-GET /api/health
-GET /api/latest
-GET /api/messages?limit=N
-~~~
-
-网关端口每次启动可能变化，前端通过 runtime config 或 URL 参数传入。
-
-### 2. 正式后端模式
-
-页面从正式后端读取：
-
-- 登录和权限
-- 客户、用户、角色
-- 机器和历史数据
-- 报表、告警、系统设置
-
-正式模式不在前端保存 MQTT 凭据。
+1. 用户通过 BSF 后端登录，厂家 Token 只保存在服务端加密会话中。
+2. `/api/v1/vendor-devices` 代理厂家设备列表。
+3. `/api/v1/machines` 提供客户与机器资料。
+4. `/api/v1/device-data` 提供历史遥测。
+5. 页面使用同一份后端数据渲染 Machines、Locations、Graphs、Raw Data、
+   Reports 和 Alerts。
+6. 未绑定客户或机器的厂家设备显示为 `Unassigned`，系统不会自动绑定。

@@ -26,7 +26,7 @@
 
 ## 3. API / Data Sources
 
-- MQTT Broker 状态接入真实网关检查。
+- Data Source 状态接入后端 API 健康检查。
 - 增加 Check Connection 按钮。
 - Data Ingestion Stats 接入真实数据：
   - Messages in Buffer

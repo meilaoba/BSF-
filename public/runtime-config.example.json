@@ -1,6 +1,5 @@
 {
-  "apiBaseUrl": "https://api.example.com/api/v1",
-  "gatewayBaseUrl": "http://127.0.0.1:11851",
+  "apiBaseUrl": "/api/v1",
   "requestTimeoutMs": 15000,
   "refreshMs": {
     "admin": 180000,

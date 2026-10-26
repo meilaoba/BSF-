@@ -1,10 +1,89 @@
-function syncLoginRole(){
-  const role = (document.getElementById('role-select') || {}).value || 'admin';
-  const defaults = { admin:'admin@platform.hk', 'client-admin':'client@platform.hk', user:'user@platform.hk' };
-  const input = document.getElementById('login-username');
-  if(input) input.value = defaults[role] || defaults.user;
+const LOGIN_ERROR_MESSAGES = {
+  INVALID_CREDENTIALS: 'Incorrect username or password. Please try again.',
+  LOGIN_RATE_LIMITED: 'Too many sign-in attempts. Please wait a few minutes and try again.',
+  ACCOUNT_DISABLED: 'This account is currently disabled. Please contact the system administrator.',
+  ACCOUNT_TYPE_NOT_SUPPORTED: 'This account is not enabled for the monitoring platform. Please contact the system administrator.',
+  UNSUPPORTED_ACCOUNT_TYPE: 'This account is not enabled for the monitoring platform. Please contact the system administrator.',
+  AUTH_SERVICE_TIMEOUT: 'The sign-in service is taking too long to respond. Please try again.',
+  AUTH_SERVICE_UNAVAILABLE: 'The sign-in service is temporarily unavailable. Please try again shortly.',
+  AUTH_NOT_CONFIGURED: 'The sign-in service is not configured yet. Please contact the system administrator.',
+  TIMEOUT: 'The sign-in request timed out. Please try again.'
+};
+
+function friendlyLoginError(error){
+  if(error && error.code && LOGIN_ERROR_MESSAGES[error.code]) return LOGIN_ERROR_MESSAGES[error.code];
+  if(error && error.message === 'Account role is not configured') return 'This account has no platform role assigned. Please contact the system administrator.';
+  if(error && error.code === 'NETWORK_ERROR') return 'Unable to reach the sign-in service. Please check your connection and try again.';
+  return 'Unable to sign in right now. Please try again or contact the system administrator.';
 }
 
+function setLoginError(message, field){
+  const box = document.getElementById('login-error');
+  const text = document.getElementById('login-error-text');
+  if(!box || !text) return;
+  text.textContent = message;
+  box.style.display = 'flex';
+  const target = field === 'username'
+    ? document.getElementById('login-username')
+    : field === 'password' ? document.getElementById('login-password') : null;
+  if(target){
+    target.setAttribute('aria-invalid', 'true');
+    target.style.borderColor = '#ef4444';
+  }
+}
+
+function clearLoginError(){
+  const box = document.getElementById('login-error');
+  if(box) box.style.display = 'none';
+  const text = document.getElementById('login-error-text');
+  if(text) text.textContent = '';
+  ['login-username', 'login-password'].forEach(function(id){
+    const input = document.getElementById(id);
+    if(!input) return;
+    input.removeAttribute('aria-invalid');
+    input.style.borderColor = '#334155';
+  });
+}
+
+function setLoginBusy(busy){
+  const button = document.getElementById('login-submit');
+  if(!button) return;
+  button.disabled = Boolean(busy);
+  button.style.opacity = busy ? '0.7' : '1';
+  button.style.cursor = busy ? 'wait' : 'pointer';
+  button.textContent = busy ? 'Signing In...' : 'Sign In';
+}
+
+function setPasswordEyeState(visible){
+  const eye = document.getElementById('login-password-eye');
+  const eyeOff = document.getElementById('login-password-eye-off');
+  if(eye) eye.style.display = visible ? 'none' : 'block';
+  if(eyeOff) eyeOff.style.display = visible ? 'block' : 'none';
+}
+
+function togglePasswordVisibility(){
+  const input = document.getElementById('login-password');
+  const button = document.getElementById('login-password-toggle');
+  if(!input || !button) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  setPasswordEyeState(show);
+  button.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  button.setAttribute('aria-pressed', show ? 'true' : 'false');
+  input.focus();
+}
+
+function resetLoginFormState(){
+  const password = document.getElementById('login-password');
+  const toggle = document.getElementById('login-password-toggle');
+  if(password) password.value = '';
+  if(password) password.type = 'password';
+  setPasswordEyeState(false);
+  if(toggle) toggle.setAttribute('aria-label', 'Show password');
+  if(toggle) toggle.setAttribute('aria-pressed', 'false');
+  setLoginBusy(false);
+  clearLoginError();
+}
 let dataRefreshTimer = null;
 
 function normalizeSessionRole(role){
@@ -29,11 +108,6 @@ async function authenticateLogin(userName, password){
       user: session.user
     };
   }
-  if(window.BSF_DEMO_MODE === true){
-    const demoRole = document.getElementById('role-select').value;
-    if(!demoRole) throw new Error('Please select a role');
-    return { role: demoRole, username: userName };
-  }
   throw new Error('Authentication service unavailable');
 }
 
@@ -57,28 +131,38 @@ async function enterAuthenticatedApp(authenticated){
 }
 
 async function login(){
-  const loginName = (document.getElementById('login-username') || {}).value || '';
+  const submit = document.getElementById('login-submit');
+  if(submit && submit.disabled) return;
+  clearLoginError();
+  const loginName = String((document.getElementById('login-username') || {}).value || '').trim();
   const password = (document.getElementById('login-password') || {}).value || '';
-  if(!loginName){ alert('Username is required.'); return; }
-  if(!password && window.BSF_DEMO_MODE !== true){ alert('Password is required.'); return; }
+  if(!loginName){ setLoginError('Enter your username or email address.', 'username'); return; }
+  if(!password){ setLoginError('Enter your password.', 'password'); return; }
+
+  setLoginBusy(true);
   let authenticated;
-  try { authenticated = await authenticateLogin(loginName, password); }
-  catch(error){ alert('Sign in failed: ' + error.message); return; }
+  try {
+    authenticated = await authenticateLogin(loginName, password);
+  } catch(error) {
+    setLoginError(friendlyLoginError(error));
+    setLoginBusy(false);
+    return;
+  }
+  setLoginBusy(false);
   await enterAuthenticatedApp(authenticated);
 }
-
 async function loadDataForCurrentRole(){
-  if(!window.BSF_LOAD_GATEWAY_DATA) return false;
+  if(!window.BSF_LOAD_BACKEND_DATA) return false;
   const limit = currentRole === 'admin' ? 100 : 1;
-  const loaded = await window.BSF_LOAD_GATEWAY_DATA(limit);
+  const loaded = await window.BSF_LOAD_BACKEND_DATA(limit);
   applyClientScopeToState();
   if(window.BSF_NOTIFICATIONS) window.BSF_NOTIFICATIONS.syncFromAlerts();
   return loaded;
 }
 
 async function loadLatestForCurrentRole(){
-  if(!window.BSF_LOAD_GATEWAY_LATEST) return false;
-  const changed = await window.BSF_LOAD_GATEWAY_LATEST();
+  if(!window.BSF_LOAD_BACKEND_LATEST) return false;
+  const changed = await window.BSF_LOAD_BACKEND_LATEST();
   if(changed && window.BSF_NOTIFICATIONS) window.BSF_NOTIFICATIONS.syncFromAlerts();
   return changed;
 }
@@ -95,7 +179,7 @@ function scheduleDataRefresh(){
   if(dataRefreshTimer) clearInterval(dataRefreshTimer);
 
   if(currentRole === 'admin'){
-    // Master Admin checks for new device data every 5 seconds and renders when a new MQTT record arrives.
+    // Master Admin checks the vendor API for fresh telemetry every 5 seconds.
     dataRefreshTimer = setInterval(async function(){
       const changed = await loadLatestForCurrentRole();
       if(changed) await refreshRealtimePage();
@@ -125,6 +209,7 @@ async function logout(){
   currentMachineId = '';
   document.getElementById('main-app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
+  resetLoginFormState();
 }
 
 
@@ -186,16 +271,6 @@ function card(title, value, unit, color){
     <p style="font-size:28px;font-weight:700;color:${color||'#f8fafc'};margin:0;">${bsfEscapeHtml(value)}<span style="font-size:14px;color:#64748b;margin-left:4px;font-weight:500;">${bsfEscapeHtml(unit||'')}</span></p>
   </div>`;
 }
-
-/* =========================================================
-   后端 API 预留层
-   ---------------------------------------------------------
-   当前页面仍使用原型数据，不改变现有界面。
-   后端接入时：
-   1. 设置 API_CONFIG.baseUrl
-   2. 设置 API_CONFIG.enabled = true
-   3. 页面通过 BSF_API.* 获取或保存数据
-   ========================================================= */
 
 if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', function(){ restoreAuthenticatedSession(); }, { once:true });

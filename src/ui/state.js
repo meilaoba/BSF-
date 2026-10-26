@@ -49,6 +49,11 @@ function isUserRole(){
 function resolveClientForCurrentUser(){
   const profile = window.BSF_USER_PROFILE || window.BSF_CURRENT_USER || {};
   if(profile.client) return profile.client;
+  if(profile.clientId){
+    const matched = devices.find(function(device){ return String(device.clientId || '') === String(profile.clientId); });
+    if(matched) return matched.client;
+    return profile.clientId;
+  }
   if(window.BSF_CURRENT_CLIENT) return window.BSF_CURRENT_CLIENT;
   if(typeof userRecords !== 'undefined' && Array.isArray(userRecords)){
     const record = userRecords.find(function(user){ return user.username === currentUsername || user.email === currentUsername; });
@@ -93,7 +98,7 @@ function scopedDevices(){
   const client = refreshClientScope();
   const machineId = refreshMachineScope();
   let list = isClientScopedRole() ? devices.filter(function(device){ return (device.client || 'Unassigned') === client; }) : devices.slice();
-  if(currentRole === 'user' && machineId) list = list.filter(function(device){ return device.id === machineId; });
+  if(currentRole === 'user' && machineId) list = list.filter(function(device){ return device.id === machineId || device.backendId === machineId; });
   return list;
 }
 

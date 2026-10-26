@@ -108,8 +108,10 @@ export const config = {
     required: bool('AUTH_REQUIRED', productionMode),
     vendor: {
       loginUrl: str('VENDOR_LOGIN_URL', 'https://iot.creekscomposter.com:8888/user/login'),
+      deviceListUrl: str('VENDOR_DEVICE_LIST_URL', 'https://iot.creekscomposter.com:8888/emDevice/queryListData'),
       requestFormat: str('VENDOR_LOGIN_FORMAT', 'json').toLowerCase(),
       timeoutMs: num('VENDOR_AUTH_TIMEOUT_MS', 10000),
+      deviceTimeoutMs: num('VENDOR_DEVICE_TIMEOUT_MS', 15000),
     },
     sessionTtlSeconds: num('AUTH_SESSION_TTL_SECONDS', 8 * 60 * 60),
     cookieName: str('AUTH_SESSION_COOKIE', 'bsf_session'),

@@ -1,9 +1,10 @@
 import { config } from '../config.js';
 import { query } from '../db.js';
-import { ForbiddenError, UnauthorizedError } from '../lib/errors.js';
+import { AppError, ForbiddenError, UnauthorizedError } from '../lib/errors.js';
 import { clientIp } from '../lib/http.js';
 import {
   constantTimeEqual,
+  decryptSecret,
   encryptSecret,
   randomToken,
   sha256Hex,
@@ -169,6 +170,42 @@ export async function getSessionFromRequest(req) {
   };
 }
 
+export async function getVendorAccessToken(session) {
+  if (!session?.sessionId) {
+    throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session is unavailable. Please sign in again.', {
+      status: 401,
+    });
+  }
+
+  const { rows } = await query(
+    `SELECT s.vendor_access_token_enc
+       FROM auth_sessions s
+       JOIN users u ON u.id = s.user_id
+      WHERE s.id = $1
+        AND s.revoked_at IS NULL
+        AND s.expires_at > now()
+        AND u.status = 'active'
+      LIMIT 1`,
+    [session.sessionId]
+  );
+
+  const encrypted = rows[0]?.vendor_access_token_enc;
+  if (!encrypted) {
+    throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session is unavailable. Please sign in again.', {
+      status: 401,
+    });
+  }
+
+  try {
+    const token = decryptSecret(encrypted, config.auth.tokenEncryptionKey);
+    if (!token) throw new Error('empty token');
+    return token;
+  } catch {
+    throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session is unavailable. Please sign in again.', {
+      status: 401,
+    });
+  }
+}
 export async function requireAuthenticatedSession(req) {
   const session = await getSessionFromRequest(req);
   if (!session) throw new UnauthorizedError('Authentication required');

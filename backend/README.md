@@ -83,6 +83,10 @@ session; tenant roles are scoped by the backend.
 | POST | `/api/v1/notifications/test/whatsapp` | dashboard test button |
 | POST | `/api/v1/notifications/jobs/retry` | retry a job / requeue waiting_config |
 | POST | `/api/v1/alerts/temperature` | threshold check + fan-out |
+| GET | /api/v1/vendor-devices | read-only vendor device list (session token, no local writes) |
+| POST | `/api/v1/vendor-devices/sync` | mirror the current vendor page into `vendor_devices` (no automatic linkage) |
+| GET | `/api/v1/device-data` | stored time-series telemetry with machine/client/date filters |
+| POST | `/api/v1/device-data/ingest` | normalize and persist one vendor API telemetry record |
 | GET/POST/PUT/DELETE | `/api/v1/clients` | client records |
 | GET/POST/PUT/DELETE | `/api/v1/machines` | machine records + client linkage |
 | GET/POST/PUT/DELETE | `/api/v1/users` | Master Admin / Client Admin / User |
@@ -90,6 +94,44 @@ session; tenant roles are scoped by the backend.
 | GET/PUT | `/api/v1/notification-preferences` | per-scope channel preferences |
 | GET/PUT | `/api/v1/alert-thresholds` | per-machine temperature limits |
 | GET | `/api/v1/audit-logs` | change history |
+
+### Device and telemetry data model
+
+The database stores vendor device metadata separately from client/machine
+directory records. `machines.vendor_device_id` is an explicit nullable link:
+syncing a vendor device never assigns it to a client or machine automatically.
+
+- `vendor_devices` mirrors fields from `emDevice/queryListData` such as
+  `deviceSerialNum`, `deviceName`, `deviceOnline`, coordinates, template and
+  owner metadata.
+- `machine_telemetry` stores typed vendor API fields (`CabinTemp`, `HotPlateTemp`,
+  `Humidity`, `RealTimeWeight`, `SingleAddMaterial`, `TotalAddMaterial`,
+  `SingleDischarge`, `TotalDischarge`, `FermentState`, all equipment state
+  codes, etc.) plus the original JSON in `raw_data`.
+- `alert_events` stores durable alert history and acknowledgement state.
+- `system_settings` stores the singleton GHG formula, weight scaling and reset
+  date settings.
+- `v_machine_latest_telemetry` returns the newest telemetry row per machine.
+
+`POST /api/v1/device-data/ingest` accepts either one flattened device or the
+batch envelope:
+
+```json
+{
+  "timestamp": 1791608608,
+  "topic": "CREEKS/365701012616B60D/data",
+  "devices": [
+    { "deviceId": "Mitsubishi_PLC", "deviceState": 1, "deviceData": { "CabinTemp": 30.5 } }
+  ]
+}
+```
+
+Every device in one batch is written atomically. Ingestion resolves an
+active machine by UUID, `machines.device_id`, linked vendor device ID or serial,
+in that order. It fails with a validation error when no active machine matches;
+it never creates or links a machine implicitly. Re-delivery with the same
+machine/source/timestamp upserts the existing row instead of creating a
+duplicate.
 
 ### Vendor login and session security
 
@@ -102,11 +144,20 @@ The browser never calls the vendor login API directly. The backend:
 5. stores vendor tokens encrypted with AES-256-GCM;
 6. sets an opaque `HttpOnly` session cookie and a separate CSRF cookie.
 
+### Vendor device list proxy
+
+`GET /api/v1/vendor-devices` calls the vendor `emDevice/queryListData` endpoint
+from the backend using the encrypted token stored in the current login session.
+It supports `pageNum`, `pageSize`, `equipName`, `deviceAddress` and
+`deviceOnline`. The response is normalized to `data.devices` with pagination in
+`meta`.
+
+This endpoint is read-only: it does not create clients, create machines or
+change client/machine linkage. The vendor token is sent only in the upstream
+`token` request header and is never returned to the browser or written to logs.
 The raw vendor token is never returned to the browser. State-changing requests
 must include the `X-CSRF-Token` header, and repeated login failures are rate
-limited and written to the audit log. The same-origin `/api/gateway/` MQTT
-bridge also requires a valid BSF session; unauthenticated device-data requests
-are rejected.
+limited and written to the audit log. Device-data routes require a valid BSF session; unauthenticated requests are rejected.
 
 Required environment values are documented in `.env.example`. Generate a key
 with `openssl rand -base64 32`. `AUTH_COOKIE_SECURE=true` requires HTTPS; do not

@@ -252,7 +252,7 @@ export function registerNotificationRoutes(router) {
   });
 
   // ---------------------------------------------------------------------
-  // Alert ingestion: the MQTT gateway posts a reading here and the backend
+  // Alert ingestion: the vendor API data pipeline posts a reading here and the backend
   // decides whether a threshold was crossed and who should be notified.
   // ---------------------------------------------------------------------
   router.post('/api/v1/alerts/temperature', async (req, res) => {

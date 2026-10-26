@@ -35,10 +35,10 @@ function syncFromAlerts(){
     return item;
   });
   if(devices && devices.length){
-    const systemId = 'gateway-data-loaded';
+    const systemId = 'backend-data-loaded';
     notificationRecords.unshift({
       id:systemId,
-      title:'Gateway connected',
+      title:'Data source connected',
       detail:(devices[0].id || 'Device') + ' data loaded',
       time:typeof bsfFormatTime === 'function' ? bsfFormatTime(Date.now() / 1000) : new Date().toLocaleString(),
       device:devices[0].id || '',

@@ -14,6 +14,8 @@ import { AppError, UnauthorizedError } from './lib/errors.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerNotificationRoutes } from './routes/notifications.js';
 import { registerDirectoryRoutes } from './routes/directory.js';
+import { registerVendorDeviceRoutes } from './routes/vendor-devices.js';
+import { registerDeviceDataRoutes } from './routes/device-data.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { hasValidApiKey } from './middleware/auth.js';
 import {
@@ -29,6 +31,8 @@ registerAuthRoutes(router);
 registerHealthRoutes(router);
 registerNotificationRoutes(router);
 registerDirectoryRoutes(router);
+registerVendorDeviceRoutes(router);
+registerDeviceDataRoutes(router);
 
 const server = http.createServer(async (req, res) => {
   const started = Date.now();

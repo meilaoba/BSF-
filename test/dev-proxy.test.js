@@ -49,7 +49,6 @@ const child = spawn(process.execPath, ['scripts/dev-server.mjs'], {
     ...process.env,
     PORT: String(frontendPort),
     BSF_BACKEND_URL: `http://127.0.0.1:${backendPort}`,
-    BSF_GATEWAY_URL: 'http://127.0.0.1:1'
   },
   stdio: ['ignore', 'pipe', 'pipe']
 });
@@ -96,13 +95,7 @@ test('frontend proxy forwards login and preserves session cookies', async () => 
   assert.equal(lastLoginHeaders['x-forwarded-proto'], 'http');
 });
 
-test('gateway rejects unauthenticated clients and accepts a valid session', async () => {
-  const anonymous = await fetch(`http://127.0.0.1:${frontendPort}/api/gateway/health`);
-  assert.equal(anonymous.status, 401);
-
-  const authenticated = await fetch(`http://127.0.0.1:${frontendPort}/api/gateway/health`, {
-    headers: { Cookie: 'bsf_session=session-test' }
-  });
-  // Auth passed; the placeholder gateway target is intentionally unreachable.
-  assert.equal(authenticated.status, 502);
+test('retired device transport endpoint is no longer exposed', async () => {
+  const response = await fetch(`http://127.0.0.1:${frontendPort}/api/gateway/health`);
+  assert.equal(response.status, 404);
 });

@@ -108,6 +108,7 @@ export function registerDirectoryRoutes(router) {
         optionalString(body.address, 'address', { max: 500 }),
         optionalString(body.region, 'region', { max: 80 }),
         JSON.stringify(body.metadata ?? {}),
+        optionalString(body.vendorDeviceId, 'vendorDeviceId', { max: 160 }),
       ]
     );
 
@@ -216,16 +217,20 @@ export function registerDirectoryRoutes(router) {
     const searchTerm = optionalString(search.get('search'), 'search', { max: 100 });
     if (searchTerm) {
       params.push(`%${searchTerm}%`);
-      clauses.push(`(m.serial ILIKE $${params.length} OR m.name ILIKE $${params.length} OR m.location ILIKE $${params.length})`);
+      clauses.push(`(m.serial ILIKE $${params.length} OR m.device_id ILIKE $${params.length} OR m.name ILIKE $${params.length} OR m.location ILIKE $${params.length} OR vd.device_name ILIKE $${params.length})`);
     }
 
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
     const { rows } = await query(
       `SELECT m.*, c.name AS client_name,
+              vd.device_name AS vendor_device_name,
+              vd.online_code AS vendor_online_code,
+              vd.last_synced_at AS vendor_last_synced_at,
               (SELECT count(*)::int FROM users u WHERE u.machine_id = m.id) AS user_count
          FROM machines m
          LEFT JOIN clients c ON c.id = m.client_id
+         LEFT JOIN vendor_devices vd ON vd.vendor_device_id = m.vendor_device_id
          ${where}
         ORDER BY c.name NULLS LAST, m.serial
         LIMIT ${limit} OFFSET ${offset}`,
@@ -239,8 +244,8 @@ export function registerDirectoryRoutes(router) {
     const body = await readJsonBody(req);
 
     const { rows } = await query(
-      `INSERT INTO machines (serial, device_id, name, client_id, location, latitude, longitude, region, status, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9,'active'), $10)
+      `INSERT INTO machines (serial, device_id, name, client_id, location, latitude, longitude, region, status, metadata, vendor_device_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9,'active'), $10, $11)
        RETURNING *`,
       [
         requireString(body.serial, 'serial', { max: 64 }),
@@ -253,6 +258,7 @@ export function registerDirectoryRoutes(router) {
         optionalString(body.region, 'region', { max: 80 }),
         body.status ? requireEnum(body.status, 'status', ['active', 'inactive', 'maintenance', 'retired']) : null,
         JSON.stringify(body.metadata ?? {}),
+        optionalString(body.vendorDeviceId, 'vendorDeviceId', { max: 160 }),
       ]
     );
 
@@ -289,7 +295,8 @@ export function registerDirectoryRoutes(router) {
                 latitude = COALESCE($7, latitude),
                 longitude = COALESCE($8, longitude),
                 region = COALESCE($9, region),
-                status = COALESCE($10, status)
+                status = COALESCE($10, status),
+                vendor_device_id = COALESCE($11, vendor_device_id)
           WHERE id = $1
           RETURNING *`,
         [
@@ -303,6 +310,7 @@ export function registerDirectoryRoutes(router) {
           optionalNumber(body.longitude, 'longitude'),
           optionalString(body.region, 'region', { max: 80 }),
           body.status ? requireEnum(body.status, 'status', ['active', 'inactive', 'maintenance', 'retired']) : null,
+          optionalString(body.vendorDeviceId, 'vendorDeviceId', { max: 160 }),
         ]
       );
 

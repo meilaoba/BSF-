@@ -8,6 +8,7 @@ export function createBackendApi(options = {}) {
   });
 
   return {
+    health() { return http.get('/health'); },
     login(data) { return http.post('/auth/login', data); },
     logout() { return http.post('/auth/logout', {}); },
     getSession() { return http.get('/auth/me'); },
@@ -21,6 +22,7 @@ export function createBackendApi(options = {}) {
     deleteClient(id) { return http.delete('/clients/' + encodeURIComponent(id)); },
 
     getMachines(params) { return http.get('/machines', params); },
+    getVendorDevices(params) { return http.get('/vendor-devices', params); },
     getMachineMetrics(id, params) { return http.get('/machines/' + encodeURIComponent(id) + '/metrics', params); },
     updateMachine(id, data) { return http.put('/machines/' + encodeURIComponent(id), data); },
     deactivateMachine(id) { return http.post('/machines/' + encodeURIComponent(id) + '/deactivate'); },
@@ -29,7 +31,8 @@ export function createBackendApi(options = {}) {
     getLocations(params) { return http.get('/locations', params); },
     getGraphs(params) { return http.get('/graphs', params); },
     getFoodWaste(params) { return http.get('/graphs/food-waste', params); },
-    getRawData(params) { return http.get('/raw-data', params); },
+    getDeviceData(params) { return http.get('/device-data', params); },
+    getRawData(params) { return http.get('/device-data', params); },
     getReports(params) { return http.get('/reports', params); },
 
     getAlerts(params) { return http.get('/alerts', params); },

@@ -24,7 +24,7 @@ function renderMachines(container){
   const filteredDevices = machineFilters.device
     ? clientDevices.filter(dev=>dev.id===machineFilters.device)
     : clientDevices;
-  const d = filteredDevices[0] || devices[0];
+  const d = filteredDevices[0] || null;
   const previewDevices = filteredDevices.filter(machineHasCoordinates);
   const previewLats = previewDevices.map(function(dev){ return Number(dev.lat); });
   const previewLngs = previewDevices.map(function(dev){ return Number(dev.lng); });
@@ -41,7 +41,7 @@ function renderMachines(container){
     const color = status==='online' ? '#10b981' : status==='running' ? '#3b82f6' : status==='standby' ? '#f59e0b' : '#ef4444';
     return '<div title="' + machinePreviewEscape(dev.id) + ' - ' + machinePreviewEscape(status.toUpperCase()) + '" style="position:absolute;top:' + top.toFixed(2) + '%;left:' + left.toFixed(2) + '%;transform:translate(-50%,-50%);width:14px;height:14px;background:' + color + ';border-radius:50%;box-shadow:0 0 0 4px ' + color + '33;border:2px solid #1e293b;"></div>';
   }).join('');
-  const previewEmpty = previewDevices.length ? '' : '<p style="color:#64748b;font-size:12px;margin:8px 0 0;">GPS coordinates unavailable</p>';
+  const previewEmpty = d && !previewDevices.length ? '<p style="color:#64748b;font-size:12px;margin:8px 0 0;">GPS coordinates unavailable</p>' : '';
 
   container.innerHTML = `
     <div style="margin-bottom:24px;">
@@ -65,20 +65,22 @@ function renderMachines(container){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
-      ${card('Accumulated GHG Reduced', d.ghgReduced, 'kg CO₂e', '#10b981')}
-      ${card('Accumulated Waste', d.wasteCollected, 'kg', '#3b82f6')}
-      ${card('Est. Fertilizer', d.fertilizer, 'kg', '#f59e0b')}
-      ${card('Daily Waste', d.dailyWaste, 'kg', '#8b5cf6')}
-      ${card('Daily Energy', d.dailyEnergy, 'kWh', '#ef4444')}
-      ${card('Avg Env Temp', d.avgTemp, '°C', '#06b6d4')}
-      ${card('Container Temp', d.containerTemp, '°C', '#f97316')}
-      ${card('Container Humidity', d.humidity, '%', '#0ea5e9')}
+      ${d ? [
+        card('Accumulated GHG Reduced', d.ghgReduced, 'kg CO₂e', '#10b981'),
+        card('Accumulated Waste', d.wasteCollected, 'kg', '#3b82f6'),
+        card('Est. Fertilizer', d.fertilizer, 'kg', '#f59e0b'),
+        card('Daily Waste', d.dailyWaste, 'kg', '#8b5cf6'),
+        card('Daily Energy', d.dailyEnergy, 'kWh', '#ef4444'),
+        card('Avg Env Temp', d.avgTemp, '°C', '#06b6d4'),
+        card('Container Temp', d.containerTemp, '°C', '#f97316'),
+        card('Container Humidity', d.humidity, '%', '#0ea5e9')
+      ].join('') : '<div style="grid-column:1/-1;background:#1e293b;border-radius:12px;padding:28px;text-align:center;color:#64748b;border:1px solid #334155;">No device data available</div>'}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;">
         <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 16px;text-transform:uppercase;letter-spacing:0.5px;">Device Status</h3>
         <div style="display:flex;flex-direction:column;gap:12px;">
-          ${filteredDevices.map(dev=>`
+          ${filteredDevices.length ? filteredDevices.map(dev=>`
             <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:#0f172a;border-radius:8px;border:1px solid #334155;">
               <div>
                 <p style="margin:0;font-weight:600;color:#f8fafc;font-size:14px;">${dev.id}</p>
@@ -89,7 +91,7 @@ function renderMachines(container){
                 <p style="margin:4px 0 0;font-size:11px;color:#64748b;">${dev.network} · ${dev.signal}%</p>
               </div>
             </div>
-          `).join('')}
+          `).join('') : '<div style="padding:20px;text-align:center;color:#64748b;font-size:13px;">No devices available</div>'}
         </div>
       </div>
       <div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;">
@@ -98,8 +100,7 @@ function renderMachines(container){
           <div style="position:absolute;width:100%;height:100%;background:radial-gradient(circle at 30% 40%,rgba(16,185,129,0.15),transparent 50%),radial-gradient(circle at 70% 60%,rgba(59,130,246,0.1),transparent 50%);"></div>
           <div style="text-align:center;position:relative;z-index:1;">
             <div style="font-size:48px;margin-bottom:8px;">📍</div>
-            <p style="color:#94a3b8;font-size:13px;margin:0;">${(d.lat === null || d.lng === null) ? '—, —' : d.lat + ', ' + d.lng}</p>
-            <p style="color:#64748b;font-size:12px;margin:4px 0 0;">Last update: ${d.lastUpdate}</p>
+            ${d ? '<p style="color:#94a3b8;font-size:13px;margin:0;">' + machinePreviewEscape(d.lat === null || d.lat === undefined || d.lng === null || d.lng === undefined ? '—, —' : d.lat + ', ' + d.lng) + '</p><p style="color:#64748b;font-size:12px;margin:4px 0 0;">Last update: ' + machinePreviewEscape(d.lastUpdate || '—') + '</p>' : '<p style="color:#64748b;font-size:13px;margin:0;">No device location available</p>'}
             ${previewEmpty}
           </div>
           ${previewMarkers}

@@ -1,5 +1,5 @@
 [Unit]
-Description=BSF dashboard frontend and same-origin gateway proxy
+Description=BSF dashboard frontend and backend API proxy
 After=network-online.target bsf-backend.service
 Wants=network-online.target bsf-backend.service
 
@@ -13,7 +13,6 @@ Environment=HOST=127.0.0.1
 Environment=PORT=4180
 Environment=BSF_BACKEND_URL=http://127.0.0.1:3000
 Environment=BSF_TRUST_PROXY=true
-Environment=BSF_GATEWAY_AUTH_REQUIRED=true
 ExecStart=/usr/bin/node scripts/dev-server.mjs
 Restart=always
 RestartSec=3
