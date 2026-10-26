@@ -7,11 +7,11 @@ Wants=network-online.target bsf-backend.service
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/var/www/bsf-frontend
+WorkingDirectory=/var/www/BSF-
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=4180
-Environment=BSF_BACKEND_URL=http://127.0.0.1:3000
+Environment=BSF_BACKEND_URL=http://127.0.0.1:3000`r`nEnvironment=BSF_TRUST_PROXY=true
 Environment=BSF_GATEWAY_AUTH_REQUIRED=true
 ExecStart=/usr/bin/node scripts/dev-server.mjs
 Restart=always
