@@ -80,7 +80,7 @@ async function rawDataLoadHistory(){
     rawDataHistoryError = '';
     return;
   }
-  if(key === rawDataHistoryCompletedKey && !rawDataHistoryError) return;
+  if(key === rawDataHistoryCompletedKey) return;
   if(rawDataHistoryLoading && key === rawDataHistoryRequestKey) return;
 
   rawDataHistoryLoading = true;

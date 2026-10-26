@@ -58,7 +58,7 @@ async function graphLoadHistory(){
   const range = graphHistoryRange();
   const groupBy = graphHistoryGroupBy();
   const key = graphHistoryViewKey();
-  if(key === graphHistoryCompletedKey && !graphHistoryError) return;
+  if(key === graphHistoryCompletedKey) return;
   if(graphHistoryLoading && key === graphHistoryRequestKey) return;
   if(!targets.length){
     graphHistoryRows = [];
