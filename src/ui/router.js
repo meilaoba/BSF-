@@ -162,7 +162,8 @@ async function loadDataForCurrentRole(){
 
 async function loadLatestForCurrentRole(){
   if(!window.BSF_LOAD_BACKEND_LATEST) return false;
-  const changed = await window.BSF_LOAD_BACKEND_LATEST();
+  const limit = currentRole === 'admin' ? 1000 : 1;
+  const changed = await window.BSF_LOAD_BACKEND_LATEST(limit);
   if(changed && window.BSF_NOTIFICATIONS) window.BSF_NOTIFICATIONS.syncFromAlerts();
   return changed;
 }
@@ -175,23 +176,21 @@ async function refreshRealtimePage(){
   navigate(currentPage);
 }
 
+function currentRefreshIntervalMs(){
+  const defaults = { admin:3 * 60 * 1000, clientAdmin:10 * 60 * 1000, user:10 * 60 * 1000 };
+  const roleKey = currentRole === 'client-admin' ? 'clientAdmin' : currentRole;
+  const refreshMs = window.BSF_RUNTIME_CONFIG && window.BSF_RUNTIME_CONFIG.refreshMs;
+  const configured = refreshMs && Number(refreshMs[roleKey]);
+  return Number.isFinite(configured) && configured >= 30000 ? configured : (defaults[roleKey] || defaults.user);
+}
+
 function scheduleDataRefresh(){
   if(dataRefreshTimer) clearInterval(dataRefreshTimer);
 
-  if(currentRole === 'admin'){
-    // Master Admin checks the vendor API for fresh telemetry every 5 seconds.
-    dataRefreshTimer = setInterval(async function(){
-      const changed = await loadLatestForCurrentRole();
-      if(changed) await refreshRealtimePage();
-    }, 5000);
-    return;
-  }
-
-  // Client Admin and User refresh the page every 10 minutes and show the nearest latest record.
   dataRefreshTimer = setInterval(async function(){
     await loadLatestForCurrentRole();
     await refreshRealtimePage();
-  }, 10 * 60 * 1000);
+  }, currentRefreshIntervalMs());
 }
 
 async function logout(){

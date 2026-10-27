@@ -7,6 +7,76 @@ function machinePreviewEscape(value){
     .replace(/'/g, '&#39;');
 }
 
+function machineTelemetryLabel(key){
+  return String(key || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, function(letter){ return letter.toUpperCase(); });
+}
+
+function machineTelemetryUnit(key){
+  const units = {
+    cabintemp:'°C', hotplatetemp:'°C', humidity:'%',
+    realtimeweight:'kg', totaladdmaterial:'kg', singleaddmaterial:'kg',
+    totaldischarge:'kg', singledischarge:'kg', runtime:'min',
+    energy:'kWh', solarpower:'kW', co2:'ppm', no2:'ppm', h2s:'ppm', signal:'%'
+  };
+  return units[String(key || '').toLowerCase()] || '';
+}
+
+function machineTelemetryValue(key, value){
+  const normalized = String(key || '').toLowerCase();
+  if(normalized === 'operatingstatus' && typeof bsfOperatingStatusLabel === 'function') return bsfOperatingStatusLabel(value);
+  if(normalized === 'fermentstate' && typeof bsfFermentStateLabel === 'function') return bsfFermentStateLabel(value);
+  return value === undefined || value === null || value === '' ? '—' : value;
+}
+
+function renderVendorTelemetry(device){
+  const telemetry = device && device.telemetry && typeof device.telemetry === 'object' && !Array.isArray(device.telemetry)
+    ? device.telemetry
+    : {};
+  const entries = Object.keys(telemetry).map(function(key){
+    return { key:key, value:machineTelemetryValue(key, telemetry[key]), unit:machineTelemetryUnit(key) };
+  }).filter(function(item){
+    return item.value === null || ['string', 'number', 'boolean'].includes(typeof item.value);
+  });
+  const meta = [];
+  function addMeta(label, value){
+    if(value === undefined || value === null || value === '') return;
+    meta.push([label, value]);
+  }
+  addMeta('Device ID', device.vendorDeviceId || device.backendId || device.id);
+  addMeta('Serial Number', device.serial);
+  addMeta('Status', device.status);
+  addMeta('Device Type', device.vendorDeviceType);
+  addMeta('Template', device.vendorTemplateName);
+  addMeta('Address Code', device.vendorAddressCode);
+  addMeta('Owner', device.vendorOwnerName);
+  addMeta('Power', device.vendorPower === null || device.vendorPower === undefined ? '' : device.vendorPower + ' kW');
+  addMeta('Last Update', device.lastUpdate);
+  addMeta('Last Sync', device.vendorLastSyncedAt);
+  addMeta('Source', device.telemetrySource || device.network);
+  return `
+    <div id="live-telemetry" data-telemetry-count="${entries.length}" style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;margin-top:16px;">
+      <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;">
+        <div>
+          <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0;text-transform:uppercase;letter-spacing:0.5px;">Live Telemetry</h3>
+          <p style="font-size:12px;color:#64748b;margin:6px 0 0;">All fields returned by the vendor API for the selected device</p>
+        </div>
+        <span style="padding:4px 10px;border-radius:20px;background:rgba(16,185,129,0.15);color:#10b981;font-size:11px;font-weight:700;">VENDOR API · ${entries.length} FIELDS</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:10px;margin-bottom:16px;">
+        ${meta.map(function(item){
+          return '<div style="padding:10px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;"><p style="margin:0 0 4px;color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.4px;">' + machinePreviewEscape(item[0]) + '</p><p style="margin:0;color:#e2e8f0;font-size:13px;font-weight:600;overflow-wrap:anywhere;">' + machinePreviewEscape(item[1]) + '</p></div>';
+        }).join('')}
+      </div>
+      <div style="height:1px;background:#334155;margin-bottom:16px;"></div>
+      ${entries.length ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:10px;">' + entries.map(function(item){
+        return '<div style="padding:10px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;"><p style="margin:0 0 4px;color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.4px;">' + machinePreviewEscape(machineTelemetryLabel(item.key)) + '</p><p style="margin:0;color:#f8fafc;font-size:16px;font-weight:700;overflow-wrap:anywhere;">' + machinePreviewEscape(item.value) + (item.unit ? '<span style="font-size:11px;color:#64748b;font-weight:500;margin-left:3px;">' + machinePreviewEscape(item.unit) + '</span>' : '') + '</p><p style="margin:4px 0 0;color:#475569;font-size:9px;font-family:monospace;">' + machinePreviewEscape(item.key) + '</p></div>';
+      }).join('') + '</div>' : '<p style="margin:0;color:#64748b;font-size:13px;">No vendor telemetry returned for this device.</p>'}
+    </div>`;
+}
+
 function machineHasCoordinates(device){
   if(!device) return false;
   const rawLat = device.lat;
@@ -71,9 +141,12 @@ function renderMachines(container){
         card('Est. Fertilizer', d.fertilizer, 'kg', '#f59e0b'),
         card('Daily Waste', d.dailyWaste, 'kg', '#8b5cf6'),
         card('Daily Energy', d.dailyEnergy, 'kWh', '#ef4444'),
-        card('Avg Env Temp', d.avgTemp, '°C', '#06b6d4'),
+        card('Hot Plate Temp', d.hotPlateTemp, '°C', '#06b6d4'),
         card('Container Temp', d.containerTemp, '°C', '#f97316'),
-        card('Container Humidity', d.humidity, '%', '#0ea5e9')
+        card('Container Humidity', d.humidity, '%', '#0ea5e9'),
+        card('Real-Time Weight', d.realTimeWeight, 'kg', '#14b8a6'),
+        card('Total Added Material', d.totalAddMaterial, 'kg', '#22c55e'),
+        card('Total Discharged', d.totalDischarge, 'kg', '#f43f5e')
       ].join('') : '<div style="grid-column:1/-1;background:#1e293b;border-radius:12px;padding:28px;text-align:center;color:#64748b;border:1px solid #334155;">No device data available</div>'}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -88,7 +161,7 @@ function renderMachines(container){
               </div>
               <div style="text-align:right;">
                 <span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${dev.status==='online'?'rgba(16,185,129,0.15)':dev.status==='running'?'rgba(59,130,246,0.15)':dev.status==='standby'?'rgba(245,158,11,0.15)':'rgba(239,68,68,0.15)'};color:${dev.status==='online'?'#10b981':dev.status==='running'?'#3b82f6':dev.status==='standby'?'#f59e0b':'#ef4444'};">${machinePreviewEscape(String(dev.status || '').toUpperCase())}</span>
-                <p style="margin:4px 0 0;font-size:11px;color:#64748b;">${machinePreviewEscape(dev.network)} · ${machinePreviewEscape(dev.signal)}%</p>
+                <p style="margin:4px 0 0;font-size:11px;color:#64748b;">${machinePreviewEscape(dev.network)} · ${dev.signal === undefined || dev.signal === null || dev.signal === '' ? '—' : machinePreviewEscape(dev.signal) + '%'}</p>
               </div>
             </div>
           `).join('') : '<div style="padding:20px;text-align:center;color:#64748b;font-size:13px;">No devices available</div>'}
@@ -107,5 +180,6 @@ function renderMachines(container){
         </div>
       </div>
     </div>
+    ${d ? renderVendorTelemetry(d) : ''}
   `;
 }

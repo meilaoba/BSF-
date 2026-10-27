@@ -18,6 +18,20 @@ function bsfField(object, names){
   return undefined;
 }
 
+function bsfTelemetryObject(value){
+  if(!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const clean = Object.create(null);
+  Object.keys(value).slice(0, 256).forEach(function(rawKey){
+    const key = String(rawKey).trim();
+    if(!key || key.length > 128 || key === '__proto__' || key === 'prototype' || key === 'constructor') return;
+    const raw = value[rawKey];
+    if(raw !== null && !['string', 'number', 'boolean'].includes(typeof raw)) return;
+    if(typeof raw === 'string' && raw.length > 500) return;
+    clean[key] = raw;
+  });
+  return clean;
+}
+
 function bsfNumber(value){
   if(value === undefined || value === null || value === '') return null;
   const number = Number(value);
@@ -104,7 +118,10 @@ function bsfReadTelemetry(data){
     humidityPct: bsfNumber(bsfField(data, ['Humidity', 'humidity', 'humidity_pct'])),
     realTimeWeightKg: bsfNumber(bsfField(data, ['RealTimeWeight', 'realTimeWeight', 'real_time_weight', 'real_time_weight_kg', 'weight'])),
     totalAddedMaterialKg: bsfNumber(bsfField(data, ['TotalAddMaterial', 'totalAddMaterial', 'total_added_material_kg'])),
+    singleAddedMaterialKg: bsfNumber(bsfField(data, ['SingleAddMaterial', 'singleAddMaterial', 'single_added_material_kg'])),
     totalDischargeKg: bsfNumber(bsfField(data, ['TotalDischarge', 'totalDischarge', 'total_discharge_kg', 'OtalUnloadingWeight'])),
+    singleDischargeKg: bsfNumber(bsfField(data, ['SingleDischarge', 'singleDischarge', 'single_discharge_kg'])),
+    dischargeCode: bsfNumber(bsfField(data, ['Discharge', 'discharge', 'discharge_code'])),
     runTimeMin: bsfNumber(bsfField(data, ['RunTime', 'runTime', 'run_time_min'])),
     operatingStatusCode: bsfNumber(bsfField(data, ['OperatingStatus', 'operatingStatus', 'operating_status_code'])),
     operatingStatus: bsfOperatingStatusLabel(bsfField(data, ['OperatingStatus', 'operatingStatus', 'operating_status'])),
@@ -160,6 +177,8 @@ function bsfLastUpdate(machine, vendor, stored, reading){
 
 function bsfDeviceFromMachine(machine, vendor, stored){
   const vendorTelemetry = bsfField(vendor, ['telemetry', 'data']) || {};
+  const rawTelemetry = bsfTelemetryObject(vendorTelemetry);
+  const liveTelemetry = Object.keys(rawTelemetry).length ? rawTelemetry : bsfTelemetryObject(stored || {});
   const reading = bsfHasTelemetry(bsfReadTelemetry(vendorTelemetry))
     ? bsfReadTelemetry(vendorTelemetry)
     : bsfReadTelemetry(stored || {});
@@ -179,26 +198,47 @@ function bsfDeviceFromMachine(machine, vendor, stored){
     status:bsfResolveStatus(machine, vendor, reading, stored),
     lastUpdate:bsfLastUpdate(machine, vendor, stored, reading),
     network:'Vendor API',
-    signal:reading.signalPct ?? 0,
+    signal:reading.signalPct,
+    vendorDeviceType:bsfField(vendor, ['deviceType']) ?? '',
+    vendorTemplateName:bsfField(vendor, ['templateName']) || '',
+    vendorAddressCode:bsfField(vendor, ['addressCode']) || '',
+    vendorOwnerName:bsfField(bsfField(vendor, ['owner']) || {}, ['userName']) || '',
+    vendorPower:bsfNumber(bsfField(vendor, ['power'])),
+    vendorCreatedAt:bsfField(vendor, ['createdAt', 'createTime']) || '',
+    vendorLastSyncedAt:bsfField(vendor, ['lastSyncedAt', 'last_synced_at']) || '',
+    vendorRealtime:bsfField(vendor, ['realtime']) === true,
     ghgReduced:'\u2014',
     wasteCollected:'\u2014',
     fertilizer:'\u2014',
     dailyWaste:'\u2014',
     dailyEnergy:'\u2014',
     avgTemp:bsfDisplay(reading.hotPlateTempC),
+    hotPlateTemp:bsfDisplay(reading.hotPlateTempC),
     containerTemp:bsfDisplay(reading.cabinTempC),
     humidity:bsfDisplay(reading.humidityPct),
     realTimeWeight:bsfDisplay(reading.realTimeWeightKg),
     totalAddMaterial:bsfDisplay(reading.totalAddedMaterialKg),
+    singleAddMaterial:bsfDisplay(reading.singleAddedMaterialKg),
     totalDischarge:bsfDisplay(reading.totalDischargeKg),
+    singleDischarge:bsfDisplay(reading.singleDischargeKg),
+    discharge:bsfDisplay(reading.dischargeCode),
+    runTime:bsfDisplay(reading.runTimeMin),
+    feed:bsfDisplay(reading.feedCode),
+    shredder:bsfDisplay(reading.shredderCode),
+    mixingMotor:bsfDisplay(reading.mixingMotorCode),
+    fan:bsfDisplay(reading.fanCode),
+    zipper:bsfDisplay(reading.zipperCode),
     operatingStatus:reading.operatingStatus,
     fermentState:reading.fermentState,
-    fermentRunTime:bsfDisplay(reading.fermentRunTimeMin)
+    fermentRunTime:bsfDisplay(reading.fermentRunTimeMin),
+    telemetry:liveTelemetry,
+    telemetrySource:Object.keys(rawTelemetry).length ? 'Vendor API' : 'Stored telemetry'
   };
 }
 
 function bsfDeviceFromVendor(vendor){
   const telemetry = bsfField(vendor, ['telemetry', 'data']) || {};
+  const rawTelemetry = bsfTelemetryObject(telemetry);
   const reading = bsfReadTelemetry(telemetry);
   const id = bsfSafeIdentifier(bsfField(vendor, ['serialNumber', 'id']));
   if(!id) return null;
@@ -216,21 +256,41 @@ function bsfDeviceFromVendor(vendor){
     status:bsfResolveStatus(null, vendor, reading, null),
     lastUpdate:bsfLastUpdate(null, vendor, null, reading),
     network:'Vendor API',
-    signal:reading.signalPct ?? 0,
+    signal:reading.signalPct,
+    vendorDeviceType:bsfField(vendor, ['deviceType']) ?? '',
+    vendorTemplateName:bsfField(vendor, ['templateName']) || '',
+    vendorAddressCode:bsfField(vendor, ['addressCode']) || '',
+    vendorOwnerName:bsfField(bsfField(vendor, ['owner']) || {}, ['userName']) || '',
+    vendorPower:bsfNumber(bsfField(vendor, ['power'])),
+    vendorCreatedAt:bsfField(vendor, ['createdAt', 'createTime']) || '',
+    vendorLastSyncedAt:bsfField(vendor, ['lastSyncedAt', 'last_synced_at']) || '',
+    vendorRealtime:bsfField(vendor, ['realtime']) === true,
     ghgReduced:'\u2014',
     wasteCollected:'\u2014',
     fertilizer:'\u2014',
     dailyWaste:'\u2014',
     dailyEnergy:'\u2014',
     avgTemp:bsfDisplay(reading.hotPlateTempC),
+    hotPlateTemp:bsfDisplay(reading.hotPlateTempC),
     containerTemp:bsfDisplay(reading.cabinTempC),
     humidity:bsfDisplay(reading.humidityPct),
     realTimeWeight:bsfDisplay(reading.realTimeWeightKg),
     totalAddMaterial:bsfDisplay(reading.totalAddedMaterialKg),
+    singleAddMaterial:bsfDisplay(reading.singleAddedMaterialKg),
     totalDischarge:bsfDisplay(reading.totalDischargeKg),
+    singleDischarge:bsfDisplay(reading.singleDischargeKg),
+    discharge:bsfDisplay(reading.dischargeCode),
+    runTime:bsfDisplay(reading.runTimeMin),
+    feed:bsfDisplay(reading.feedCode),
+    shredder:bsfDisplay(reading.shredderCode),
+    mixingMotor:bsfDisplay(reading.mixingMotorCode),
+    fan:bsfDisplay(reading.fanCode),
+    zipper:bsfDisplay(reading.zipperCode),
     operatingStatus:reading.operatingStatus,
     fermentState:reading.fermentState,
-    fermentRunTime:bsfDisplay(reading.fermentRunTimeMin)
+    fermentRunTime:bsfDisplay(reading.fermentRunTimeMin),
+    telemetry:rawTelemetry,
+    telemetrySource:Object.keys(rawTelemetry).length ? 'Vendor API' : 'Unavailable'
   };
 }
 
@@ -257,7 +317,14 @@ function bsfStoredRow(row, machineById){
     fan:bsfDisplay(reading.fanCode),
     zipper:bsfDisplay(reading.zipperCode),
     weight:bsfDisplay(reading.realTimeWeightKg),
+    totalAddMaterial:bsfDisplay(reading.totalAddedMaterialKg),
+    singleAddMaterial:bsfDisplay(reading.singleAddedMaterialKg),
+    totalDischarge:bsfDisplay(reading.totalDischargeKg),
+    singleDischarge:bsfDisplay(reading.singleDischargeKg),
+    discharge:bsfDisplay(reading.dischargeCode),
+    runTime:bsfDisplay(reading.runTimeMin),
     temperature:bsfDisplay(reading.cabinTempC),
+    hotPlateTemp:bsfDisplay(reading.hotPlateTempC),
     humidity:bsfDisplay(reading.humidityPct),
     energy:bsfDisplay(reading.energyKwh),
     solarPower:bsfDisplay(reading.solarPowerKw),
@@ -268,7 +335,7 @@ function bsfStoredRow(row, machineById){
       ? bsfField(row, ['latitude']) + ',' + bsfField(row, ['longitude'])
       : '\u2014',
     network:'API',
-    signal:reading.signalPct ?? 0,
+    signal:reading.signalPct,
     vendorDeviceId:vendorId,
     volatile:false
   };
@@ -295,7 +362,14 @@ function bsfVendorRow(vendor, machine){
     fan:bsfDisplay(reading.fanCode),
     zipper:bsfDisplay(reading.zipperCode),
     weight:bsfDisplay(reading.realTimeWeightKg),
+    totalAddMaterial:bsfDisplay(reading.totalAddedMaterialKg),
+    singleAddMaterial:bsfDisplay(reading.singleAddedMaterialKg),
+    totalDischarge:bsfDisplay(reading.totalDischargeKg),
+    singleDischarge:bsfDisplay(reading.singleDischargeKg),
+    discharge:bsfDisplay(reading.dischargeCode),
+    runTime:bsfDisplay(reading.runTimeMin),
     temperature:bsfDisplay(reading.cabinTempC),
+    hotPlateTemp:bsfDisplay(reading.hotPlateTempC),
     humidity:bsfDisplay(reading.humidityPct),
     energy:bsfDisplay(reading.energyKwh),
     solarPower:bsfDisplay(reading.solarPowerKw),
@@ -306,7 +380,7 @@ function bsfVendorRow(vendor, machine){
       ? bsfField(vendor, ['latitude']) + ',' + bsfField(vendor, ['longitude'])
       : '\u2014',
     network:'Vendor API',
-    signal:reading.signalPct ?? 0,
+    signal:reading.signalPct,
     vendorDeviceId:bsfField(vendor, ['id']) || '',
     volatile:!recordedAt
   };
@@ -409,9 +483,13 @@ function bsfAlertsFromDevices(deviceList){
   return out;
 }
 
+function bsfRowSortTimestamp(row){
+  return Number(row && row.sourceTimestampSeconds) || Number(row && row.receivedAtSeconds) || bsfEpochSeconds(row && row.recordedAt) || 0;
+}
+
 function bsfSnapshotFingerprint(deviceList, rows){
   return JSON.stringify({
-    devices:deviceList.map(function(device){ return [device.id, device.status, device.lastUpdate, device.containerTemp, device.realTimeWeight]; }),
+    devices:deviceList.map(function(device){ return [device.id, device.status, device.lastUpdate, device.containerTemp, device.realTimeWeight, device.telemetry]; }),
     rows:rows.slice(0, 50).map(function(row){ return [row.device, row.recordedAt, row.temperature, row.weight, row.humidity]; })
   });
 }
@@ -443,7 +521,14 @@ function bsfHistoryRow(item, device, groupBy){
     fan:'\u2014',
     zipper:'\u2014',
     weight:'\u2014',
+    totalAddMaterial:'\u2014',
+    singleAddMaterial:'\u2014',
+    totalDischarge:'\u2014',
+    singleDischarge:'\u2014',
+    discharge:'\u2014',
+    runTime:'\u2014',
     temperature:bsfDisplay(temperature),
+    hotPlateTemp:'\u2014',
     humidity:bsfDisplay(humidity),
     energy:'\u2014',
     solarPower:'\u2014',
@@ -452,7 +537,7 @@ function bsfHistoryRow(item, device, groupBy){
     h2s:'\u2014',
     gps:'\u2014',
     network:'Vendor history',
-    signal:device.signal ?? 0,
+    signal:device.signal,
     vendorDeviceId:device.vendorDeviceId || '',
     history:true,
     volatile:false
@@ -468,7 +553,7 @@ function bsfMergeRows(baseRows, extraRows){
     if(row && row.device && row.recordedAt) rows.set(row.device + '@' + (row.sourceTimestampSeconds || row.recordedAt), row);
   });
   return Array.from(rows.values()).sort(function(a, b){
-    return (b.sourceTimestampSeconds || 0) - (a.sourceTimestampSeconds || 0);
+    return bsfRowSortTimestamp(b) - bsfRowSortTimestamp(a);
   });
 }
 
@@ -490,19 +575,148 @@ async function bsfLoadVendorHistory(options){
 window.BSF_LOAD_VENDOR_HISTORY = bsfLoadVendorHistory;
 window.BSF_MERGE_ROWS = bsfMergeRows;
 
+const RAW_HISTORY_STORAGE_PREFIX = 'bsf.delivery.rawHistory.v1';
+const RAW_HISTORY_MAX_ROWS = 5000;
+
+function bsfHistoryStorageKey(){
+  const profile = window.BSF_SESSION?.user || window.BSF_USER_PROFILE || window.BSF_CURRENT_USER || {};
+  const role = typeof currentRole === 'undefined' ? 'unknown' : currentRole;
+  const user = profile.id || profile.userName || profile.email || (typeof currentUsername === 'undefined' ? '' : currentUsername);
+  const scope = profile.machineId || (typeof currentMachineId === 'undefined' ? '' : currentMachineId) ||
+    profile.clientId || (typeof currentClient === 'undefined' ? '' : currentClient) || 'all';
+  return RAW_HISTORY_STORAGE_PREFIX + ':' + bsfSafeIdentifier(role) + ':' + bsfSafeIdentifier(user) + ':' + bsfSafeIdentifier(scope);
+}
+
+function bsfReadStoredHistory(){
+  try {
+    const parsed = JSON.parse(localStorage.getItem(bsfHistoryStorageKey()) || '[]');
+    return Array.isArray(parsed) ? parsed.filter(function(row){ return row && row.device && row.recordedAt; }) : [];
+  } catch(error) {
+    return [];
+  }
+}
+
+function bsfWriteStoredHistory(rows){
+  const ordered = rows.slice(0, RAW_HISTORY_MAX_ROWS);
+  try {
+    localStorage.setItem(bsfHistoryStorageKey(), JSON.stringify(ordered));
+  } catch(error) {
+    try { localStorage.setItem(bsfHistoryStorageKey(), JSON.stringify(ordered.slice(0, Math.floor(ordered.length / 2)))); } catch(ignored) {}
+  }
+}
+
+function bsfRowValueFingerprint(row){
+  return JSON.stringify([
+    row.deviceState, row.operatingStatus, row.fermentState, row.feed, row.shredder,
+    row.mixingMotor, row.fan, row.zipper, row.weight, row.totalAddMaterial,
+    row.singleAddMaterial, row.totalDischarge, row.singleDischarge, row.discharge,
+    row.runTime, row.temperature, row.hotPlateTemp, row.humidity, row.energy, row.solarPower,
+    row.co2, row.no2, row.h2s, row.gps, row.signal
+  ]);
+}
+
+function bsfRefreshIntervalSeconds(){
+  const role = typeof currentRole === 'undefined' ? 'user' : currentRole;
+  const roleKey = role === 'client-admin' ? 'clientAdmin' : role;
+  const defaults = { admin:180, clientAdmin:600, user:600 };
+  const configured = window.BSF_RUNTIME_CONFIG && window.BSF_RUNTIME_CONFIG.refreshMs &&
+    Number(window.BSF_RUNTIME_CONFIG.refreshMs[roleKey]);
+  return Number.isFinite(configured) && configured >= 30000 ? Math.round(configured / 1000) : (defaults[roleKey] || 600);
+}
+
+function bsfRealtimeSampleBucket(row, intervalSeconds){
+  const receivedAt = Number(row && row.receivedAtSeconds) || bsfRowSortTimestamp(row);
+  return receivedAt ? Math.floor(receivedAt / intervalSeconds) : 0;
+}
+
+function bsfAppendHistoryRows(existingRows, incomingRows){
+  const rows = (existingRows || []).slice();
+  const exactIndexes = new Map();
+  const intervalSeconds = bsfRefreshIntervalSeconds();
+  rows.forEach(function(row, index){
+    if(row.sourceTimestampSeconds) exactIndexes.set(row.device + '@' + row.sourceTimestampSeconds, index);
+  });
+
+  (incomingRows || []).forEach(function(row){
+    if(!row || !row.device || !row.recordedAt) return;
+    if(row.sourceTimestampSeconds){
+      const key = row.device + '@' + row.sourceTimestampSeconds;
+      const existingIndex = exactIndexes.get(key);
+      if(existingIndex === undefined){
+        exactIndexes.set(key, rows.length);
+        rows.push(row);
+      } else {
+        rows[existingIndex] = row;
+      }
+      return;
+    }
+
+    const incomingBucket = bsfRealtimeSampleBucket(row, intervalSeconds);
+    let latest = null;
+    let sameBucketIndex = -1;
+    rows.forEach(function(existing, index){
+      if(existing.device !== row.device) return;
+      if(existing.volatile && !existing.sourceTimestampSeconds &&
+        incomingBucket && bsfRealtimeSampleBucket(existing, intervalSeconds) === incomingBucket){
+        sameBucketIndex = index;
+      }
+      if(!latest || bsfRowSortTimestamp(existing) > bsfRowSortTimestamp(latest)) latest = existing;
+    });
+
+    if(sameBucketIndex >= 0){
+      rows[sameBucketIndex] = row;
+      return;
+    }
+    if(!incomingBucket && latest && latest.volatile &&
+      bsfRowValueFingerprint(latest) === bsfRowValueFingerprint(row)) return;
+    rows.push(row);
+  });
+
+  return rows.sort(function(left, right){
+    return bsfRowSortTimestamp(right) - bsfRowSortTimestamp(left) ||
+      String(right.recordedAt).localeCompare(String(left.recordedAt));
+  }).slice(0, RAW_HISTORY_MAX_ROWS);
+}
+
+function bsfLatestRowsByDevice(rows){
+  const latest = new Map();
+  (rows || []).forEach(function(row){
+    if(!row || !row.device) return;
+    const current = latest.get(row.device);
+    if(!current || bsfRowSortTimestamp(row) > bsfRowSortTimestamp(current) ||
+      (bsfRowSortTimestamp(row) === bsfRowSortTimestamp(current) && String(row.recordedAt) > String(current.recordedAt))) latest.set(row.device, row);
+  });
+  return Array.from(latest.values());
+}
+
+function bsfRowsForCurrentScope(snapshot){
+  const role = typeof currentRole === 'undefined' ? 'admin' : currentRole;
+  if(role === 'admin') return snapshot.rows;
+  // Vendor rows are already scoped by the authenticated vendor token. Keep the
+  // latest row even when the vendor device is not linked to a local Client yet.
+  return bsfLatestRowsByDevice(snapshot.rows);
+}
+
 async function bsfLoadBackendData(limit){
   const snapshot = await bsfFetchSnapshot(limit);
   const fingerprint = bsfSnapshotFingerprint(snapshot.devices, snapshot.rows);
-  const changed = window.BSF_BACKEND_LAST_FINGERPRINT !== fingerprint;
+  const previousFingerprint = window.BSF_BACKEND_LAST_FINGERPRINT;
+  const existingRows = bsfReadStoredHistory();
+  const incomingRows = bsfRowsForCurrentScope(snapshot);
+  const mergedRows = bsfAppendHistoryRows(existingRows, incomingRows);
+  const historyChanged = JSON.stringify(existingRows) !== JSON.stringify(mergedRows);
+  const changed = previousFingerprint !== fingerprint || historyChanged;
   window.BSF_BACKEND_LAST_FINGERPRINT = fingerprint;
+  if(historyChanged) bsfWriteStoredHistory(mergedRows);
+  if(historyChanged && typeof currentPage !== 'undefined' && currentPage === 'raw-data' &&
+    typeof rawDataPage !== 'undefined') rawDataPage = 1;
   devices.splice(0, devices.length, ...snapshot.devices);
-  rawDataRows.splice(0, rawDataRows.length, ...snapshot.rows);
-  window.BSF_GRAPH_HISTORY_ROWS = snapshot.rows.slice();
+  rawDataRows.splice(0, rawDataRows.length, ...mergedRows);
+  window.BSF_GRAPH_HISTORY_ROWS = mergedRows.slice();
   alerts.splice(0, alerts.length, ...bsfAlertsFromDevices(snapshot.devices));
   window.BSF_BACKEND_LAST_LOAD = Date.now();
   return { loaded:true, changed:changed };
 }
-
 window.BSF_LOAD_BACKEND_DATA = async function(limit){
   try {
     const result = await bsfLoadBackendData(limit);
@@ -513,9 +727,9 @@ window.BSF_LOAD_BACKEND_DATA = async function(limit){
   }
 };
 
-window.BSF_LOAD_BACKEND_LATEST = async function(){
+window.BSF_LOAD_BACKEND_LATEST = async function(limit){
   try {
-    const result = await bsfLoadBackendData(1000);
+    const result = await bsfLoadBackendData(limit == null ? 1000 : limit);
     return result.changed;
   } catch(error) {
     console.warn('[BSF] API latest load failed:', error.message);
@@ -528,5 +742,7 @@ window.BSF_BACKEND_DATA = {
   readTelemetry:bsfReadTelemetry,
   buildSnapshot:bsfBuildSnapshot,
   historyRow:bsfHistoryRow,
-  mergeRows:bsfMergeRows
+  mergeRows:bsfMergeRows,
+  appendRows:bsfAppendHistoryRows,
+  rowValueFingerprint:bsfRowValueFingerprint
 };

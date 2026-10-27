@@ -105,7 +105,7 @@ function validateSocketUrl() {
  * vendor devices. The vendor token stays in the backend and the returned records
  * are filtered against the REST device list to prevent cross-device leakage.
  */
-export function fetchVendorRealtimeDevices({ token, devices, timeoutMs } = {}) {
+function fetchVendorRealtimeDevicesOnce({ token, devices, timeoutMs } = {}) {
   const accessToken = cleanIdentifier(token, 8192);
   if (!accessToken) throw new ValidationError('A vendor access token is required');
   if (!Array.isArray(devices)) throw new ValidationError('`devices` must be an array');
@@ -176,6 +176,20 @@ export function fetchVendorRealtimeDevices({ token, devices, timeoutMs } = {}) {
       else finish(new ProviderError('VENDOR_REALTIME_UNAVAILABLE', 'Vendor realtime service closed without data', { status: 503 }));
     });
   });
+}
+
+export async function fetchVendorRealtimeDevices(options = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      return await fetchVendorRealtimeDevicesOnce(options);
+    } catch (error) {
+      lastError = error;
+      if (error?.code === 'VENDOR_REALTIME_CONFIGURATION_ERROR' || attempt === 2) break;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+  throw lastError;
 }
 
 export function mergeRealtimeDevices(records, liveByDeviceId) {

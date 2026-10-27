@@ -176,7 +176,8 @@ function graphPeriodRange(){
 
 function graphFilteredRawRows(){
   const historyRows = graphHistoryCompletedKey === graphHistoryViewKey() ? (window.BSF_DEVICE_HISTORY_ROWS || []) : [];
-  const rows = historyRows.length ? historyRows : ((window.BSF_GRAPH_HISTORY_ROWS && window.BSF_GRAPH_HISTORY_ROWS.length) ? window.BSF_GRAPH_HISTORY_ROWS : rawDataRows);
+  const storedRows = (window.BSF_GRAPH_HISTORY_ROWS && window.BSF_GRAPH_HISTORY_ROWS.length) ? window.BSF_GRAPH_HISTORY_ROWS : rawDataRows;
+  const rows = window.BSF_MERGE_ROWS ? window.BSF_MERGE_ROWS(historyRows, storedRows) : historyRows.concat(storedRows);
   const range = graphPeriodRange();
   const visibleIds = new Set(scopedDevices().map(function(device){ return device.id; }));
   return rows.filter(function(row){

@@ -61,7 +61,10 @@ backend/          BSF 后端、数据库迁移和通知队列
 
 - 页面只调用 `/api/v1`。
 - 设备清单来自 `/api/v1/machines` 与 `/api/v1/vendor-devices`。
-- 历史遥测来自 `/api/v1/device-data`。
+- 历史遥测来自 `/api/v1/device-data` 与 `/api/v1/vendor-devices/history`。
+- Master Admin 每 3 分钟、Client Admin / User 每 10 分钟读取一次最新记录。
+- 轮询结果追加到按角色和账号隔离的本地历史缓存，不覆盖旧记录。
+- 相同设备与上报时间去重；没有上报时间且数值未变化的实时快照不会重复保存。
 - 未绑定客户或机器的厂家设备显示为 `Unassigned`，不会自动建立关联。
 - 前端不保存厂家凭据，不连接设备网络，不生成模拟业务数据。
 
