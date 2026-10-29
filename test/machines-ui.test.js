@@ -18,3 +18,18 @@ test('machines page keeps metric cards, device status and location preview', () 
   assert.match(source, /Device Status/);
   assert.match(source, /Location Preview/);
 });
+
+test('machines page restores the original eight-metric layout', () => {
+  assert.match(source, /Accumulated GHG Reduced/);
+  assert.match(source, /Accumulated Waste/);
+  assert.match(source, /Est\. Fertilizer/);
+  assert.match(source, /Daily Waste/);
+  assert.match(source, /Daily Energy/);
+  assert.match(source, /Avg Env Temp/);
+  assert.match(source, /Container Temp/);
+  assert.match(source, /Container Humidity/);
+  assert.doesNotMatch(source, /Hot Plate Temp/);
+  assert.doesNotMatch(source, /Current Weight/);
+  assert.doesNotMatch(source, /Total Added Material/);
+  assert.doesNotMatch(source, /Total Discharged/);
+});

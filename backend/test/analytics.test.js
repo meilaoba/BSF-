@@ -12,6 +12,7 @@ const { config } = await import('../src/config.js');
 const {
   analyticsDeviceLookup,
   analyticsScopeForUser,
+  dateRangeForRequest,
   rawSampleRange,
 } = await import('../src/routes/analytics.js');
 const {
@@ -32,6 +33,19 @@ test('confirmed formula and polling defaults remain configurable', () => {
   assert.equal(config.auth.vendor.realtimeEnabled, false);
   assert.equal(config.auth.vendor.accessTokenTtlDays, 7);
   assert.equal(config.auth.vendor.refreshTokenTtlDays, 8);
+});
+
+test('graph range uses explicit start and end dates for every period', () => {
+  const range = dateRangeForRequest(new URL(
+    'http://localhost/api/v1/graphs?start=2026-10-16&end=2026-10-31'
+  ), 'monthly', new Date('2026-10-30T00:00:00Z'));
+  assert.deepEqual(range, { start:'2026-10-16', end:'2026-10-31' });
+  assert.throws(
+    () => dateRangeForRequest(new URL(
+      'http://localhost/api/v1/graphs?start=2026-10-16&end=2026-10-17'
+    ), 'daily', new Date('2026-10-30T00:00:00Z')),
+    (error) => error.code === 'VALIDATION_ERROR'
+  );
 });
 
 test('master admin may request a client or machine scope', () => {
@@ -114,6 +128,15 @@ test('analytics migration preserves source units and prevents duplicate captures
   assert.match(sql, /UNIQUE \(vendor_account_id, vendor_device_id, captured_at\)/);
   assert.match(sql, /vendor_device_telemetry_account_time_idx/);
   assert.match(sql, /vendor_device_telemetry_device_time_idx/);
+});
+
+test('environment temperature migration stores HKO samples and daily values', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sql = fs.readFileSync(path.join(root, 'db/migrations/010_environment_temperature.sql'), 'utf8');
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS environment_temperature_samples/);
+  assert.match(sql, /UNIQUE \(station, observed_at\)/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS environment_daily_temperature/);
+  assert.match(sql, /status IN \('provisional', 'official'\)/);
 });
 
 test('tenant device payloads retain authorized telemetry and omit raw input/output', () => {

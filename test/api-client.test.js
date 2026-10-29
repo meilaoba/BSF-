@@ -52,6 +52,7 @@ test('classic API bootstrap exposes authenticated analytics requests without ES 
   assert.deepEqual(result.summary, { pointCount: 0 });
   assert.equal(calls[0].url, '/api/v1/graphs?period=monthly&year=2026&month=10');
   assert.equal(calls[0].options.credentials, 'include');
+  assert.equal(typeof client.getEnvironmentTemperature, 'function');
 });
 
 test('classic API bootstrap sends CSRF and surfaces backend error codes', async () => {

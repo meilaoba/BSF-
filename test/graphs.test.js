@@ -30,7 +30,14 @@ test('graph period parameters request real daily, monthly and yearly API buckets
   vm.runInContext("graphFilters={client:'Client A',machine:'KW-001',start:'2026-10-15',end:'2026-10-15'}", sandbox);
   vm.runInContext("graphPeriods={foodWaste:'daily',ghg:'daily',temp:'daily',energy:'daily'}", sandbox);
   assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext('graphApiParams()', sandbox))), {
-    period:'daily', clientId:'Client A', machineId:'KW-001', year:2026, month:10, date:'2026-10-15'
+    period:'daily',
+    clientId:'Client A',
+    machineId:'KW-001',
+    start:'2026-10-15',
+    end:'2026-10-15',
+    year:2026,
+    month:10,
+    date:'2026-10-15'
   });
 
   vm.runInContext("graphFilters={client:'Client A',machine:'',start:'2026-10-01',end:'2026-10-31'}", sandbox);
@@ -43,6 +50,20 @@ test('graph period parameters request real daily, monthly and yearly API buckets
   vm.runInContext("graphFilters={client:'Client A',machine:'',start:'2026-01-01',end:'2026-12-31'}", sandbox);
   vm.runInContext("graphPeriods={foodWaste:'yearly',ghg:'yearly',temp:'yearly',energy:'yearly'}", sandbox);
   assert.equal(vm.runInContext('graphApiParams()', sandbox).period, 'yearly');
+});
+
+test('graph date filters define the real range instead of the entire period', () => {
+  vm.runInContext("graphFilters={client:'Client A',machine:'KW-001',start:'2026-10-16',end:'2026-10-31'}", sandbox);
+  vm.runInContext("graphPeriods={foodWaste:'monthly',ghg:'monthly',temp:'monthly',energy:'monthly'}", sandbox);
+  assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext('graphPeriodRange()', sandbox))), {
+    start:'2026-10-16',
+    end:'2026-10-31',
+    year:2026,
+    month:10
+  });
+  const params = vm.runInContext('graphApiParams()', sandbox);
+  assert.equal(params.start, '2026-10-16');
+  assert.equal(params.end, '2026-10-31');
 });
 
 test('graph errors distinguish missing account linkage from an empty dataset', () => {

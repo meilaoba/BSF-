@@ -140,6 +140,7 @@
     getLocations:function(params){ return get('/locations', params); },
     getGraphs:function(params){ return get('/graphs', params); },
     getFoodWaste:function(params){ return get('/graphs/food-waste', params); },
+    getEnvironmentTemperature:function(params){ return get('/environment-temperature', params); },
     getDeviceData:function(params){ return get('/device-data', params); },
     getRawData:function(params){ return get('/device-data', params); },
     getRawSamples:function(params){ return get('/raw-data-samples', params); },

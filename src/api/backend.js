@@ -32,6 +32,7 @@ export function createBackendApi(options = {}) {
     getLocations(params) { return http.get('/locations', params); },
     getGraphs(params) { return http.get('/graphs', params); },
     getFoodWaste(params) { return http.get('/graphs/food-waste', params); },
+    getEnvironmentTemperature(params) { return http.get('/environment-temperature', params); },
     getDeviceData(params) { return http.get('/device-data', params); },
     getRawData(params) { return http.get('/device-data', params); },
     getRawSamples(params) { return http.get('/raw-data-samples', params); },

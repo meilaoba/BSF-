@@ -13,6 +13,7 @@ import {
   resolveVendorDeviceIds,
   vendorAccountIdForSession,
 } from '../services/vendor-analytics.js';
+import { getEnvironmentTemperature } from '../services/environment-temperature.js';
 
 const PERIODS = new Set(['daily', 'monthly', 'yearly']);
 const GROUPS = new Set(['hour', 'day', 'month']);
@@ -24,7 +25,7 @@ function validDateKey(value) {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-function dateRangeForRequest(url, period, now) {
+export function dateRangeForRequest(url, period, now) {
   const requestedStart = optionalString(url.searchParams.get('start'), 'start', { max: 10 });
   const requestedEnd = optionalString(url.searchParams.get('end'), 'end', { max: 10 });
   const requestedDate = optionalString(url.searchParams.get('date'), 'date', { max: 10 });
@@ -33,6 +34,19 @@ function dateRangeForRequest(url, period, now) {
   if (requestedStart && !validDateKey(requestedStart)) throw new ValidationError('`start` must be a valid YYYY-MM-DD date');
   if (requestedEnd && !validDateKey(requestedEnd)) throw new ValidationError('`end` must be a valid YYYY-MM-DD date');
   if (requestedDate && !validDateKey(requestedDate)) throw new ValidationError('`date` must be a valid YYYY-MM-DD date');
+
+  if (requestedStart || requestedEnd) {
+    const rangeStart = requestedStart || requestedEnd;
+    const rangeEnd = requestedEnd || requestedStart;
+    if (!rangeStart || !rangeEnd) throw new ValidationError('Both `start` and `end` are required');
+    if (rangeStart > rangeEnd) throw new ValidationError('`start` cannot be after `end`');
+    if (period === 'daily' && rangeStart !== rangeEnd) {
+      throw new ValidationError('Daily analytics must cover exactly one date');
+    }
+    const spanDays = (Date.parse(`${rangeEnd}T00:00:00Z`) - Date.parse(`${rangeStart}T00:00:00Z`)) / 86400000;
+    if (spanDays > 366) throw new ValidationError('Analytics range cannot exceed 366 days');
+    return { start: rangeStart, end: rangeEnd };
+  }
 
   if (period === 'daily') {
     if (requestedStart && requestedEnd && requestedStart !== requestedEnd) {
@@ -167,6 +181,15 @@ export function rawSampleRange(url) {
   return { start: resolvedStart, end: resolvedEnd };
 }
 export function registerAnalyticsRoutes(router) {
+  router.get('/api/v1/environment-temperature', async (req, res) => {
+    if (!req.auth) throw new AppError('UNAUTHORIZED', 'Authentication required', { status: 401 });
+    const url = new URL(req.url || '/', 'http://localhost');
+    const date = optionalString(url.searchParams.get('date'), 'date', { max: 10 });
+    if (date && !validDateKey(date)) throw new ValidationError('`date` must be a valid YYYY-MM-DD date');
+    const result = await getEnvironmentTemperature(date);
+    sendOk(res, result ? { ...result, value: result.temperatureC } : { date, value:null, status:'unavailable' });
+  });
+
   router.get('/api/v1/raw-data-samples', async (req, res) => {
     if (!req.auth) throw new AppError('UNAUTHORIZED', 'Authentication required', { status: 401 });
     const vendorAccountId = vendorAccountIdForSession(req.auth);

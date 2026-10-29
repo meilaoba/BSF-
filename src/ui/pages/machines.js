@@ -65,12 +65,9 @@ function machineMetricsMarkup(device){
     machineMetricCard('Est. Fertilizer', machineMetricValue(metrics.fertilizerKg), 'kg', '#f59e0b', 'machine-metric-fertilizer'),
     machineMetricCard('Daily Waste', machineMetricValue(metrics.dailyWasteKg), 'kg', '#8b5cf6', 'machine-metric-daily-waste'),
     ...(isClientScopedRole() ? [] : [machineMetricCard('Daily Energy', machineMetricValue(metrics.dailyEnergyKwh), 'kWh', '#ef4444', 'machine-metric-daily-energy')]),
-    machineMetricCard('Hot Plate Temp', machinePreviewEscape(device.hotPlateTemp), '°C', '#06b6d4', 'machine-metric-hot-temp'),
+    machineMetricCard('Avg Env Temp', machineMetricValue(metrics.environmentTempC), '°C', '#22c55e', 'machine-metric-env-temp'),
     machineMetricCard('Container Temp', machinePreviewEscape(device.containerTemp), '°C', '#f97316', 'machine-metric-temp'),
-    machineMetricCard('Container Humidity', machinePreviewEscape(device.humidity), '%', '#0ea5e9', 'machine-metric-humidity'),
-    machineMetricCard('Current Weight', machinePreviewEscape(device.realTimeWeight), 'kg', '#14b8a6', 'machine-metric-weight'),
-    machineMetricCard('Total Added Material', machinePreviewEscape(device.totalAddMaterial), 'kg', '#22c55e', 'machine-metric-total-add'),
-    machineMetricCard('Total Discharged', machinePreviewEscape(device.totalDischarge), 'kg', '#f43f5e', 'machine-metric-total-discharge')
+    machineMetricCard('Container Humidity', machinePreviewEscape(device.humidity), '%', '#0ea5e9', 'machine-metric-humidity')
   ].join('');
 }
 
@@ -88,18 +85,24 @@ async function loadMachineMetrics(device){
   const today = window.BSF_METRICS && window.BSF_METRICS.hongKongDateKey
     ? window.BSF_METRICS.hongKongDateKey(new Date())
     : new Date().toISOString().slice(0, 10);
+  const environmentRequest = typeof window.BSF_API.getEnvironmentTemperature === 'function'
+    ? window.BSF_API.getEnvironmentTemperature({ date:today }).catch(function(){ return null; })
+    : Promise.resolve(null);
   const request = Promise.all([
     window.BSF_API.getGraphs(Object.assign({ period:'monthly' }, identity)),
-    window.BSF_API.getGraphs(Object.assign({ period:'daily', date:today }, identity))
+    window.BSF_API.getGraphs(Object.assign({ period:'daily', date:today }, identity)),
+    environmentRequest
   ]).then(function(results){
     const monthlySummary = results[0] && results[0].summary ? results[0].summary : {};
     const dailySummary = results[1] && results[1].summary ? results[1].summary : {};
+    const environment = results[2] || {};
     const data = {
       wasteKg:monthlySummary.wasteKg,
       ghgKg:monthlySummary.ghgKg,
       fertilizerKg:monthlySummary.fertilizerKg,
       dailyWasteKg:dailySummary.wasteKg,
-      dailyEnergyKwh:dailySummary.energyKwh
+      dailyEnergyKwh:dailySummary.energyKwh,
+      environmentTempC:environment.temperatureC
     };
     machineMetricCache.set(key, { savedAt:Date.now(), data:data });
     if(currentPage === 'machines' && machineMetricKey(device) === key){
@@ -108,6 +111,7 @@ async function loadMachineMetrics(device){
       applyMachineMetricText('machine-metric-fertilizer', data.fertilizerKg);
       applyMachineMetricText('machine-metric-daily-waste', data.dailyWasteKg);
       applyMachineMetricText('machine-metric-daily-energy', data.dailyEnergyKwh);
+      applyMachineMetricText('machine-metric-env-temp', data.environmentTempC);
     }
   }).catch(function(){
     // Unavailable aggregated metrics remain an em dash.

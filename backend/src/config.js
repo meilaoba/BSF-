@@ -154,7 +154,17 @@ export const config = {
   },
 
   environment: {
-    hkoDailyTemperatureUrl: str('HKO_DAILY_TEMPERATURE_URL', ''),
+    hkoCurrentTemperatureUrl: str(
+      'HKO_CURRENT_TEMPERATURE_URL',
+      'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=en'
+    ),
+    hkoDailyTemperatureUrl: str(
+      'HKO_DAILY_TEMPERATURE_URL',
+      'https://data.weather.gov.hk/weatherAPI/opendata/opendata.php?dataType=CLMTEMP&rformat=json&station=HKO'
+    ),
+    hkoStation: str('HKO_STATION', 'HKO'),
+    hkoStationName: str('HKO_STATION_NAME', 'Hong Kong Observatory'),
+    hkoTimeoutMs: num('HKO_TIMEOUT_MS', 15000),
   },
 };
 

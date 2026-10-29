@@ -49,25 +49,31 @@ function graphAnchorDate(){
   return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : today;
 }
 
-function graphPeriodRange(){
-  const anchor = graphAnchorDate();
-  const year = Number(anchor.slice(0, 4));
-  const month = Number(anchor.slice(5, 7));
-  if(graphPeriods.foodWaste === 'daily') return { start:anchor, end:anchor, year:year, month:month };
-  if(graphPeriods.foodWaste === 'yearly') return { start:year + '-01-01', end:year + '-12-31', year:year, month:month };
+function ensureGraphDateFilters(){
+  const today = graphTodayKey();
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7));
+  const period = graphNormalizePeriod(graphPeriods.foodWaste);
   const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return {
-    start:year + '-' + graphPad(month) + '-01',
-    end:year + '-' + graphPad(month) + '-' + graphPad(lastDay),
-    year:year,
-    month:month
-  };
+  const defaults = period === 'daily'
+    ? { start:today, end:today }
+    : period === 'yearly'
+      ? { start:year + '-01-01', end:year + '-12-31' }
+      : { start:year + '-' + graphPad(month) + '-01', end:year + '-' + graphPad(month) + '-' + graphPad(lastDay) };
+  if(!graphFilters.start || !/^\d{4}-\d{2}-\d{2}$/.test(graphFilters.start)) graphFilters.start = defaults.start;
+  if(!graphFilters.end || !/^\d{4}-\d{2}-\d{2}$/.test(graphFilters.end)) graphFilters.end = defaults.end;
+  if(graphFilters.start > graphFilters.end) graphFilters.end = graphFilters.start;
+  if(period === 'daily') graphFilters.end = graphFilters.start;
 }
 
-function ensureGraphDateFilters(){
-  if(!graphFilters.start || !/^\d{4}-\d{2}-\d{2}$/.test(graphFilters.start)) graphFilters.start = graphTodayKey();
-  if(!graphFilters.end || !/^\d{4}-\d{2}-\d{2}$/.test(graphFilters.end)) graphFilters.end = graphFilters.start;
-  if(graphFilters.start > graphFilters.end) graphFilters.end = graphFilters.start;
+function graphPeriodRange(){
+  ensureGraphDateFilters();
+  return {
+    start:graphFilters.start,
+    end:graphFilters.end,
+    year:Number(graphFilters.end.slice(0, 4)),
+    month:Number(graphFilters.end.slice(5, 7))
+  };
 }
 
 function graphPeriodRangeForFilters(){
@@ -100,6 +106,8 @@ function graphApiParams(){
     period:graphPeriods.foodWaste,
     clientId:graphFilters.client || undefined,
     machineId:graphFilters.machine || undefined,
+    start:range.start,
+    end:range.end,
     year:range.year,
     month:range.month
   };
@@ -402,9 +410,10 @@ function setGraphPeriod(period){
   graphApiData = null;
   graphApiKey = '';
   graphApiError = '';
-  const range = graphPeriodRange();
-  graphFilters.start = range.start;
-  graphFilters.end = range.end;
+  if(normalized === 'daily'){
+    graphFilters.end = graphFilters.start || graphFilters.end || graphTodayKey();
+    graphFilters.start = graphFilters.end;
+  }
   graphFilterMessage = '';
   renderGraphs(document.getElementById('page-content'));
 }
