@@ -67,6 +67,9 @@ export function mapVendorDevice(record) {
       userName: cleanText(record.userName, 200),
     },
     telemetry: telemetry(record.data),
+    input: telemetry(record.input),
+    output: telemetry(record.output),
+    recordedAt: cleanText(record.recordedAt ?? record.updateTime, 80),
     createdAt: createdAt === null ? null : new Date(createdAt).toISOString(),
   };
 }
@@ -261,4 +264,34 @@ export async function listVendorDevices(input) {
 
   const body = await readLimitedJson(response);
   return normalizeDeviceListResponse(body, { requestedPageSize: request.pageSize });
+}
+
+/**
+ * Fetches every page returned by the vendor inventory API. The vendor caps a
+ * response at ten records even when a larger page size is requested, so callers
+ * that need a complete tenant view must follow pagination explicitly.
+ */
+export async function listAllVendorDevices(input = {}) {
+  const first = await listVendorDevices({ ...input, pageNum: 1, pageSize: 100 });
+  const records = [...first.records];
+  const pages = Math.max(1, Math.min(Number(first.pagination.pages) || 1, 100));
+
+  for (let pageNum = 2; pageNum <= pages; pageNum += 1) {
+    const page = await listVendorDevices({ ...input, pageNum, pageSize: 100 });
+    records.push(...page.records);
+  }
+
+  const unique = new Map();
+  for (const record of records) {
+    if (record?.id) unique.set(String(record.id), record);
+  }
+  return {
+    records: Array.from(unique.values()),
+    pagination: {
+      ...first.pagination,
+      current: 1,
+      pages,
+      total: Math.max(first.pagination.total, unique.size),
+    },
+  };
 }

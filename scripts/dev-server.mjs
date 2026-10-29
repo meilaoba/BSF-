@@ -20,6 +20,7 @@ const publicDirectoryPrefixes = [
   '/src/api/',
   '/src/config/',
   '/src/services/',
+  '/src/shared/',
   '/src/styles/',
   '/src/ui/',
   '/src/utils/',

@@ -34,6 +34,7 @@ export function createBackendApi(options = {}) {
     getFoodWaste(params) { return http.get('/graphs/food-waste', params); },
     getDeviceData(params) { return http.get('/device-data', params); },
     getRawData(params) { return http.get('/device-data', params); },
+    getRawSamples(params) { return http.get('/raw-data-samples', params); },
     getReports(params) { return http.get('/reports', params); },
 
     getAlerts(params) { return http.get('/alerts', params); },

@@ -28,3 +28,20 @@ test('login failures render inline instead of using browser alerts', () => {
   assert.match(router, /function setLoginError\(/);
   assert.doesNotMatch(router, /alert\('Sign in failed:/);
 });
+
+test('session restore shows a loading view before login or the application', () => {
+  assert.match(html, /id="auth-loading-screen"/);
+  assert.match(html, /id="auth-loading-text"[^>]*>Loading system/);
+  assert.match(html, /id="login-screen" style="display:none/);
+  assert.match(router, /setAuthView\('loading'/);
+  assert.match(router, /isAuthenticationFailure/);
+  assert.match(router, /isRetryableSessionError/);
+});
+
+test('authenticated startup keeps the loading view until the first page is rendered', () => {
+  const startup = router.match(/async function enterAuthenticatedApp[\s\S]*?async function login\(/);
+  assert.ok(startup);
+  assert.match(startup[0], /setAuthView\('loading', 'Loading system data\.\.\.'\)/);
+  assert.match(startup[0], /await loadDataForCurrentRole\(\)/);
+  assert.match(startup[0], /navigate\('machines'\)[\s\S]*setAuthView\('app'\)/);
+});

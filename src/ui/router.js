@@ -85,6 +85,46 @@ function resetLoginFormState(){
   clearLoginError();
 }
 let dataRefreshTimer = null;
+let authRestorePromise = null;
+
+function setAuthView(view, message){
+  const loading = document.getElementById('auth-loading-screen');
+  const login = document.getElementById('login-screen');
+  const main = document.getElementById('main-app');
+  const loadingText = document.getElementById('auth-loading-text');
+  const retry = document.getElementById('auth-retry-button');
+  if(loading) loading.style.display = view === 'loading' ? 'flex' : 'none';
+  if(login) login.style.display = view === 'login' ? 'flex' : 'none';
+  if(main) main.style.display = view === 'app' ? 'block' : 'none';
+  if(loadingText) loadingText.textContent = message || 'Loading system...';
+  if(retry) retry.style.display = view === 'error' ? 'inline-block' : 'none';
+  if(view === 'error' && loading) loading.style.display = 'flex';
+  if(view === 'login' || view === 'app') {
+    if(retry) retry.style.display = 'none';
+  }
+}
+
+function isAuthenticationFailure(error){
+  const code = String(error && (error.code || error.status) || '');
+  return code === '401' || code === 'UNAUTHORIZED' || code === 'AUTH_REQUIRED';
+}
+
+function isRetryableSessionError(error){
+  const code = String(error && (error.code || error.status) || '');
+  return code === 'NETWORK_ERROR'
+    || code === 'TIMEOUT'
+    || code === '429'
+    || code === '502'
+    || code === '503'
+    || code === '504'
+    || /^5\d\d$/.test(code);
+}
+
+function waitForAuthRetry(attempt){
+  return new Promise(function(resolve){
+    setTimeout(resolve, attempt === 0 ? 500 : 1500);
+  });
+}
 
 function normalizeSessionRole(role){
   const value = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -114,8 +154,7 @@ async function authenticateLogin(userName, password){
 async function enterAuthenticatedApp(authenticated){
   currentRole = authenticated.role;
   currentUsername = authenticated.username;
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('main-app').style.display='block';
+  setAuthView('loading', 'Loading system data...');
   const roleMeta = { admin:{label:'Master Admin'}, 'client-admin':{label:'Client Admin'}, user:{label:'User'} };
   const roleInfo = roleMeta[currentRole] || roleMeta.user;
   document.getElementById('role-badge').textContent = roleInfo.label;
@@ -128,6 +167,7 @@ async function enterAuthenticatedApp(authenticated){
   applyClientScopeToState();
   scheduleDataRefresh();
   navigate('machines');
+  setAuthView('app');
 }
 
 async function login(){
@@ -177,7 +217,7 @@ async function refreshRealtimePage(){
 }
 
 function currentRefreshIntervalMs(){
-  const defaults = { admin:3 * 60 * 1000, clientAdmin:10 * 60 * 1000, user:10 * 60 * 1000 };
+  const defaults = { admin:30 * 60 * 1000, clientAdmin:30 * 60 * 1000, user:30 * 60 * 1000 };
   const roleKey = currentRole === 'client-admin' ? 'clientAdmin' : currentRole;
   const refreshMs = window.BSF_RUNTIME_CONFIG && window.BSF_RUNTIME_CONFIG.refreshMs;
   const configured = refreshMs && Number(refreshMs[roleKey]);
@@ -206,28 +246,66 @@ async function logout(){
   currentUsername = '';
   currentClient = '';
   currentMachineId = '';
-  document.getElementById('main-app').style.display='none';
-  document.getElementById('login-screen').style.display='flex';
+  setAuthView('login');
   resetLoginFormState();
 }
 
 
 async function restoreAuthenticatedSession(){
-  if(!window.BSF_AUTH_CONFIG || !window.BSF_AUTH_CONFIG.enabled || !window.BSF_API) return;
+  if(authRestorePromise) return authRestorePromise;
+  authRestorePromise = (async function(){
+    if(!window.BSF_AUTH_CONFIG || !window.BSF_AUTH_CONFIG.enabled || !window.BSF_API){
+      setAuthView('error', 'Authentication service is unavailable.');
+      return;
+    }
+    setAuthView('loading', 'Checking your session...');
+    let lastError = null;
+    for(let attempt = 0; attempt < 3; attempt += 1){
+      try {
+        const session = await window.BSF_API.getSession();
+        if(!session || !session.user){
+          setAuthView('login');
+          return;
+        }
+        window.BSF_SESSION = session;
+        window.BSF_USER_PROFILE = session.user;
+        window.BSF_CURRENT_USER = session.user;
+        const resolvedRole = normalizeSessionRole(session.user.role);
+        if(!resolvedRole) throw new Error('Account role is not configured');
+        await enterAuthenticatedApp({
+          role: resolvedRole,
+          username: session.user.userName || session.user.fullName || 'User',
+          user: session.user
+        });
+        return;
+      } catch(error) {
+        lastError = error;
+        if(isAuthenticationFailure(error)){
+          setAuthView('login');
+          return;
+        }
+        if(!isRetryableSessionError(error)) break;
+        if(attempt < 2){
+          setAuthView('loading', 'Connection interrupted. Reconnecting...');
+          await waitForAuthRetry(attempt);
+        }
+      }
+    }
+    const message = lastError && lastError.message
+      ? 'Unable to load the system: ' + lastError.message
+      : 'Unable to load the system.';
+    setAuthView('error', message);
+  })();
   try {
-    const session = await window.BSF_API.getSession();
-    if(!session || !session.user) return;
-    window.BSF_SESSION = session;
-    window.BSF_USER_PROFILE = session.user;
-    window.BSF_CURRENT_USER = session.user;
-    const resolvedRole = normalizeSessionRole(session.user.role);
-    if(!resolvedRole) throw new Error('Account role is not configured');
-    await enterAuthenticatedApp({
-      role: resolvedRole,
-      username: session.user.userName || session.user.fullName || 'User',
-      user: session.user
-    });
-  } catch (error) {}
+    await authRestorePromise;
+  } finally {
+    authRestorePromise = null;
+  }
+}
+
+function retryRestoreAuthenticatedSession(){
+  if(authRestorePromise) return;
+  restoreAuthenticatedSession();
 }
 
 function renderNav(){
@@ -245,6 +323,8 @@ function renderNav(){
 }
 
 function navigate(page){
+  const allowedPages = new Set((navItems[currentRole] || []).map(function(item){ return item.id; }));
+  if(!allowedPages.has(page)) page = 'machines';
   currentPage = page;
   renderNav();
   const content = document.getElementById('page-content');

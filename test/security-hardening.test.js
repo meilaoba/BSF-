@@ -61,3 +61,8 @@ test('spreadsheet sanitizer neutralizes text formula prefixes only', () => {
   assert.equal(sandbox.bsfSpreadsheetSafeText(-2), '-2');
   assert.equal(sandbox.bsfSpreadsheetSafeText('Normal text'), 'Normal text');
 });
+
+test('CORS permits the per-tab chart instance header used by the frontend', () => {
+  const http = read('backend/src/lib/http.js');
+  assert.match(http, /x-bsf-client-instance/);
+});

@@ -2,18 +2,20 @@
 let rawDataFilterMessage = '';
 
 let rawDataHistoryRows = [];
+let rawDataHistoryTotal = 0;
 let rawDataHistoryLoading = false;
 let rawDataHistoryError = '';
 let rawDataHistoryRequestKey = '';
 let rawDataHistoryCompletedKey = '';
-const rawDataHistoryCache = new Map();
-const RAW_DATA_HISTORY_TTL_MS = 5 * 60 * 1000;
-
 function rawDataPad(value){ return String(value).padStart(2, '0'); }
 function rawDataInputValue(date){
   return date.getFullYear() + '-' + rawDataPad(date.getMonth() + 1) + '-' + rawDataPad(date.getDate()) + 'T' + rawDataPad(date.getHours()) + ':' + rawDataPad(date.getMinutes());
 }
 function rawDataDay(value){ return String(value || '').slice(0, 10); }
+function rawDataDateTime(value){
+  const match = String(value || '').trim().match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::\d{2})?$/);
+  return match ? match[1] : '';
+}
 function rawDataAddDays(value, days){
   const date = new Date(String(value || '').slice(0, 10) + 'T00:00:00');
   if(!Number.isFinite(date.getTime())) return '';
@@ -23,46 +25,49 @@ function rawDataAddDays(value, days){
 function rawDataEnsureDateFilters(){
   const now = new Date();
   if(!rawDataFilters.end) rawDataFilters.end = rawDataInputValue(now);
-  if(!rawDataFilters.start) rawDataFilters.start = rawDataAddDays(rawDataFilters.end, -29) + 'T00:00';
+  if(!rawDataFilters.start) rawDataFilters.start = rawDataAddDays(rawDataFilters.end, -59) + 'T00:00';
   if(rawDataFilters.start && rawDataFilters.end && rawDataFilters.start > rawDataFilters.end){
     rawDataFilters.start = rawDataDay(rawDataFilters.end) + 'T00:00';
   }
 }
 function rawDataHistoryRange(){
   rawDataEnsureDateFilters();
-  let start = rawDataDay(rawDataFilters.start);
-  let end = rawDataDay(rawDataFilters.end);
-  if(!end) end = rawDataDay(rawDataInputValue(new Date()));
-  if(!start) start = rawDataAddDays(end, -29);
+  let start = rawDataDateTime(rawDataFilters.start);
+  let end = rawDataDateTime(rawDataFilters.end);
+  if(!end) end = rawDataInputValue(new Date());
+  if(!start) start = rawDataAddDays(end, -59) + 'T00:00';
   if(start > end) start = end;
-  const minStart = rawDataAddDays(end, -29);
+  const minStart = rawDataAddDays(end, -59) + 'T00:00';
   if(start < minStart) start = minStart;
   return { start:start, end:end };
 }
-function rawDataHistoryTargets(){
-  return scopedDevices().filter(function(device){
-    if(rawDataFilters.client && device.client !== rawDataFilters.client) return false;
-    if(rawDataFilters.device && device.id !== rawDataFilters.device) return false;
-    return Boolean(device.vendorDeviceId);
-  });
-}
-function rawDataHistoryCacheKey(device, range){
-  return String(device.vendorDeviceId || device.id) + '|' + range.start + '|' + range.end + '|raw';
-}
 function rawDataHistoryViewKey(){
   const range = rawDataHistoryRange();
-  return rawDataHistoryTargets().map(function(device){ return rawDataHistoryCacheKey(device, range); }).sort().join(',');
+  return [range.start, range.end, rawDataFilters.client || '', rawDataFilters.device || '', rawDataPage].join('|');
+}
+function rawDataRequestOptions(page, pageSize){
+  const selectedDevice = scopedDevices().find(function(device){ return device.id === rawDataFilters.device; });
+  const range = rawDataHistoryRange();
+  return {
+    page:page || 1,
+    pageSize:pageSize || RAW_DATA_PAGE_SIZE,
+    start:range.start,
+    end:range.end,
+    clientId:rawDataFilters.client || undefined,
+    machineId:selectedDevice ? selectedDevice.id : undefined,
+    devices:scopedDevices()
+  };
 }
 function rawDataHistoryStatusMarkup(){
   let message = '';
   let color = '#64748b';
   if(rawDataHistoryLoading){
-    message = 'Loading vendor history...';
+    message = 'Loading saved samples...';
   } else if(rawDataHistoryError){
     message = rawDataHistoryError;
     color = '#f59e0b';
   } else if(rawDataHistoryCompletedKey){
-    message = rawDataHistoryRows.length + ' historical vendor record' + (rawDataHistoryRows.length === 1 ? '' : 's') + ' loaded';
+    message = rawDataHistoryTotal ? rawDataHistoryTotal + ' saved sample' + (rawDataHistoryTotal === 1 ? '' : 's') + ' in the selected period' : 'No saved samples in the selected period';
   }
   return '<p id="raw-history-status" style="min-height:18px;margin:-6px 0 12px;color:' + color + ';font-size:12px;">' + bsfEscapeHtml(message) + (rawDataHistoryError ? ' <button onclick="retryRawDataHistory()" style="margin-left:8px;padding:2px 8px;background:#334155;border:1px solid #475569;border-radius:5px;color:#e2e8f0;cursor:pointer;font-size:11px;">Retry</button>' : '') + '</p>';
 }
@@ -72,65 +77,40 @@ function retryRawDataHistory(){
   rawDataLoadHistory();
 }
 async function rawDataLoadHistory(){
-  const targets = rawDataHistoryTargets();
-  const range = rawDataHistoryRange();
   const key = rawDataHistoryViewKey();
-  if(!targets.length || !window.BSF_LOAD_VENDOR_HISTORY){
+  if(!window.BSF_LOAD_RAW_SAMPLES){
     rawDataHistoryCompletedKey = key;
-    rawDataHistoryError = '';
+    rawDataHistoryError = 'Saved sample API is unavailable';
     return;
   }
-  if(key === rawDataHistoryCompletedKey) return;
   if(rawDataHistoryLoading && key === rawDataHistoryRequestKey) return;
+  if(rawDataHistoryCompletedKey === key) return;
 
   rawDataHistoryLoading = true;
   rawDataHistoryRequestKey = key;
   rawDataHistoryError = '';
   const status = document.getElementById('raw-history-status');
-  if(status) status.textContent = 'Loading vendor history...';
+  if(status) status.textContent = 'Loading saved samples...';
 
-  const collected = [];
-  const failures = [];
-  const pending = [];
-  targets.forEach(function(device){
-    const cacheKey = rawDataHistoryCacheKey(device, range);
-    const cached = rawDataHistoryCache.get(cacheKey);
-    if(cached && Date.now() - cached.savedAt < RAW_DATA_HISTORY_TTL_MS){
-      collected.push.apply(collected, cached.rows);
-    } else {
-      pending.push({ device:device, cacheKey:cacheKey });
-    }
-  });
-
-  let cursor = 0;
-  async function worker(){
-    while(cursor < pending.length){
-      const item = pending[cursor++];
-      try {
-        const rows = await window.BSF_LOAD_VENDOR_HISTORY({ device:item.device, start:range.start, end:range.end, groupBy:'raw' });
-        rawDataHistoryCache.set(item.cacheKey, { savedAt:Date.now(), rows:rows });
-        collected.push.apply(collected, rows);
-      } catch(error) {
-        const stale = rawDataHistoryCache.get(item.cacheKey);
-        if(stale) collected.push.apply(collected, stale.rows);
-        failures.push(item.device.id);
-      }
-    }
-  }
   try {
-    await Promise.all(Array.from({ length:Math.min(3, pending.length) }, worker));
-    rawDataHistoryRows = window.BSF_MERGE_ROWS(collected, []);
+    const result = await window.BSF_LOAD_RAW_SAMPLES(rawDataRequestOptions(rawDataPage, RAW_DATA_PAGE_SIZE));
+    rawDataHistoryRows = Array.isArray(result.rows) ? result.rows : [];
+    rawDataHistoryTotal = Number(result.total) || 0;
+    rawDataPage = Math.min(Math.max(Number(result.page) || rawDataPage, 1), Math.max(1, Math.ceil(rawDataHistoryTotal / RAW_DATA_PAGE_SIZE)));
+    rawDataHistoryCompletedKey = rawDataHistoryViewKey();
+  } catch(error) {
+    rawDataHistoryRows = [];
+    rawDataHistoryTotal = 0;
+    rawDataHistoryError = error && error.message ? error.message : 'Saved samples could not be loaded';
     rawDataHistoryCompletedKey = key;
-    rawDataHistoryError = failures.length ? 'Historical data is unavailable for ' + failures.length + ' machine' + (failures.length === 1 ? '' : 's') + '; live records remain visible.' : '';
   } finally {
     rawDataHistoryLoading = false;
   }
 
-  if(currentPage === 'raw-data' && rawDataHistoryViewKey() === key){
+  if(currentPage === 'raw-data'){
     renderRawData(document.getElementById('page-content'));
   }
 }
-
 function rawDataPaginationHtml(totalPages){
   const current = Math.min(Math.max(rawDataPage,1), Math.max(totalPages,1));
   let html = '<button '+(current<=1?'disabled':'')+' onclick="setRawDataPage('+(current-1)+')" style="padding:6px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:'+(current<=1?'#475569':'#94a3b8')+';font-size:12px;cursor:'+(current<=1?'not-allowed':'pointer')+';">Prev</button>';
@@ -143,7 +123,7 @@ function rawDataPaginationHtml(totalPages){
   html += '<button '+(current>=totalPages?'disabled':'')+' onclick="setRawDataPage('+(current+1)+')" style="padding:6px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:'+(current>=totalPages?'#475569':'#94a3b8')+';font-size:12px;cursor:'+(current>=totalPages?'not-allowed':'pointer')+';">Next</button>';
   return html;
 }
-function setRawDataPage(page){ rawDataPage=page; renderRawData(document.getElementById('page-content')); }
+function setRawDataPage(page){ rawDataPage=page; rawDataLoadHistory(); }
 
 function rawDataTime(row){ const value=String(row.recordedAt || '').replace(' ','T'); const time=new Date(value).getTime(); return Number.isFinite(time)?time:null; }
 function rawDataUpdateDateLimits(){
@@ -174,7 +154,7 @@ function rawDataSetEndDate(value){
   if(input) input.value=rawDataFilters.end;
   rawDataUpdateDateLimits();
 }
-function rawDataFilteredRows(){ const clientDevices=scopedDevices(); const ids=new Set(clientDevices.map(function(dev){return dev.id;})); const startTime=rawDataFilters.start?new Date(rawDataFilters.start).getTime():null; const endTime=rawDataFilters.end?new Date(rawDataFilters.end).getTime():null; const rows=rawDataHistoryRows.length?window.BSF_MERGE_ROWS(rawDataHistoryRows, rawDataRows):rawDataRows; return rows.filter(function(row){ if(rawDataFilters.client&&!ids.has(row.device))return false; if(rawDataFilters.device&&row.device!==rawDataFilters.device)return false; const time=rawDataTime(row); if(startTime!==null&&time!==null&&time<startTime)return false; if(endTime!==null&&time!==null&&time>endTime)return false; return true; }); }
+function rawDataFilteredRows(){ return rawDataHistoryRows.slice(); }
 function applyRawDataFilter(){
   let start=(document.getElementById('raw-start-filter')||{}).value||'';
   let end=(document.getElementById('raw-end-filter')||{}).value||'';
@@ -186,12 +166,109 @@ function applyRawDataFilter(){
   rawDataFilters.start=start;
   rawDataFilters.end=end;
   rawDataPage=1;
-  renderRawData(document.getElementById('page-content'));
+  rawDataHistoryCompletedKey='';
+  rawDataLoadHistory();
 }
 function rawCsvCell(value){ return '"' + bsfSpreadsheetSafeText(value).replace(/"/g,'""') + '"'; }
 function rawDataDisplay(value){ return bsfEscapeHtml(value === undefined || value === null || value === '' ? '—' : value); }
 function rawDataToast(message){ let toast=document.getElementById('raw-data-toast'); if(!toast){toast=document.createElement('div');toast.id='raw-data-toast';document.body.appendChild(toast);} toast.textContent=message; toast.style.cssText='position:fixed;top:20px;right:20px;z-index:100000;padding:12px 18px;border-radius:8px;color:#e2e8f0;background:#065f46;border:1px solid #10b981;box-shadow:0 12px 30px rgba(0,0,0,.35);font-size:13px;font-weight:600;'; setTimeout(function(){if(toast)toast.remove();},3000); }
-function exportRawDataCsv(){ const rows=rawDataFilteredRows(); const head=['Recorded At','Device','State','Operating','Ferment','Run Time(min)','Weight(kg)','Total Add(kg)','Single Add(kg)','Total Discharge(kg)','Single Discharge(kg)','Discharge','Feed','Shredder','Mixing Motor','Fan','Zipper','Temp(°C)','Hot Plate Temp(°C)','Hum(%)','Energy(kWh)','Solar Power(kW)','CO2(ppm)','NO2(ppm)','H2S(ppm)','Signal']; const body=rows.map(function(row){return [row.recordedAt,row.device,row.deviceState,row.operatingStatus,row.fermentState,row.runTime,row.weight,row.totalAddMaterial,row.singleAddMaterial,row.totalDischarge,row.singleDischarge,row.discharge,row.feed,row.shredder,row.mixingMotor,row.fan,row.zipper,row.temperature,row.hotPlateTemp,row.humidity,row.energy,row.solarPower,row.co2,row.no2,row.h2s,row.signal];}); const csv=[head].concat(body).map(function(row){return row.map(rawCsvCell).join(',');}).join('\r\n'); const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const link=document.createElement('a'); link.href=url; link.download='bsf-raw-data-'+new Date().toISOString().slice(0,10)+'.csv'; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url); rawDataToast('Raw Data CSV export started'); }
+async function rawDataLoadAllForExport(){
+  const rows = [];
+  let page = 1;
+  let total = 0;
+  while(page <= 1000){
+    const result = await window.BSF_LOAD_RAW_SAMPLES(rawDataRequestOptions(page, RAW_DATA_PAGE_SIZE));
+    const batch = Array.isArray(result.rows) ? result.rows : [];
+    rows.push.apply(rows, batch);
+    total = Number(result.total) || 0;
+    if(!batch.length || rows.length >= total) break;
+    page += 1;
+  }
+  if(rows.length < total) throw new Error('The export contains too many records; narrow the date range.');
+  return rows;
+}
+async function exportRawDataCsv(){
+  let rows = rawDataFilteredRows();
+  if(window.BSF_LOAD_RAW_SAMPLES){
+    try {
+      rows = await rawDataLoadAllForExport();
+    } catch(error) {
+      rawDataToast(error && error.message ? error.message : 'Raw Data export failed');
+      return;
+    }
+  }
+  const compact = isClientScopedRole();
+  const head = compact
+    ? ['Recorded At','Device','State','Weight(kg)','Temp(°C)','Hum(%)']
+    : ['Recorded At','Device','State','Operating','Ferment','Run Time(min)','Weight(kg)','Total Add(kg)','Single Add(kg)','Total Discharge(kg)','Single Discharge(kg)','Discharge','Feed','Shredder','Mixing Motor','Fan','Zipper','Temp(°C)','Hot Plate Temp(°C)','Hum(%)','Energy(kWh)','Solar Power(kW)','CO2(ppm)','NO2(ppm)','H2S(ppm)','Signal'];
+  const body = rows.map(function(row){
+    const state = row.operatingStatus && row.operatingStatus !== '—' ? row.operatingStatus : row.deviceState;
+    return compact
+      ? [row.recordedAt,row.device,state,row.weight,row.temperature,row.humidity]
+      : [row.recordedAt,row.device,row.deviceState,row.operatingStatus,row.fermentState,row.runTime,row.weight,row.totalAddMaterial,row.singleAddMaterial,row.totalDischarge,row.singleDischarge,row.discharge,row.feed,row.shredder,row.mixingMotor,row.fan,row.zipper,row.temperature,row.hotPlateTemp,row.humidity,row.energy,row.solarPower,row.co2,row.no2,row.h2s,row.signal];
+  });
+  const csv = [head].concat(body).map(function(row){ return row.map(rawCsvCell).join(','); }).join('\r\n');
+  const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'bsf-raw-data-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  rawDataToast('Raw Data CSV export started');
+}
+
+
+
+function rawDataCompactTableMarkup(rows){
+  const th = 'padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;';
+  const td = 'padding:10px 16px;color:#e2e8f0;white-space:nowrap;';
+  return `<table class="raw-data-table" style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="background:#0f172a;border-bottom:1px solid #334155;">
+      <th style="${th}">Recorded At</th><th style="${th}">Device</th><th style="${th}">State</th>
+      <th style="${th}">Weight(kg)</th><th style="${th}">Temp(°C)</th><th style="${th}">Hum(%)</th>
+    </tr></thead>
+    <tbody>${rows.map((row,i)=>`<tr style="border-bottom:1px solid #334155;background:${i%2===0?'#1e293b':'#1a2332'};">
+      <td style="${td}">${rawDataDisplay(row.recordedAt)}</td>
+      <td style="${td}font-weight:600;">${rawDataDisplay(row.device)}</td>
+      <td style="padding:10px 16px;"><span style="padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;background:${row.deviceState==='Running'?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)'};color:${row.deviceState==='Running'?'#10b981':'#f59e0b'};">${rawDataDisplay(row.deviceState)}</span></td>
+      <td style="${td}">${rawDataDisplay(row.weight)}</td>
+      <td style="${td}">${rawDataDisplay(row.temperature)}</td>
+      <td style="${td}">${rawDataDisplay(row.humidity)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+function rawDataFullTableMarkup(rows){
+  const th = 'padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;';
+  const td = 'padding:10px 16px;color:#e2e8f0;white-space:nowrap;';
+  return `<table class="raw-data-table" style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="background:#0f172a;border-bottom:1px solid #334155;">
+      <th style="${th}">Recorded At</th><th style="${th}">Device</th><th style="${th}">State</th>
+      <th style="${th}">Operating</th><th style="${th}">Ferment</th><th style="${th}">Run Time(min)</th>
+      <th style="${th}">Weight(kg)</th><th style="${th}">Total Add(kg)</th><th style="${th}">Single Add(kg)</th>
+      <th style="${th}">Total Discharge(kg)</th><th style="${th}">Single Discharge(kg)</th><th style="${th}">Discharge</th>
+      <th style="${th}">Feed</th><th style="${th}">Shredder</th><th style="${th}">Mixing Motor</th><th style="${th}">Fan</th><th style="${th}">Zipper</th>
+      <th style="${th}">Temp(°C)</th><th style="${th}">Hot Plate Temp(°C)</th><th style="${th}">Hum(%)</th>
+      <th style="${th}">Energy(kWh)</th><th style="${th}">Solar Power(kW)</th><th style="${th}">CO₂(ppm)</th><th style="${th}">NO₂(ppm)</th><th style="${th}">H₂S(ppm)</th><th style="${th}">Signal</th>
+    </tr></thead>
+    <tbody>${rows.map((row,i)=>`<tr style="border-bottom:1px solid #334155;background:${i%2===0?'#1e293b':'#1a2332'};">
+      <td style="${td}">${rawDataDisplay(row.recordedAt)}</td><td style="${td}font-weight:600;">${rawDataDisplay(row.device)}</td>
+      <td style="padding:10px 16px;"><span style="padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;background:${row.deviceState==='Running'?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)'};color:${row.deviceState==='Running'?'#10b981':'#f59e0b'};">${rawDataDisplay(row.deviceState)}</span></td>
+      <td style="${td}">${rawDataDisplay(row.operatingStatus)}</td><td style="${td}">${rawDataDisplay(row.fermentState)}</td><td style="${td}">${rawDataDisplay(row.runTime)}</td>
+      <td style="${td}">${rawDataDisplay(row.weight)}</td><td style="${td}">${rawDataDisplay(row.totalAddMaterial)}</td><td style="${td}">${rawDataDisplay(row.singleAddMaterial)}</td>
+      <td style="${td}">${rawDataDisplay(row.totalDischarge)}</td><td style="${td}">${rawDataDisplay(row.singleDischarge)}</td><td style="${td}">${rawDataDisplay(row.discharge)}</td>
+      <td style="${td}">${rawDataDisplay(row.feed)}</td><td style="${td}">${rawDataDisplay(row.shredder)}</td><td style="${td}">${rawDataDisplay(row.mixingMotor)}</td><td style="${td}">${rawDataDisplay(row.fan)}</td><td style="${td}">${rawDataDisplay(row.zipper)}</td>
+      <td style="${td}">${rawDataDisplay(row.temperature)}</td><td style="${td}">${rawDataDisplay(row.hotPlateTemp)}</td><td style="${td}">${rawDataDisplay(row.humidity)}</td>
+      <td style="${td}">${rawDataDisplay(row.energy)}</td><td style="${td}">${rawDataDisplay(row.solarPower)}</td>
+      <td style="padding:10px 16px;color:${parseFloat(row.co2)>900?'#ef4444':'#e2e8f0'};font-weight:${parseFloat(row.co2)>900?'700':'400'};">${rawDataDisplay(row.co2)}</td>
+      <td style="padding:10px 16px;color:${parseFloat(row.no2)>0.18?'#ef4444':'#e2e8f0'};font-weight:${parseFloat(row.no2)>0.18?'700':'400'};">${rawDataDisplay(row.no2)}</td>
+      <td style="padding:10px 16px;color:${parseFloat(row.h2s)>0.25?'#ef4444':'#e2e8f0'};font-weight:${parseFloat(row.h2s)>0.25?'700':'400'};">${rawDataDisplay(row.h2s)}</td>
+      <td style="${td}">${row.signal === undefined || row.signal === null || row.signal === '' ? '—' : rawDataDisplay(row.signal) + '%'}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
 
 function populateRawDataFilters(clients, clientDevices){
   const clientSelect = document.getElementById('raw-client-filter');
@@ -226,18 +303,14 @@ function renderRawData(container){
   const clients = scopedClientNames();
   const clientScoped = isClientScopedRole();
   const clientDevices = scopedDevices();
-  const filteredRows = rawDataFilteredRows();
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / RAW_DATA_PAGE_SIZE));
+  const totalRows = rawDataHistoryTotal;
+  const totalPages = Math.max(1, Math.ceil(totalRows / RAW_DATA_PAGE_SIZE));
   if(rawDataPage > totalPages) rawDataPage = totalPages;
   if(rawDataPage < 1) rawDataPage = 1;
   const startIndex = (rawDataPage - 1) * RAW_DATA_PAGE_SIZE;
-  const pageRows = filteredRows.slice(startIndex, startIndex + RAW_DATA_PAGE_SIZE);
-  const displayRows = pageRows.map(function(row){
-    const safe = Object.assign({}, row);
-    ['recordedAt','device','deviceState','operatingStatus','fermentState','runTime','weight','totalAddMaterial','singleAddMaterial','totalDischarge','singleDischarge','discharge','feed','shredder','mixingMotor','fan','zipper','temperature','humidity','energy','solarPower','co2','no2','h2s','signal'].forEach(function(key){ safe[key] = bsfEscapeHtml(row[key]); });
-    return safe;
-  });
-  const rowSummary = filteredRows.length ? 'Showing ' + (startIndex + 1) + '-' + Math.min(startIndex + pageRows.length, filteredRows.length) + ' of ' + filteredRows.length + ' records' : 'No records';
+  const pageRows = rawDataHistoryRows;
+  const displayRows = pageRows.map(function(row){ return Object.assign({}, row); });
+  const rowSummary = totalRows ? 'Showing ' + (startIndex + 1) + '-' + Math.min(startIndex + pageRows.length, totalRows) + ' of ' + totalRows + ' saved samples' : (rawDataHistoryLoading ? 'Loading saved samples...' : 'No records');
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Raw Data</h2>
@@ -267,70 +340,7 @@ function renderRawData(container){
     ${rawDataHistoryStatusMarkup()}
     <div style="background:#1e293b;border-radius:12px;border:1px solid #334155;overflow:hidden;">
       <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead>
-            <tr style="background:#0f172a;border-bottom:1px solid #334155;">
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Recorded At</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Device</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">State</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Operating</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Ferment</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Run Time(min)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Weight(kg)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Total Add(kg)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Single Add(kg)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Total Discharge(kg)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Single Discharge(kg)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Discharge</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Feed</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Shredder</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Mixing Motor</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Fan</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Zipper</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Temp(°C)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Hot Plate Temp(°C)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Hum(%)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Energy(kWh)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Solar Power(kW)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">CO₂(ppm)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">NO₂(ppm)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">H₂S(ppm)</th>
-              <th style="padding:12px 16px;text-align:left;color:#94a3b8;font-weight:600;white-space:nowrap;">Signal</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${displayRows.map((row,i)=>`
-              <tr style="border-bottom:1px solid #334155;background:${i%2===0?'#1e293b':'#1a2332'};">
-                <td style="padding:10px 16px;color:#e2e8f0;white-space:nowrap;">${rawDataDisplay(row.recordedAt)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;font-weight:600;">${rawDataDisplay(row.device)}</td>
-                <td style="padding:10px 16px;"><span style="padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;background:${row.deviceState==='Running'?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)'};color:${row.deviceState==='Running'?'#10b981':'#f59e0b'};">${rawDataDisplay(row.deviceState)}</span></td>
-                <td style="padding:10px 16px;color:#94a3b8;">${rawDataDisplay(row.operatingStatus)}</td>
-                <td style="padding:10px 16px;color:#94a3b8;">${rawDataDisplay(row.fermentState)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.runTime)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.weight)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.totalAddMaterial)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.singleAddMaterial)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.totalDischarge)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.singleDischarge)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.discharge)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.feed)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.shredder)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.mixingMotor)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.fan)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.zipper)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.temperature)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.hotPlateTemp)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.humidity)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.energy)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${rawDataDisplay(row.solarPower)}</td>
-                <td style="padding:10px 16px;color:${parseFloat(row.co2)>900?'#ef4444':'#e2e8f0'};font-weight:${parseFloat(row.co2)>900?'700':'400'};">${rawDataDisplay(row.co2)}</td>
-                <td style="padding:10px 16px;color:${parseFloat(row.no2)>0.18?'#ef4444':'#e2e8f0'};font-weight:${parseFloat(row.no2)>0.18?'700':'400'};">${rawDataDisplay(row.no2)}</td>
-                <td style="padding:10px 16px;color:${parseFloat(row.h2s)>0.25?'#ef4444':'#e2e8f0'};font-weight:${parseFloat(row.h2s)>0.25?'700':'400'};">${rawDataDisplay(row.h2s)}</td>
-                <td style="padding:10px 16px;color:#e2e8f0;">${row.signal === undefined || row.signal === null || row.signal === '' ? '—' : rawDataDisplay(row.signal) + '%'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+        ${isClientScopedRole() ? rawDataCompactTableMarkup(displayRows) : rawDataFullTableMarkup(displayRows)}
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid #334155;">
         <span style="font-size:12px;color:#64748b;">${rowSummary}</span>

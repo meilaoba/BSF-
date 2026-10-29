@@ -68,6 +68,20 @@ test('keeps unbound vendor devices visible without inventing a client link', () 
   assert.equal(snapshot.devices[0].status, 'offline');
 });
 
+test('maps confirmed deviceOnline codes and humidity display scale', () => {
+  sandbox.window.BSF_RUNTIME_CONFIG = { humidityScale: 100 };
+  const snapshot = buildSnapshot([], [{
+    id: 'vendor-201',
+    serialNumber: 'SERIAL-201',
+    deviceName: 'Running Unit',
+    onlineCode: 2,
+    telemetry: { CabinTemp: 40, Humidity: 0.2, RealTimeWeight: 12, OperatingStatus: 2 }
+  }], []);
+  assert.equal(snapshot.devices[0].status, 'running');
+  assert.equal(snapshot.devices[0].humidity, 20);
+  sandbox.window.BSF_RUNTIME_CONFIG = {};
+});
+
 test('deduplicates a stored and live row with the same device timestamp', () => {
   const machine = {
     id: '11111111-1111-4111-8111-111111111111',
@@ -287,7 +301,7 @@ test('preserves every vendor telemetry field required by the full device view', 
   assert.equal(snapshot.devices.length, 1);
   assert.deepEqual({ ...snapshot.devices[0].telemetry }, telemetry);
   assert.equal(snapshot.devices[0].realTimeWeight, 10.8);
-  assert.equal(snapshot.devices[0].totalAddMaterial, 0.1);
+  assert.equal(snapshot.devices[0].totalAddMaterial, 100);
   assert.equal(snapshot.devices[0].runTime, 2);
   assert.equal(snapshot.devices[0].vendorDeviceType, 25);
   assert.equal(snapshot.devices[0].vendorTemplateName, 'Mitsubishi_SS_CZ');
@@ -302,9 +316,60 @@ test('preserves every vendor telemetry field required by the full device view', 
   assert.equal(snapshot.rows[0].weight, 10.8);
   assert.equal(snapshot.rows[0].temperature, 40);
   assert.equal(snapshot.rows[0].hotPlateTemp, 38.2);
-  assert.equal(snapshot.rows[0].totalAddMaterial, 0.1);
+  assert.equal(snapshot.rows[0].totalAddMaterial, 100);
   assert.equal(snapshot.rows[0].singleAddMaterial, 0.2);
   assert.equal(snapshot.rows[0].singleDischarge, 2.6);
   assert.equal(snapshot.rows[0].runTime, 2);
   assert.equal(snapshot.rows[0].operatingStatus, 'Standby');
+});
+
+test('maps scheduled raw samples to the compact six-column contract with real fields only', () => {
+  const rawSampleRow = sandbox.window.BSF_BACKEND_DATA.rawSampleRow;
+  const row = rawSampleRow({
+    id: 'sample-1',
+    deviceId: 'vendor-300',
+    capturedAt: '2026-10-28T14:58:46+08:00',
+    normalized: {
+      cabinTempC: 40.9,
+      humidityPct: 0.2,
+      realTimeWeightKg: 10.8,
+      operatingStatusCode: 1
+    },
+    telemetry: {
+      HotPlateTemp: 38.7,
+      TotalAddMaterial: 0.1,
+      TotalDischarge: 0,
+      RunTime: 2
+    }
+  }, {
+    id: 'KW-300',
+    vendorDeviceId: 'vendor-300',
+    status: 'standby'
+  });
+
+  assert.equal(row.recordedAt, '2026-10-28 14:58:46');
+  assert.equal(row.device, 'KW-300');
+  assert.equal(row.deviceState, 'Standby');
+  assert.equal(row.weight, 10.8);
+  assert.equal(row.temperature, 40.9);
+  assert.equal(row.humidity, 0.2);
+  assert.equal(row.totalAddMaterial, 100);
+  assert.equal(row.hotPlateTemp, 38.7);
+  assert.equal(row.network, 'Scheduled collector');
+});
+
+test('leaves missing raw sample fields empty instead of fabricating values', () => {
+  const rawSampleRow = sandbox.window.BSF_BACKEND_DATA.rawSampleRow;
+  const row = rawSampleRow({
+    deviceId: 'vendor-301',
+    capturedAt: '2026-10-28T14:50:00+08:00',
+    normalized: { operatingStatusCode: 1 },
+    telemetry: {}
+  }, { id: 'KW-301', vendorDeviceId: 'vendor-301' });
+
+  assert.equal(row.weight, '—');
+  assert.equal(row.temperature, '—');
+  assert.equal(row.humidity, '—');
+  assert.equal(row.hotPlateTemp, '—');
+  assert.equal(row.totalAddMaterial, '—');
 });

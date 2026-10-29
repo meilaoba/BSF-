@@ -13,6 +13,11 @@ function finiteNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function tonsToKg(value) {
+  const tons = finiteNumber(value);
+  return tons === null ? null : tons * 1000;
+}
+
 function boundedNumber(value, min, max) {
   const number = finiteNumber(value);
   return number !== null && number >= min && number <= max ? number : null;
@@ -88,9 +93,9 @@ export function mapTelemetryInput(input, { receivedAt = new Date() } = {}) {
     humidityPct: boundedNumber(firstDefined(payload.Humidity, payload.humidity), 0, 100),
     realTimeWeightKg: finiteNumber(firstDefined(payload.RealTimeWeight, payload.realTimeWeight, payload.weight)),
     singleAddedMaterialKg: finiteNumber(firstDefined(payload.SingleAddMaterial, payload.singleAddMaterial)),
-    totalAddedMaterialKg: finiteNumber(firstDefined(payload.TotalAddMaterial, payload.totalAddMaterial)),
+    totalAddedMaterialKg: tonsToKg(firstDefined(payload.TotalAddMaterial, payload.totalAddMaterial)),
     singleDischargeKg: finiteNumber(firstDefined(payload.SingleDischarge, payload.singleDischarge)),
-    totalDischargeKg: finiteNumber(firstDefined(payload.TotalDischarge, payload.totalDischarge, payload.OtalUnloadingWeight)),
+    totalDischargeKg: tonsToKg(firstDefined(payload.TotalDischarge, payload.totalDischarge, payload.OtalUnloadingWeight)),
     runTimeMin: finiteNumber(firstDefined(payload.RunTime, payload.runTime)),
     operatingStatusCode: integer(firstDefined(payload.OperatingStatus, payload.operatingStatusCode)),
     operatingStatus: statusText(firstDefined(payload.OperatingStatus, payload.operatingStatus)),

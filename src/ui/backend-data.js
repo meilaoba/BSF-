@@ -76,9 +76,9 @@ function bsfList(value, key){
 
 function bsfStatusFromDeviceState(state){
   const value = Number(state);
-  if(value === 1) return 'running';
-  if(value === 2) return 'standby';
-  if(value === 3) return 'offline';
+  if(value === 0) return 'offline';
+  if(value === 1) return 'standby';
+  if(value === 2) return 'running';
   return 'online';
 }
 
@@ -111,15 +111,30 @@ function bsfOperatingStateFromCode(value){
   return null;
 }
 
+function bsfTelemetryKilograms(data, rawNames, kgNames){
+  const kgValue = bsfField(data, kgNames);
+  if(kgValue !== undefined && kgValue !== null && kgValue !== '') return bsfNumber(kgValue);
+  const tonnes = bsfNumber(bsfField(data, rawNames));
+  return tonnes === null ? null : tonnes * 1000;
+}
+
+function bsfHumidityPercent(value){
+  const number = bsfNumber(value);
+  if(number === null) return null;
+  const configured = window.BSF_RUNTIME_CONFIG && Number(window.BSF_RUNTIME_CONFIG.humidityScale);
+  const scale = Number.isFinite(configured) && configured > 0 ? configured : 1;
+  return number * scale;
+}
+
 function bsfReadTelemetry(data){
   return {
     cabinTempC: bsfNumber(bsfField(data, ['CabinTemp', 'cabinTemp', 'cabin_temp', 'cabin_temp_c', 'temperature'])),
     hotPlateTempC: bsfNumber(bsfField(data, ['HotPlateTemp', 'hotPlateTemp', 'hot_plate_temp', 'hot_plate_temp_c'])),
-    humidityPct: bsfNumber(bsfField(data, ['Humidity', 'humidity', 'humidity_pct'])),
+    humidityPct: bsfHumidityPercent(bsfField(data, ['Humidity', 'humidity', 'humidity_pct'])),
     realTimeWeightKg: bsfNumber(bsfField(data, ['RealTimeWeight', 'realTimeWeight', 'real_time_weight', 'real_time_weight_kg', 'weight'])),
-    totalAddedMaterialKg: bsfNumber(bsfField(data, ['TotalAddMaterial', 'totalAddMaterial', 'total_added_material_kg'])),
+    totalAddedMaterialKg: bsfTelemetryKilograms(data, ['TotalAddMaterial', 'totalAddMaterial'], ['total_added_material_kg']),
     singleAddedMaterialKg: bsfNumber(bsfField(data, ['SingleAddMaterial', 'singleAddMaterial', 'single_added_material_kg'])),
-    totalDischargeKg: bsfNumber(bsfField(data, ['TotalDischarge', 'totalDischarge', 'total_discharge_kg', 'OtalUnloadingWeight'])),
+    totalDischargeKg: bsfTelemetryKilograms(data, ['TotalDischarge', 'totalDischarge', 'OtalUnloadingWeight'], ['total_discharge_kg']),
     singleDischargeKg: bsfNumber(bsfField(data, ['SingleDischarge', 'singleDischarge', 'single_discharge_kg'])),
     dischargeCode: bsfNumber(bsfField(data, ['Discharge', 'discharge', 'discharge_code'])),
     runTimeMin: bsfNumber(bsfField(data, ['RunTime', 'runTime', 'run_time_min'])),
@@ -159,10 +174,12 @@ function bsfResolveStatus(machine, vendor, reading, stored){
   if(machineStatus === 'maintenance') return 'standby';
   const onlineCode = bsfNumber(bsfField(vendor, ['onlineCode', 'deviceOnline']));
   if(onlineCode === 0) return 'offline';
+  if(onlineCode === 1) return 'standby';
+  if(onlineCode === 2) return 'running';
   const deviceState = bsfField(stored, ['device_state', 'deviceState']);
   if(deviceState !== undefined) return bsfStatusFromDeviceState(deviceState);
   if(reading.operatingStatusCode !== null) return bsfOperatingStateFromCode(reading.operatingStatusCode) || 'online';
-  return onlineCode === 1 ? 'online' : 'online';
+  return 'online';
 }
 
 function bsfLastUpdate(machine, vendor, stored, reading){
@@ -171,6 +188,7 @@ function bsfLastUpdate(machine, vendor, stored, reading){
     bsfField(telemetry, ['timestamp', 'recordedAt', 'recorded_at', 'updateTime', 'dataTime']) ||
     bsfField(stored, ['recorded_at', 'recordedAt']) ||
     bsfField(machine, ['last_seen_at']) ||
+    bsfField(vendor, ['recordedAt', 'recorded_at', 'latestTelemetryAt']) ||
     bsfField(vendor, ['last_synced_at', 'lastSyncedAt'])
   );
 }
@@ -461,7 +479,7 @@ async function bsfFetchSnapshot(limit){
   if(!api) throw new Error('Backend API is unavailable');
   const results = await Promise.allSettled([
     api.getMachines({ limit:1000 }),
-    api.getVendorDevices({ pageNum:1, pageSize:100 }),
+    api.getVendorDevices({ all:true, pageNum:1, pageSize:100 }),
     api.getDeviceData({ limit:Math.max(1, Math.min(Number(limit) || 1000, 1000)) })
   ]);
   if(results.every(function(result){ return result.status === 'rejected'; })) throw results[0].reason;
@@ -544,6 +562,84 @@ function bsfHistoryRow(item, device, groupBy){
   };
 }
 
+function bsfRawSampleRow(sample, device){
+  const telemetry = bsfTelemetryObject(bsfField(sample, ['telemetry']) || {});
+  const normalized = bsfField(sample, ['normalized']) || {};
+  const data = Object.assign({}, telemetry, {
+    cabin_temp_c:bsfField(normalized, ['cabinTempC']),
+    humidity_pct:bsfField(normalized, ['humidityPct']),
+    real_time_weight_kg:bsfField(normalized, ['realTimeWeightKg']),
+    operating_status_code:bsfField(normalized, ['operatingStatusCode'])
+  });
+  const reading = bsfReadTelemetry(data);
+  const rawRecordedAt = bsfField(sample, ['recordedAt', 'capturedAt']);
+  const recordedAt = bsfDate(rawRecordedAt);
+  if(!recordedAt) return null;
+  const state = bsfOperatingStateFromCode(reading.operatingStatusCode) || (device && device.status) || 'offline';
+  return {
+    recordedAt:bsfFormatTime(recordedAt),
+    receivedAtSeconds:bsfEpochSeconds(recordedAt),
+    sourceTimestampSeconds:bsfEpochSeconds(rawRecordedAt),
+    device:(device && device.id) || bsfSafeIdentifier(bsfField(sample, ['deviceId'])),
+    deviceState:bsfRawState(state),
+    operatingStatus:reading.operatingStatus,
+    fermentState:reading.fermentState,
+    feed:bsfDisplay(reading.feedCode),
+    shredder:bsfDisplay(reading.shredderCode),
+    mixingMotor:bsfDisplay(reading.mixingMotorCode),
+    fan:bsfDisplay(reading.fanCode),
+    zipper:bsfDisplay(reading.zipperCode),
+    weight:bsfDisplay(reading.realTimeWeightKg),
+    totalAddMaterial:bsfDisplay(reading.totalAddedMaterialKg),
+    singleAddMaterial:bsfDisplay(reading.singleAddedMaterialKg),
+    totalDischarge:bsfDisplay(reading.totalDischargeKg),
+    singleDischarge:bsfDisplay(reading.singleDischargeKg),
+    discharge:bsfDisplay(reading.dischargeCode),
+    runTime:bsfDisplay(reading.runTimeMin),
+    temperature:bsfDisplay(reading.cabinTempC),
+    hotPlateTemp:bsfDisplay(reading.hotPlateTempC),
+    humidity:bsfDisplay(reading.humidityPct),
+    energy:bsfDisplay(reading.energyKwh),
+    solarPower:bsfDisplay(reading.solarPowerKw),
+    co2:bsfDisplay(reading.co2Ppm),
+    no2:bsfDisplay(reading.no2Ppm),
+    h2s:bsfDisplay(reading.h2sPpm),
+    gps:'\u2014',
+    network:'Scheduled collector',
+    signal:reading.signalPct,
+    vendorDeviceId:bsfField(sample, ['deviceId']) || (device && device.vendorDeviceId) || '',
+    history:true,
+    volatile:false
+  };
+}
+
+async function bsfLoadRawSamples(options){
+  const api = await bsfWaitForBackendApi();
+  if(!api || typeof api.getRawSamples !== 'function') throw new Error('Raw sample API is unavailable');
+  const response = await api.getRawSamples({
+    page:options && options.page || 1,
+    pageSize:options && options.pageSize || 30,
+    start:options && options.start,
+    end:options && options.end,
+    clientId:options && options.clientId || undefined,
+    machineId:options && options.machineId || undefined
+  });
+  const devices = options && Array.isArray(options.devices) ? options.devices : [];
+  const byVendorId = new Map();
+  devices.forEach(function(device){
+    if(device.vendorDeviceId) byVendorId.set(String(device.vendorDeviceId), device);
+  });
+  const items = bsfList(response, 'items');
+  const rows = items.map(function(item){
+    return bsfRawSampleRow(item, byVendorId.get(String(bsfField(item, ['deviceId']) || '')));
+  }).filter(Boolean);
+  return {
+    rows:rows,
+    total:Number(bsfField(response, ['total'])) || 0,
+    page:Number(bsfField(response, ['page'])) || (options && options.page) || 1,
+    pageSize:Number(bsfField(response, ['pageSize'])) || (options && options.pageSize) || 30
+  };
+}
 function bsfMergeRows(baseRows, extraRows){
   const rows = new Map();
   baseRows.forEach(function(row){
@@ -573,6 +669,7 @@ async function bsfLoadVendorHistory(options){
 }
 
 window.BSF_LOAD_VENDOR_HISTORY = bsfLoadVendorHistory;
+window.BSF_LOAD_RAW_SAMPLES = bsfLoadRawSamples;
 window.BSF_MERGE_ROWS = bsfMergeRows;
 
 const RAW_HISTORY_STORAGE_PREFIX = 'bsf.delivery.rawHistory.v1';
@@ -742,6 +839,7 @@ window.BSF_BACKEND_DATA = {
   readTelemetry:bsfReadTelemetry,
   buildSnapshot:bsfBuildSnapshot,
   historyRow:bsfHistoryRow,
+  rawSampleRow:bsfRawSampleRow,
   mergeRows:bsfMergeRows,
   appendRows:bsfAppendHistoryRows,
   rowValueFingerprint:bsfRowValueFingerprint

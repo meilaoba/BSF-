@@ -42,9 +42,13 @@ function candidatesFromMessage(message) {
   if (message.data && typeof message.data === 'object' && !Array.isArray(message.data)) {
     return [{
       id: message.deviceId ?? message.deviceSerialNum ?? message.id,
+      deviceName: message.deviceName,
       deviceSerialNum: message.deviceSerialNum,
       deviceOnline: message.deviceOnline,
       data: message.data,
+      input: message.input,
+      output: message.output,
+      recordedAt: message.recordedAt ?? message.timestamp ?? message.updateTime,
     }];
   }
   if (message.id !== undefined && message.data !== undefined) return [message];
@@ -69,12 +73,18 @@ export function normalizeRealtimeMessage(message, devices) {
     const device = (id && byId.get(id)) || (serial && bySerial.get(serial));
     if (!device) continue;
     const telemetry = sanitizeTelemetry(candidate.data);
-    if (!telemetry) continue;
+    const input = sanitizeTelemetry(candidate.input);
+    const output = sanitizeTelemetry(candidate.output);
+    if (!telemetry && !input && !output) continue;
     normalized.push({
       id: cleanIdentifier(device.id),
+      deviceName: cleanIdentifier(candidate.deviceName ?? device.deviceName, 300),
       serialNumber: cleanIdentifier(device.serialNumber),
       onlineCode: finiteInteger(candidate.deviceOnline),
-      telemetry,
+      recordedAt: cleanIdentifier(candidate.recordedAt, 80),
+      telemetry: telemetry || {},
+      input: input || {},
+      output: output || {},
     });
   }
   return normalized;
@@ -200,7 +210,12 @@ export function mergeRealtimeDevices(records, liveByDeviceId) {
     return {
       ...record,
       onlineCode: live.onlineCode ?? record.onlineCode,
-      telemetry: { ...(record.telemetry || {}), ...live.telemetry },
+      deviceName: record.deviceName || live.deviceName || record.deviceName,
+      telemetry: { ...(record.telemetry || {}), ...(live.telemetry || {}) },
+      input: { ...(record.input || {}), ...(live.input || {}) },
+      output: { ...(record.output || {}), ...(live.output || {}) },
+      recordedAt: live.recordedAt || record.recordedAt || now,
+      realtimeCapturedAt: now,
       lastSyncedAt: now,
       realtime: true,
     };

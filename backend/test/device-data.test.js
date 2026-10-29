@@ -53,9 +53,9 @@ test('maps vendor API telemetry fields without coercing invalid values', () => {
   assert.equal(mapped.hotPlateTempC, 49.75);
   assert.equal(mapped.humidityPct, null);
   assert.equal(mapped.realTimeWeightKg, 18.25);
-  assert.equal(mapped.totalAddedMaterialKg, 6.053);
+  assert.equal(mapped.totalAddedMaterialKg, 6053);
   assert.equal(mapped.singleAddedMaterialKg, 1.2);
-  assert.equal(mapped.totalDischargeKg, -3.2);
+  assert.equal(mapped.totalDischargeKg, -3200);
   assert.equal(mapped.singleDischargeKg, -0.1);
   assert.equal(mapped.fermentRunTimeMin, 120);
   assert.equal(mapped.runTimeMin, 15);

@@ -4,11 +4,40 @@ import { readJsonBody, sendOk } from '../lib/http.js';
 import { optionalInt, optionalString } from '../lib/validate.js';
 import { getVendorAccessToken } from '../middleware/session.js';
 import { requireApiKey } from '../middleware/auth.js';
-import { listVendorDevices } from '../providers/vendor-devices.js';
+import { listAllVendorDevices, listVendorDevices } from '../providers/vendor-devices.js';
 import { fetchVendorRealtimeDevices, mergeRealtimeDevices } from '../providers/vendor-realtime.js';
 import { aggregateHistoryRows, fetchVendorHistory, validateHistoryRange } from '../providers/vendor-history.js';
 import { upsertVendorDevices } from '../services/device-data.js';
+import {
+  loadLatestVendorTelemetrySnapshots,
+  vendorAccountIdForSession,
+} from '../services/vendor-analytics.js';
 
+export function mergeLatestVendorTelemetry(devices, latestByDevice) {
+  return devices.map((device) => {
+    const latest = latestByDevice.get(String(device.id));
+    if (!latest) return device;
+    return {
+      ...device,
+      telemetry: { ...(latest.telemetry || {}), ...(device.telemetry || {}) },
+      input: { ...(latest.input || {}), ...(device.input || {}) },
+      output: { ...(latest.output || {}), ...(device.output || {}) },
+      recordedAt: device.recordedAt || latest.recordedAt || latest.capturedAt,
+      latestTelemetryAt: latest.capturedAt,
+    };
+  });
+}
+
+export function scopedDeviceForRole(device, role) {
+  if (role === 'master_admin') return device;
+  return {
+    ...device,
+    // Raw Data restricts its six visible columns in the UI. Machine cards need
+    // the full authorized telemetry snapshot, so do not silently remove fields.
+    input: undefined,
+    output: undefined,
+  };
+}
 export function registerVendorDeviceRoutes(router) {
   // Historical temperature/humidity is read-only and scoped through the same
   // vendor token. Requests are matched against the authorized device list.
@@ -27,8 +56,8 @@ export function registerVendorDeviceRoutes(router) {
       throw new ValidationError('groupBy must be raw, hour, day, or month');
     }
     const range = validateHistoryRange(start, end);
-    if (groupBy === 'raw' && range.span > 30) {
-      throw new ValidationError('Raw history cannot span more than 30 days');
+    if (groupBy === 'raw' && range.span > 60) {
+      throw new ValidationError('Raw history cannot span more than 60 days');
     }
 
     const token = await getVendorAccessToken(req.auth);
@@ -70,9 +99,11 @@ export function registerVendorDeviceRoutes(router) {
     const equipName = optionalString(url.searchParams.get('equipName'), 'equipName', { max: 200 });
     const deviceAddress = optionalString(url.searchParams.get('deviceAddress'), 'deviceAddress', { max: 20 });
     const deviceOnline = optionalInt(url.searchParams.get('deviceOnline'), 'deviceOnline', { min: 0 });
+    const all = ['1', 'true', 'yes'].includes(String(url.searchParams.get('all') || '').toLowerCase());
 
     const token = await getVendorAccessToken(req.auth);
-    const result = await listVendorDevices({
+    const listDevices = all ? listAllVendorDevices : listVendorDevices;
+    const result = await listDevices({
       token,
       pageNum,
       pageSize,
@@ -93,7 +124,21 @@ export function registerVendorDeviceRoutes(router) {
       }
     }
 
-    sendOk(res, { devices }, result.pagination);
+    const vendorAccountId = vendorAccountIdForSession(req.auth);
+    if (vendorAccountId && devices.length) {
+      try {
+        const latest = await loadLatestVendorTelemetrySnapshots({
+          vendorAccountId,
+          deviceIds: devices.map((device) => String(device.id)),
+        });
+        devices = mergeLatestVendorTelemetry(devices, latest);
+      } catch (error) {
+        console.warn('[vendor] latest saved telemetry unavailable:', error.code || 'TELEMETRY_FALLBACK_UNAVAILABLE');
+      }
+    }
+
+    const scopedDevices = devices.map((device) => scopedDeviceForRole(device, req.auth.user.role));
+    sendOk(res, { devices: scopedDevices }, result.pagination);
   });
 
   // Explicit, auditable synchronization. It mirrors vendor records only and

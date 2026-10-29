@@ -1,6 +1,10 @@
 let reportFilters = { client:'', device:'', period:'monthly', month:new Date().getMonth()+1, year:new Date().getFullYear() };
 let reportFoodWasteData = [];
 let reportYearManuallySelected = false;
+let reportApiData = null;
+let reportApiKey = '';
+let reportApiRequestKey = '';
+let reportApiRequestPromise = null;
 
 function syncReportCalendarYear(){
   const currentYear = new Date().getFullYear();
@@ -20,20 +24,80 @@ function reportPad(value){
 }
 
 function reportPeriodRange(){
-  const year = Number(reportFilters.year) || new Date().getFullYear();
-  if(reportFilters.period === 'yearly'){
-    return { start:year + '-01-01', end:year + '-12-31' };
+  if(window.BSF_METRICS && typeof window.BSF_METRICS.periodRange === 'function'){
+    const range = window.BSF_METRICS.periodRange({
+      period:reportFilters.period,
+      year:reportFilters.year,
+      month:reportFilters.month,
+      now:new Date()
+    });
+    return { start:range.start, end:range.end };
   }
+  const year = Number(reportFilters.year) || new Date().getFullYear();
+  if(reportFilters.period === 'yearly') return { start:year + '-01-01', end:year + '-12-31' };
   const month = Math.min(12, Math.max(1, Number(reportFilters.month) || 1));
   const lastDay = new Date(year, month, 0).getDate();
   const monthText = reportPad(month);
   return { start:year + '-' + monthText + '-01', end:year + '-' + monthText + '-' + reportPad(lastDay) };
 }
 
+function reportRequestKey(){
+  return [reportFilters.period, reportFilters.year, reportFilters.month, reportFilters.client, reportFilters.device].join('|');
+}
+
+function reportSelectedMachine(){
+  if(reportFilters.device) return reportFilters.device;
+  if(isUserRole()){
+    const device = scopedDevices()[0];
+    return device ? device.id : '';
+  }
+  return '';
+}
+
+function reportMetricNumber(value){
+  if(value === undefined || value === null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function reportMetricModel(){
+  const hasApiData = reportApiData && reportApiKey === reportRequestKey();
+  const summary = hasApiData && reportApiData.summary ? reportApiData.summary : {};
+  return {
+    wasteKg:reportMetricNumber(summary.wasteKg),
+    ghgKg:reportMetricNumber(summary.ghgKg),
+    energyKwh:reportMetricNumber(summary.energyKwh),
+    fertilizerKg:reportMetricNumber(summary.fertilizerKg),
+    avgTempC:reportMetricNumber(summary.avgTempC),
+    avgHumidityPct:reportMetricNumber(summary.avgHumidityPct),
+    standbyDeviceDays:reportMetricNumber(summary.standbyDeviceDays),
+    observedDeviceDays:reportMetricNumber(summary.observedDeviceDays),
+    empty:!hasApiData || summary.pointCount === 0
+  };
+}
+
+function reportMetricDisplay(value, unit){
+  return value === null || value === undefined ? '—' : Number(value).toFixed(1);
+}
+
+function reportShowsEnergy(){
+  return !isClientScopedRole();
+}
+
+function reportDisplayTitle(){
+  const dimension = reportFilters.device || isUserRole() ? 'Machine' : 'Client';
+  return dimension + ' ' + reportPeriodTitle() + ' Report';
+}
+
 function reportRowsForPeriod(){
   const range = reportPeriodRange();
   const visibleIds = new Set(scopedDevices().map(function(device){ return device.id; }));
-  return rawDataRows.filter(function(row){
+  const historyRows = window.BSF_DEVICE_HISTORY_ROWS || [];
+  const storedRows = (window.BSF_GRAPH_HISTORY_ROWS && window.BSF_GRAPH_HISTORY_ROWS.length)
+    ? window.BSF_GRAPH_HISTORY_ROWS
+    : rawDataRows;
+  const sourceRows = window.BSF_MERGE_ROWS ? window.BSF_MERGE_ROWS(historyRows, storedRows) : historyRows.concat(storedRows);
+  return sourceRows.filter(function(row){
     if(!visibleIds.has(row.device)) return false;
     const dateText = String(row.recordedAt || '').slice(0,10);
     if(!dateText || dateText < range.start || dateText > range.end) return false;
@@ -68,7 +132,9 @@ function reportFilterOptions(){
   const clientOptions = (clientScoped ? '' : '<option value="">All Clients</option>') + clients.map(function(client){
     return '<option value="' + bsfEscapeHtml(client) + '"' + (reportFilters.client===client?' selected':'') + '>' + bsfEscapeHtml(client) + '</option>';
   }).join('');
-  const availableDevices = scopedDevices();
+  const availableDevices = scopedDevices().filter(function(dev){
+    return !reportFilters.client || dev.client === reportFilters.client;
+  });
   const deviceOptions = (isUserRole() ? '' : '<option value="">All Devices</option>') + availableDevices.map(function(dev){
     return '<option value="' + bsfEscapeHtml(dev.id) + '"' + (reportFilters.device===dev.id?' selected':'') + '>' + bsfEscapeHtml(dev.id) + '</option>';
   }).join('');
@@ -76,6 +142,7 @@ function reportFilterOptions(){
 }
 function reportFoodWasteValue(row){
   const raw = row && (row.value !== undefined ? row.value : row.waste !== undefined ? row.waste : row.weight);
+  if(raw === null || raw === undefined || String(raw).trim() === '') return null;
   const value = Number(raw);
   return Number.isFinite(value) ? value : null;
 }
@@ -186,12 +253,47 @@ function renderReportFoodWasteChart(){
 }
 
 async function loadReportFoodWaste(){
-  if(!window.BSF_API || !window.BSF_API_CONFIG || !window.BSF_API_CONFIG.enabled){ reportFoodWasteData = []; renderReportFoodWasteChart(); return; }
-  try {
-    const data = await window.BSF_API.getFoodWaste({period:reportFilters.period, year:reportFilters.year, month:reportFilters.period === 'monthly' ? reportFilters.month : undefined, clientId:reportFilters.client || undefined, deviceId:reportFilters.device || undefined});
-    reportFoodWasteData = data && (data.items || data.list) ? (data.items || data.list) : (Array.isArray(data) ? data : []);
-  } catch(error) { reportFoodWasteData = []; }
-  renderReportFoodWasteChart();
+  if(!window.BSF_API || !window.BSF_API_CONFIG || !window.BSF_API_CONFIG.enabled){
+    reportApiData = null;
+    reportApiKey = '';
+    reportFoodWasteData = [];
+    reportApiRequestPromise = null;
+    renderReportFoodWasteChart();
+    return null;
+  }
+  const key = reportRequestKey();
+  if(reportApiKey === key && reportApiData) return reportApiData;
+  if(reportApiRequestKey === key && reportApiRequestPromise) return reportApiRequestPromise;
+  reportApiRequestKey = key;
+  reportApiRequestPromise = (async function(){
+    const params = {
+      period:reportFilters.period,
+      year:reportFilters.year,
+      month:reportFilters.period === 'monthly' ? reportFilters.month : undefined,
+      clientId:reportFilters.client || undefined,
+      machineId:reportSelectedMachine() || undefined
+    };
+    try {
+      const data = await window.BSF_API.getReports(params);
+      if(key !== reportRequestKey()) return null;
+      reportApiData = data && typeof data === 'object' && !Array.isArray(data) ? data : { items:[] };
+      reportApiKey = key;
+      reportFoodWasteData = reportApiData.items || reportApiData.list || [];
+    } catch(error) {
+      if(key === reportRequestKey()){
+        reportApiData = null;
+        reportApiKey = '';
+        reportFoodWasteData = [];
+      }
+    } finally {
+      if(reportApiRequestKey === key) reportApiRequestPromise = null;
+    }
+    if(currentPage === 'reports' && reportRequestKey() === key){
+      renderReports(document.getElementById('page-content'), { skipLoad:true });
+    }
+    return reportApiData;
+  })();
+  return reportApiRequestPromise;
 }
 
 function setReportFilter(key, value){
@@ -201,38 +303,44 @@ function setReportFilter(key, value){
   renderReports(document.getElementById('page-content'));
 }
 
-function renderReports(container){
+function renderReports(container, options){
   syncReportCalendarYear();
   const range = reportPeriodRange();
-  const rangeStart = new Date(range.start + 'T00:00:00');
-  const rangeEnd = new Date(range.end + 'T00:00:00');
-  const reportDays = Math.max(1, Math.round((rangeEnd - rangeStart) / 86400000) + 1);
-  const periodRows = reportRowsForPeriod();
-  const reportData = window.BSF_REPORT_DATA || {};
-  const dailyFertilizerRaw = reportData.dailyFertilizer !== undefined ? reportData.dailyFertilizer : window.BSF_REPORT_DAILY_FERTILIZER;
-  const dailyFertilizer = Number(dailyFertilizerRaw);
-  const fertilizerValue = Number.isFinite(dailyFertilizer) ? (dailyFertilizer * reportDays).toFixed(1) : '—';
-  const validTemps = periodRows.map(function(row){ return Number(row.temperature); }).filter(Number.isFinite);
-  const validHumidity = periodRows.map(function(row){ return Number(row.humidity); }).filter(Number.isFinite);
-  const avgTemp = validTemps.length ? (validTemps.reduce(function(a,b){ return a+b; },0) / validTemps.length).toFixed(1) : '—';
-  const avgHumidity = validHumidity.length ? (validHumidity.reduce(function(a,b){ return a+b; },0) / validHumidity.length).toFixed(1) : '—';
-  const reportClient = reportFilters.client || (devices[0] ? devices[0].client : 'Unassigned');
-  const reportDevice = reportFilters.device || 'All Devices';
+  const metrics = reportMetricModel();
+  const scopedDevice = scopedDevices()[0] || null;
+  const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'All Clients');
+  const reportDevice = reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'All Devices');
   const reportPeriod = range.start + ' - ' + range.end;
-  const options = reportFilterOptions();
-  const title = reportPeriodTitle() + ' Report';
+  const reportOptions = reportFilterOptions();
+  const title = reportDisplayTitle();
   const chartTitle = reportFilters.period === 'monthly' ? 'Daily Food Waste In (KG)' : 'Monthly Food Waste In (KG)';
+  const wasteValue = reportMetricDisplay(metrics.wasteKg);
+  const ghgValue = reportMetricDisplay(metrics.ghgKg);
+  const energyValue = reportMetricDisplay(metrics.energyKwh);
+  const fertilizerValue = reportMetricDisplay(metrics.fertilizerKg);
+  const avgTemp = reportMetricDisplay(metrics.avgTempC);
+  const avgHumidity = reportMetricDisplay(metrics.avgHumidityPct);
+  const energyCard = reportShowsEnergy() ? card('Energy Consumed', energyValue, 'kWh', '#ef4444') : '';
+  const alertSummaryMarkup = isClientScopedRole() ? '' : `
+    <div style="margin-bottom:24px;">
+      <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">Alert Summary</h3>
+      <div style="background:#0f172a;border-radius:8px;padding:16px;border:1px solid #334155;">
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155;"><span style="color:#e2e8f0;font-size:13px;">Critical</span><span style="color:#64748b;font-weight:600;">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155;"><span style="color:#e2e8f0;font-size:13px;">Warning</span><span style="color:#64748b;font-weight:600;">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="color:#e2e8f0;font-size:13px;">Info</span><span style="color:#64748b;font-weight:600;">—</span></div>
+      </div>
+    </div>`;
 
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Report Generation</h2>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;align-items:center;">
-      ${isClientScopedRole() ? clientScopeBadge() : '<select onchange="setReportFilter(\'client\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + options.clientOptions + '</select>'}
+      ${isClientScopedRole() ? clientScopeBadge() : '<select onchange="setReportFilter(\'client\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportOptions.clientOptions + '</select>'}
       <select onchange="setReportFilter('period',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option value="monthly"${reportFilters.period==='monthly'?' selected':''}>Monthly Report</option><option value="yearly"${reportFilters.period==='yearly'?' selected':''}>Yearly Report</option></select>
       ${reportFilters.period === 'monthly' ? '<select id="report-month-filter" onchange="setReportFilter(\'month\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportMonthOptions() + '</select>' : ''}
       ${reportFilters.period === 'yearly' ? '<select id="report-year-filter" onchange="setReportFilter(\'year\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportYearOptions() + '</select>' : ''}
-      <select ${isUserRole()?'disabled':''} onchange="setReportFilter('device',this.value)" style="padding:10px 16px;background:${isUserRole()?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${isUserRole()?'#94a3b8':'#e2e8f0'};font-size:14px;cursor:${isUserRole()?'not-allowed':'pointer'};">${options.deviceOptions}</select>
+      <select ${isUserRole()?'disabled':''} onchange="setReportFilter('device',this.value)" style="padding:10px 16px;background:${isUserRole()?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${isUserRole()?'#94a3b8':'#e2e8f0'};font-size:14px;cursor:${isUserRole()?'not-allowed':'pointer'};">${reportOptions.deviceOptions}</select>
       <button onclick="generateReportPreview()" style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Generate Preview</button>
     </div>
     <div id="report-preview" style="background:#1e293b;border-radius:12px;padding:32px;border:1px solid #334155;max-width:900px;margin:0 auto;">
@@ -241,9 +349,9 @@ function renderReports(container){
         <p style="color:#94a3b8;margin:8px 0 0;font-size:14px;">${reportPeriod} · ${reportClient} · ${reportDevice}</p>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px;">
-        ${card('Waste Collected', '—', 'kg', '#3b82f6')}
-        ${card('GHG Reduced', '—', 'kg CO₂e', '#10b981')}
-        ${card('Energy Consumed', '—', 'kWh', '#ef4444')}
+        ${card('Waste Collected', wasteValue, 'kg', '#3b82f6')}
+        ${card('GHG Reduced', ghgValue, 'kg CO₂e', '#10b981')}
+        ${energyCard}
         ${card('Est. Fertilizer', fertilizerValue, 'kg', '#f59e0b')}
         ${card('Avg Container Temp', avgTemp, '°C', '#f97316')}
         ${card('Avg Humidity', avgHumidity, '%', '#0ea5e9')}
@@ -252,50 +360,55 @@ function renderReports(container){
         <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">${chartTitle}</h3>
         <div id="report-food-waste-chart" style="background:#0f172a;border-radius:8px;padding:12px;border:1px solid #334155;"></div>
       </div>
-      <div style="margin-bottom:24px;">
-        <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">Alert Summary</h3>
-        <div style="background:#0f172a;border-radius:8px;padding:16px;border:1px solid #334155;">
-          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155;"><span style="color:#e2e8f0;font-size:13px;">Critical</span><span style="color:#64748b;font-weight:600;">—</span></div>
-          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155;"><span style="color:#e2e8f0;font-size:13px;">Warning</span><span style="color:#64748b;font-weight:600;">—</span></div>
-          <div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="color:#e2e8f0;font-size:13px;">Info</span><span style="color:#64748b;font-weight:600;">—</span></div>
-        </div>
-      </div>
+      ${alertSummaryMarkup}
       <div style="display:flex;gap:12px;justify-content:center;margin-top:32px;padding-top:24px;border-top:1px solid #334155;">
         <button style="padding:12px 24px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;" onclick="exportReportPdf()">Export PDF</button>
         <button style="padding:12px 24px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;" onclick="exportReportExcel()">Export Excel</button>
-        <button style="padding:12px 24px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;" onclick="exportReportCsv()">Export CSV</button>
       </div>
     </div>
   `;
   renderReportFoodWasteChart();
-  loadReportFoodWaste();
+  if(!options || !options.skipLoad) loadReportFoodWaste();
 }
 
-function generateReportPreview(){
+async function generateReportPreview(){
   const container = document.getElementById('page-content');
-  renderReports(container);
+  showReportExportToast('Generating report preview...');
+  await loadReportFoodWaste();
+  if(currentPage !== 'reports' || !container) return;
+  const loaded = reportApiData && reportApiKey === reportRequestKey();
   const preview = container.querySelector('#report-preview');
   if(preview) preview.scrollIntoView({ behavior:'smooth', block:'start' });
-  showReportExportToast('Report preview updated');
+  showReportExportToast(loaded ? 'Report preview updated' : 'Report data unavailable', loaded ? 'success' : 'error');
 }
 
 function reportExportModel(){
   const range = reportPeriodRange();
-  const rangeStart = new Date(range.start + 'T00:00:00');
-  const rangeEnd = new Date(range.end + 'T00:00:00');
-  const reportDays = Math.max(1, Math.round((rangeEnd - rangeStart) / 86400000) + 1);
-  const reportData = window.BSF_REPORT_DATA || {};
-  const dailyFertilizerRaw = reportData.dailyFertilizer !== undefined ? reportData.dailyFertilizer : window.BSF_REPORT_DAILY_FERTILIZER;
-  const dailyFertilizer = Number(dailyFertilizerRaw);
-  const fertilizerValue = Number.isFinite(dailyFertilizer) ? (dailyFertilizer * reportDays).toFixed(1) : '—';
-  const reportClient = reportFilters.client || (devices[0] ? devices[0].client : 'Unassigned');
-  const reportDevice = reportFilters.device || 'All Devices';
+  const metrics = reportMetricModel();
+  const scopedDevice = scopedDevices()[0] || null;
+  const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'All Clients');
+  const reportDevice = reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'All Devices');
   const reportPeriod = range.start + ' - ' + range.end;
-  const title = reportPeriodTitle() + ' Report';
+  const title = reportDisplayTitle();
   const chartTitle = reportFilters.period === 'monthly' ? 'Daily Food Waste In (KG)' : 'Monthly Food Waste In (KG)';
   const foodWaste = normalizedReportFoodWasteRows(false);
-  const pdfTitle = (reportFilters.device ? 'Machine' : 'Client') + ' ' + reportPeriodTitle() + ' Report';
-  return { title:title, pdfTitle:pdfTitle, chartTitle:chartTitle, period:reportPeriod, client:reportClient, device:reportDevice, fertilizerValue:fertilizerValue, foodWaste:foodWaste };
+  return {
+    title:title,
+    pdfTitle:title,
+    chartTitle:chartTitle,
+    period:reportPeriod,
+    client:reportClient,
+    device:reportDevice,
+    metrics:{
+      wasteKg:reportMetricDisplay(metrics.wasteKg),
+      ghgKg:reportMetricDisplay(metrics.ghgKg),
+      energyKwh:reportMetricDisplay(metrics.energyKwh),
+      fertilizerKg:reportMetricDisplay(metrics.fertilizerKg),
+      avgTempC:reportMetricDisplay(metrics.avgTempC),
+      avgHumidityPct:reportMetricDisplay(metrics.avgHumidityPct)
+    },
+    foodWaste:foodWaste
+  };
 }
 
 let reportExportToastTimer = null;
@@ -347,7 +460,7 @@ function excelCell(value){
 
 function exportReportCsv(){
   const model = reportExportModel();
-  const rows = [['Report',model.title],['Period',model.period],['Client',model.client],['Machine',model.device],[],['Metric','Value','Unit'],['Waste Collected','—','kg'],['GHG Reduced','—','kg CO₂e'],['Energy Consumed','—','kWh'],['Est. Fertilizer',model.fertilizerValue,'kg'],['Avg Container Temp','—','°C'],['Avg Humidity','—','%'],[],[model.chartTitle]];
+  const rows = [['Report',model.title],['Period',model.period],['Client',model.client],['Machine',model.device],[],['Metric','Value','Unit'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO₂e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%'],[],[model.chartTitle]];
   model.foodWaste.forEach(function(row){ rows.push([row.label,row.value]); });
   downloadReportFile('bsf-report-' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv;charset=utf-8', '\uFEFF' + rows.map(function(row){ return row.map(csvCell).join(','); }).join('\r\n'));
   showReportExportToast('CSV 导出已开始');
@@ -355,7 +468,7 @@ function exportReportCsv(){
 
 function exportReportExcel(){
   const model = reportExportModel();
-  const rows = [['Metric','Value','Unit'],['Waste Collected','—','kg'],['GHG Reduced','—','kg CO₂e'],['Energy Consumed','—','kWh'],['Est. Fertilizer',model.fertilizerValue,'kg'],['Avg Container Temp','—','°C'],['Avg Humidity','—','%']];
+  const rows = [['Metric','Value','Unit'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO₂e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%']];
   const tableRows = rows.map(function(row){ return '<tr>' + row.map(excelCell).join('') + '</tr>'; }).join('');
   const foodRows = model.foodWaste.map(function(row){ return '<tr>' + excelCell(row.label) + excelCell(row.value) + excelCell('KG') + '</tr>'; }).join('');
   const html = '<html><head><meta charset="UTF-8"></head><body><h2>' + bsfEscapeHtml(model.title) + '</h2><p>' + bsfEscapeHtml(model.period) + ' · ' + bsfEscapeHtml(model.client) + ' · ' + bsfEscapeHtml(model.device) + '</p><table border="1">' + tableRows + '</table><h3>' + bsfEscapeHtml(model.chartTitle) + '</h3><table border="1"><tr><td>Period</td><td>Value</td><td>Unit</td></tr>' + foodRows + '</table></body></html>';
@@ -365,7 +478,7 @@ function exportReportExcel(){
 async function exportReportPdf(){
   const model = reportExportModel();
   const pdfTitle = model.pdfTitle || model.title;
-  const rows = [['Metric','Value','Unit'],['Waste Collected','—','kg'],['GHG Reduced','—','kg CO2e'],['Energy Consumed','—','kWh'],['Est. Fertilizer',model.fertilizerValue,'kg'],['Avg Container Temp','—','°C'],['Avg Humidity','—','%']];
+  const rows = [['Metric','Value','Unit'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO2e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%']];
   const foodRows = [['Period','Value','Unit']].concat(model.foodWaste.map(function(row){
     return [row.label, row.value, 'KG'];
   }));

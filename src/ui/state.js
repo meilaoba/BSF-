@@ -168,17 +168,13 @@ const navItems = {
     {id:'graphs',label:'Graphs',icon:'📊'},
     {id:'raw-data',label:'Raw Data',icon:'📋'},
     {id:'reports',label:'Report Generation',icon:'📄'},
-    {id:'users',label:'Users',icon:'👥'},
-    {id:'alerts',label:'Alerts',icon:'🚨'},
-    {id:'account',label:'Account / Settings',icon:'👤'}
+    {id:'users',label:'Users',icon:'👥'}
   ],
   user: [
     {id:'machines',label:'Machines',icon:'⚙️'},
     {id:'locations',label:'Locations',icon:'📍'},
     {id:'graphs',label:'Graphs',icon:'📊'},
     {id:'raw-data',label:'Raw Data',icon:'📋'},
-    {id:'reports',label:'Report Generation',icon:'📄'},
-    {id:'alerts',label:'Alerts',icon:'🚨'},
-    {id:'account',label:'Account / Settings',icon:'👤'}
+    {id:'reports',label:'Report Generation',icon:'📄'}
   ]
 };

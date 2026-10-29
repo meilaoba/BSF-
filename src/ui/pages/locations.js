@@ -1,3 +1,43 @@
+function locationStatusColor(status){
+  const normalized = String(status || 'offline').toLowerCase();
+  if(normalized === 'online') return '#10b981';
+  if(normalized === 'running') return '#3b82f6';
+  if(normalized === 'standby') return '#f59e0b';
+  return '#ef4444';
+}
+
+function locationValidCoordinate(lat, lng){
+  if(lat === null || lat === undefined || lat === '' || lng === null || lng === undefined || lng === '') return false;
+  const latitude = Number(lat);
+  const longitude = Number(lng);
+  return Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 &&
+    Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
+}
+
+function locationProfile(device){
+  const client = String(device && device.client || 'Unassigned');
+  if(client.trim().toLowerCase() === 'cic zero carbon park'){
+    return {
+      lat:22.32408856041477,
+      lng:114.20885238603694,
+      address:'86C5+CG  九龍灣',
+      mapsUrl:'https://maps.app.goo.gl/vpC1AqB7YQZvWmch7',
+      poweredBy:'iBrain Tech'
+    };
+  }
+  const lat = device ? device.lat : null;
+  const lng = device ? device.lng : null;
+  const positioned = locationValidCoordinate(lat, lng);
+  return {
+    lat:positioned ? Number(lat) : null,
+    lng:positioned ? Number(lng) : null,
+    address:device && device.location ? String(device.location) : '',
+    mapsUrl:positioned ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(Number(lat) + ',' + Number(lng)) : '',
+    poweredBy:'iBrain Tech'
+  };
+}
+
+function locationMapsUrl(device){ return locationProfile(device).mapsUrl; }
 function loadGoogleMapsApi(){
   if(!GOOGLE_MAPS_API_KEY) return Promise.resolve(null);
   if(window.google && window.google.maps) return Promise.resolve(window.google.maps);
@@ -26,41 +66,40 @@ async function initGoogleMapLocations(visibleDevices){
   const maps = await loadGoogleMapsApi();
   if(!maps) return;
 
-  const positioned = visibleDevices.filter(function(device){
-    return Number.isFinite(Number(device.lat)) && Number.isFinite(Number(device.lng));
-  });
+  const positioned = (visibleDevices || []).map(function(device){
+    const profile = locationProfile(device);
+    return { device:device, lat:profile.lat, lng:profile.lng };
+  }).filter(function(item){ return locationValidCoordinate(item.lat, item.lng); });
   if(!positioned.length) return;
 
   const bg = document.getElementById('locations-map-static-bg');
   if(bg) bg.remove();
   document.querySelectorAll('.locations-static-marker').forEach(function(el){ el.remove(); });
-
-  const center = { lat:Number(positioned[0].lat), lng:Number(positioned[0].lng) };
   if(locationsMap){
     locationsMarkers.forEach(function(marker){ marker.setMap(null); });
     locationsMarkers = [];
-    locationsMap.setCenter(center);
-  } else {
-    locationsMap = new window.google.maps.Map(canvas, {
-      center,
-      zoom: 12,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: true
-    });
+    locationsMap = null;
   }
 
-  const colorOf = function(status){
-    return status==='online' ? '#10b981' : status==='running' ? '#3b82f6' : status==='standby' ? '#f59e0b' : '#ef4444';
-  };
-  positioned.forEach(function(dev){
+  const center = { lat:positioned[0].lat, lng:positioned[0].lng };
+  locationsMap = new window.google.maps.Map(canvas, {
+    center,
+    zoom:positioned.length === 1 ? 15 : 11,
+    mapTypeControl:false,
+    streetViewControl:false,
+    fullscreenControl:true
+  });
+
+  positioned.forEach(function(item){
+    const dev = item.device;
+    const mapsUrl = locationMapsUrl(dev);
     const marker = new window.google.maps.Marker({
-      position:{ lat:Number(dev.lat), lng:Number(dev.lng) },
+      position:{ lat:item.lat, lng:item.lng },
       map: locationsMap,
-      title: bsfEscapeHtml(dev.id) + ' - ' + bsfEscapeHtml(dev.status.toUpperCase()),
+      title: bsfEscapeHtml(dev.id) + ' - ' + bsfEscapeHtml(String(dev.status || 'offline').toUpperCase()),
       icon:{
         path: window.google.maps.SymbolPath.CIRCLE,
-        fillColor: colorOf(dev.status),
+        fillColor: locationStatusColor(dev.status),
         fillOpacity: 1,
         strokeColor: '#1e293b',
         strokeWeight: 3,
@@ -68,7 +107,7 @@ async function initGoogleMapLocations(visibleDevices){
       }
     });
     const info = new window.google.maps.InfoWindow({
-      content: '<div style="color:#0f172a;font-size:13px;"><b>' + bsfEscapeHtml(dev.id) + '</b><br>' + bsfEscapeHtml(dev.client) + '<br>' + bsfEscapeHtml(dev.status.toUpperCase()) + '</div>'
+      content: '<div style="color:#0f172a;font-size:13px;"><b>' + bsfEscapeHtml(dev.id) + '</b><br>' + bsfEscapeHtml(dev.client || 'Unassigned') + '<br>' + bsfEscapeHtml(String(dev.status || 'offline').toUpperCase()) + (mapsUrl ? '<br><a href="' + bsfEscapeHtml(mapsUrl) + '" target="_blank" rel="noopener noreferrer">Open Google Maps</a>' : '') + '</div>'
     });
     marker.addListener('click', function(){ info.open({ anchor:marker, map:locationsMap }); });
     locationsMarkers.push(marker);
@@ -91,31 +130,50 @@ function setLocationSearch(value){
   }
 }
 
-function renderLocations(container){
-  const locationDevices = scopedDevices();
-  const clientScoped = isClientScopedRole();
-  const clientNames = scopedClientNames();
-  const searchText = String(locationFilters.search || '').trim().toLowerCase();
-  const filteredDevices = locationDevices.filter(function(dev){
-    const client = dev.client || 'Unassigned';
-    const status = String(dev.status || '').toLowerCase();
-    if(locationFilters.client && client !== locationFilters.client) return false;
-    if(locationFilters.status && status !== locationFilters.status) return false;
+function filterLocationDevices(devices, filters){
+  const searchText = String(filters && filters.search || '').trim().toLowerCase();
+  return (Array.isArray(devices) ? devices : []).filter(function(device){
+    const client = device.client || 'Unassigned';
+    const status = String(device.status || '').toLowerCase();
+    if(filters && filters.client && client !== filters.client) return false;
+    if(filters && filters.status && status !== filters.status) return false;
     if(searchText){
-      const id = String(dev.id || '').toLowerCase();
-      const name = String(dev.name || '').toLowerCase();
+      const id = String(device.id || '').toLowerCase();
+      const name = String(device.name || '').toLowerCase();
       if(id.indexOf(searchText) < 0 && name.indexOf(searchText) < 0) return false;
     }
     return true;
   });
-  const positioned = filteredDevices.filter(function(dev){
-    return Number.isFinite(Number(dev.lat)) && Number.isFinite(Number(dev.lng));
-  });
-  const markerHtml = positioned.map(function(dev, index){
-    const top = 25 + (index % 4) * 15;
-    const left = 30 + (index % 5) * 12;
-    const color = dev.status==='online' ? '#10b981' : dev.status==='running' ? '#3b82f6' : dev.status==='standby' ? '#f59e0b' : '#ef4444';
-    return '<div class="locations-static-marker" style="position:absolute;top:'+top+'%;left:'+left+'%;width:18px;height:18px;background:'+color+';border-radius:50%;box-shadow:0 0 0 6px '+color+'33;border:3px solid #1e293b;cursor:pointer;" title="'+bsfEscapeHtml(dev.id)+' - '+bsfEscapeHtml(dev.status.toUpperCase())+'"></div>';
+}
+function renderLocations(container){
+  const locationDevices = scopedDevices();
+  const clientScoped = isClientScopedRole();
+  const clientNames = scopedClientNames();
+  const filteredDevices = filterLocationDevices(locationDevices, locationFilters);
+
+  const positioned = filteredDevices.map(function(device){
+    const profile = locationProfile(device);
+    return { device:device, profile:profile };
+  }).filter(function(item){ return locationValidCoordinate(item.profile.lat, item.profile.lng); });
+  const latitudes = positioned.map(function(item){ return item.profile.lat; });
+  const longitudes = positioned.map(function(item){ return item.profile.lng; });
+  const minLat = latitudes.length ? Math.min.apply(null, latitudes) : 0;
+  const maxLat = latitudes.length ? Math.max.apply(null, latitudes) : 0;
+  const minLng = longitudes.length ? Math.min.apply(null, longitudes) : 0;
+  const maxLng = longitudes.length ? Math.max.apply(null, longitudes) : 0;
+  const latRange = maxLat - minLat || 1;
+  const lngRange = maxLng - minLng || 1;
+  const markerHtml = positioned.map(function(item){
+    const dev = item.device;
+    const top = positioned.length === 1 ? 50 : 12 + ((maxLat - item.profile.lat) / latRange) * 76;
+    const left = positioned.length === 1 ? 50 : 12 + ((item.profile.lng - minLng) / lngRange) * 76;
+    const color = locationStatusColor(dev.status);
+    const mapsUrl = locationMapsUrl(dev);
+    const dot = '<span class="locations-static-marker" style="position:relative;width:18px;height:18px;display:block;background:' + color + ';border-radius:50%;box-shadow:0 0 0 6px ' + color + '33;border:3px solid #1e293b;"></span>';
+    const title = bsfEscapeHtml(dev.id + ' - ' + String(dev.status || 'offline').toUpperCase());
+    return mapsUrl
+      ? '<a class="locations-static-marker" href="' + bsfEscapeHtml(mapsUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Open ' + bsfEscapeHtml(dev.id) + ' in Google Maps" title="' + title + '" style="position:absolute;top:' + top.toFixed(2) + '%;left:' + left.toFixed(2) + '%;transform:translate(-50%,-50%);text-decoration:none;">' + dot + '</a>'
+      : '<span class="locations-static-marker" title="' + title + '" style="position:absolute;top:' + top.toFixed(2) + '%;left:' + left.toFixed(2) + '%;transform:translate(-50%,-50%);">' + dot + '</span>';
   }).join('');
   let mapNotice = '';
   if(!filteredDevices.length){
@@ -132,20 +190,22 @@ function renderLocations(container){
     const label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'All';
     return '<option value="' + value + '"' + (locationFilters.status === value ? ' selected' : '') + '>' + label + '</option>';
   }).join('');
-  const cards = filteredDevices.length ? filteredDevices.map(function(dev){
-    return `<div style="background:#1e293b;border-radius:12px;padding:16px;border:1px solid #334155;">
-      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
-        <div>
-          <p style="margin:0;font-weight:700;color:#f8fafc;font-size:15px;">${bsfEscapeHtml(dev.id)}</p>
-          <p style="margin:4px 0 0;font-size:12px;color:#64748b;">${bsfEscapeHtml(dev.name)}</p>
-        </div>
-        <span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${dev.status==='online'?'rgba(16,185,129,0.15)':dev.status==='running'?'rgba(59,130,246,0.15)':dev.status==='standby'?'rgba(245,158,11,0.15)':'rgba(239,68,68,0.15)'};color:${dev.status==='online'?'#10b981':dev.status==='running'?'#3b82f6':dev.status==='standby'?'#f59e0b':'#ef4444'};">${bsfEscapeHtml(String(dev.status).toUpperCase())}</span>
-      </div>
-      <p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Lat:</span> ${dev.lat === null || dev.lat === undefined ? '—' : bsfEscapeHtml(dev.lat)}</p>
-      <p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Lng:</span> ${dev.lng === null || dev.lng === undefined ? '—' : bsfEscapeHtml(dev.lng)}</p>
-      <p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Client:</span> ${bsfEscapeHtml(dev.client)}</p>
-      <p style="margin:8px 0 0;font-size:12px;color:#64748b;">Last update: ${bsfEscapeHtml(dev.lastUpdate)}</p>
-    </div>`;
+  const cards = filteredDevices.length ? filteredDevices.map(function(device){
+    const profile = locationProfile(device);
+    const color = locationStatusColor(device.status);
+    const coordinates = profile.lat === null ? '—' : profile.lat + ', ' + profile.lng;
+    const mapsLink = profile.mapsUrl
+      ? '<a href="' + bsfEscapeHtml(profile.mapsUrl) + '" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;color:#10b981;font-size:12px;font-weight:600;text-decoration:none;">Open Google Maps</a>'
+      : '<p style="margin:8px 0 0;color:#64748b;font-size:12px;">Google Maps unavailable</p>';
+    return '<div style="background:#1e293b;border-radius:12px;padding:16px;border:1px solid #334155;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:start;gap:12px;margin-bottom:12px;"><div><p style="margin:0;font-weight:700;color:#f8fafc;font-size:15px;">' + bsfEscapeHtml(device.id) + '</p><p style="margin:4px 0 0;font-size:12px;color:#64748b;">' + bsfEscapeHtml(device.name) + '</p></div>' +
+      '<span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:' + color + '26;color:' + color + ';">' + bsfEscapeHtml(String(device.status || 'offline').toUpperCase()) + '</span></div>' +
+      '<p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Current Client:</span> ' + bsfEscapeHtml(device.client || 'Unassigned') + '</p>' +
+      '<p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Location Preview:</span> ' + bsfEscapeHtml(coordinates) + '</p>' +
+      (profile.address ? '<p style="margin:0 0 4px;font-size:13px;color:#94a3b8;">' + bsfEscapeHtml(profile.address) + '</p>' : '') +
+      mapsLink +
+      '<p style="margin:10px 0 0;font-size:11px;color:#475569;">Powered by: ' + bsfEscapeHtml(profile.poweredBy) + '</p>' +
+      '<p style="margin:8px 0 0;font-size:12px;color:#64748b;">Last update: ' + bsfEscapeHtml(device.lastUpdate || '—') + '</p></div>';
   }).join('') : '<div style="grid-column:1/-1;background:#1e293b;border-radius:12px;padding:32px;text-align:center;color:#64748b;border:1px solid #334155;">No devices match the selected filters</div>';
   container.innerHTML = `
     <div style="margin-bottom:24px;">

@@ -97,6 +97,25 @@ export const config = {
     lockTimeoutSeconds: num('WORKER_LOCK_TIMEOUT_SECONDS', 300),
   },
 
+  telemetryCollector: {
+    enabled: bool('TELEMETRY_COLLECTOR_ENABLED', true),
+    pollIntervalMs: num('TELEMETRY_COLLECTOR_POLL_INTERVAL_MS', 30000),
+    masterIntervalSeconds: num('TELEMETRY_COLLECTOR_MASTER_INTERVAL_SECONDS', 180),
+    clientIntervalSeconds: num('TELEMETRY_COLLECTOR_CLIENT_INTERVAL_SECONDS', 600),
+  },
+
+  formula: {
+    wasteReductionFactor: num('FORMULA_WASTE_REDUCTION_FACTOR', 1.5),
+    energyFactorHkIsland: num('FORMULA_ENERGY_FACTOR_HK_ISLAND', 0.71),
+    energyFactorOther: num('FORMULA_ENERGY_FACTOR_OTHER', 0.37),
+    transportConstant: num('FORMULA_TRANSPORT_CONSTANT', 1.93),
+    transportMonths: num('FORMULA_TRANSPORT_MONTHS', 12),
+    transportDays: num('FORMULA_TRANSPORT_DAYS', 365),
+    fertilizerRatio: num('FORMULA_FERTILIZER_RATIO', 0.12),
+    standbyEnergyKwh: num('FORMULA_STANDBY_ENERGY_KWH', 1.5),
+    humidityScale: num('HUMIDITY_DISPLAY_SCALE', 100),
+  },
+
   alerts: {
     tempHighC: num('ALERT_TEMP_HIGH_C', 58),
     tempLowC: num('ALERT_TEMP_LOW_C', 12),
@@ -109,7 +128,7 @@ export const config = {
     vendor: {
       loginUrl: str('VENDOR_LOGIN_URL', 'https://iot.creekscomposter.com:8888/user/login'),
       deviceListUrl: str('VENDOR_DEVICE_LIST_URL', 'https://iot.creekscomposter.com:8888/emDevice/queryListData'),
-      realtimeEnabled: bool('VENDOR_REALTIME_ENABLED', true),
+      realtimeEnabled: bool('VENDOR_REALTIME_ENABLED', false),
       realtimeUrl: str('VENDOR_REALTIME_WS_URL', 'wss://iot.creekscomposter.com:8888/ws'),
       realtimeTimeoutMs: num('VENDOR_REALTIME_TIMEOUT_MS', 4000),
       historyUrl: str('VENDOR_HISTORY_URL', 'https://iot.creekscomposter.com:8888/historyData/temperatureHumidityCurve'),
@@ -117,6 +136,11 @@ export const config = {
       requestFormat: str('VENDOR_LOGIN_FORMAT', 'json').toLowerCase(),
       timeoutMs: num('VENDOR_AUTH_TIMEOUT_MS', 10000),
       deviceTimeoutMs: num('VENDOR_DEVICE_TIMEOUT_MS', 15000),
+      accessTokenTtlDays: num('VENDOR_ACCESS_TOKEN_TTL_DAYS', 7),
+      refreshTokenTtlDays: num('VENDOR_REFRESH_TOKEN_TTL_DAYS', 8),
+      refreshUrl: str('VENDOR_REFRESH_URL', ''),
+      dailyStatsUrl: str('VENDOR_DAILY_STATS_URL', ''),
+      alertListUrl: str('VENDOR_ALERT_LIST_URL', ''),
     },
     sessionTtlSeconds: num('AUTH_SESSION_TTL_SECONDS', 8 * 60 * 60),
     cookieName: str('AUTH_SESSION_COOKIE', 'bsf_session'),
@@ -127,6 +151,10 @@ export const config = {
     loginWindowSeconds: num('AUTH_LOGIN_WINDOW_SECONDS', 15 * 60),
     loginLockSeconds: num('AUTH_LOGIN_LOCK_SECONDS', 15 * 60),
     ipMaxAttempts: num('AUTH_IP_MAX_ATTEMPTS', 30),
+  },
+
+  environment: {
+    hkoDailyTemperatureUrl: str('HKO_DAILY_TEMPERATURE_URL', ''),
   },
 };
 

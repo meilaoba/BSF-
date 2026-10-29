@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { query } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import { AppError, ForbiddenError, UnauthorizedError } from '../lib/errors.js';
 import { clientIp } from '../lib/http.js';
 import {
@@ -85,6 +85,7 @@ export function publicUser(row) {
     email: row.email || null,
     phone: row.phone || null,
     role: row.role,
+    vendorUserId: row.vendor_user_id == null ? null : String(row.vendor_user_id),
     clientId: row.client_id || null,
     machineId: row.machine_id || null,
     avatarUrl: metadata.vendor?.userIcon || null,
@@ -102,37 +103,58 @@ export async function createSession({ user, vendorTokens, req }) {
   const userAgent = String(req.headers['user-agent'] || '').slice(0, 500);
   const ip = clientIp(req);
 
-  // Opportunistic cleanup keeps the session table bounded without another
-  // long-running worker. Expired sessions are never accepted even before this.
-  await query(
-    `DELETE FROM auth_sessions
-      WHERE expires_at < now() - interval '7 days'
-         OR revoked_at < now() - interval '7 days'`
-  );
+  const accessTokenEnc = encryptSecret(vendorTokens.token, config.auth.tokenEncryptionKey);
+  const refreshTokenEnc = encryptSecret(vendorTokens.refreshToken, config.auth.tokenEncryptionKey);
 
-  const { rows } = await query(
-    `INSERT INTO auth_sessions
-       (user_id, token_hash, csrf_hash, vendor_access_token_enc, vendor_refresh_token_enc,
-        expires_at, ip, user_agent)
-     VALUES ($1,$2,$3,$4,$5, now() + ($6 * interval '1 second'), $7, $8)
-     RETURNING id, expires_at`,
-    [
-      user.id,
-      sessionHash,
-      csrfHash,
-      encryptSecret(vendorTokens.token, config.auth.tokenEncryptionKey),
-      encryptSecret(vendorTokens.refreshToken, config.auth.tokenEncryptionKey),
-      ttl,
-      ip || null,
-      userAgent || null,
-    ]
-  );
+  // The browser session is intentionally short-lived. The collector credential
+  // is stored separately so telemetry ingestion does not stop when the user
+  // signs out or the local session expires.
+  const row = await withTransaction(async (client) => {
+    // Opportunistic cleanup keeps the session table bounded without another
+    // long-running worker. Expired sessions are never accepted even before this.
+    await client.query(
+      `DELETE FROM auth_sessions
+        WHERE expires_at < now() - interval '7 days'
+           OR revoked_at < now() - interval '7 days'`
+    );
+
+    const { rows } = await client.query(
+      `INSERT INTO auth_sessions
+         (user_id, token_hash, csrf_hash, vendor_access_token_enc, vendor_refresh_token_enc,
+          expires_at, ip, user_agent)
+       VALUES ($1,$2,$3,$4,$5, now() + ($6 * interval '1 second'), $7, $8)
+       RETURNING id, expires_at`,
+      [
+        user.id,
+        sessionHash,
+        csrfHash,
+        accessTokenEnc,
+        refreshTokenEnc,
+        ttl,
+        ip || null,
+        userAgent || null,
+      ]
+    );
+
+    await client.query(
+      `INSERT INTO vendor_collector_credentials
+         (user_id, vendor_access_token_enc, vendor_refresh_token_enc, updated_at)
+       VALUES ($1, $2, $3, now())
+       ON CONFLICT (user_id) DO UPDATE SET
+         vendor_access_token_enc = EXCLUDED.vendor_access_token_enc,
+         vendor_refresh_token_enc = EXCLUDED.vendor_refresh_token_enc,
+         updated_at = now()`,
+      [user.id, accessTokenEnc, refreshTokenEnc]
+    );
+
+    return rows[0];
+  });
 
   return {
     sessionToken,
     csrfToken,
-    sessionId: rows[0].id,
-    expiresAt: rows[0].expires_at,
+    sessionId: row.id,
+    expiresAt: row.expires_at,
   };
 }
 
@@ -273,7 +295,10 @@ export function applyDataScope(req, session) {
     || path === '/api/v1/auth/logout'
     || path === '/api/v1/auth/refresh'
     || path === '/api/v1/vendor-devices'
-    || path === '/api/v1/vendor-devices/history') {
+    || path === '/api/v1/vendor-devices/history'
+    || path === '/api/v1/graphs'
+    || path === '/api/v1/graphs/food-waste'
+    || path === '/api/v1/reports') {
     return;
   }
 

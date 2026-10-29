@@ -4,11 +4,36 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BSF Smart Kitchen Waste Bin</title>
-    <link rel="stylesheet" href="/src/styles/app.css" />
+    <style>
+      @keyframes bsf-spin { to { transform: rotate(360deg); } }
+    </style>
+    <script>
+      (function(){
+        var diagnostics = false;
+        try { diagnostics = new URLSearchParams(location.search).get('diag') === '1'; } catch (error) {}
+        function report(kind, message){
+          if(!diagnostics) return;
+          document.title = 'BOOT-' + kind + ': ' + String(message || 'unknown').slice(0, 180);
+        }
+        window.addEventListener('error', function(event){
+          report('ERROR', event && (event.message || (event.error && event.error.message)));
+        });
+        window.addEventListener('unhandledrejection', function(event){
+          report('REJECTION', event && event.reason && (event.reason.message || event.reason));
+        });
+      })();
+    </script>    <link rel="stylesheet" href="/src/styles/app.css" />
   </head>
   <body>
 <div id="app" style="min-height:100vh;background:#0f172a;color:#e2e8f0;font-family:'Inter',system-ui,-apple-system,sans-serif;">
-  <div id="login-screen" style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;">
+  <div id="auth-loading-screen" role="status" aria-live="polite" style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;">
+    <div style="text-align:center;max-width:460px;">
+      <div style="width:44px;height:44px;border:3px solid #334155;border-top-color:#10b981;border-radius:50%;animation:bsf-spin .9s linear infinite;margin:0 auto 18px;"></div>
+      <p id="auth-loading-text" style="margin:0;color:#e2e8f0;font-size:15px;font-weight:600;">Loading system...</p>
+      <button id="auth-retry-button" type="button" onclick="retryRestoreAuthenticatedSession()" style="display:none;margin-top:18px;padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Retry</button>
+    </div>
+  </div>
+  <div id="login-screen" style="display:none;align-items:center;justify-content:center;min-height:100vh;padding:24px;">
     <div style="width:100%;max-width:420px;background:#1e293b;border-radius:16px;padding:40px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);border:1px solid #334155;">
       <div style="text-align:center;margin-bottom:32px;">
         <div style="width:64px;height:64px;background:linear-gradient(135deg,#10b981,#059669);border-radius:16px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:28px;">🌱</div>
@@ -72,6 +97,7 @@
   </div>
 </div>
     <script type="module" src="/src/main.js"></script>
+    <script src="/src/ui/api-client.js"></script>
     <script src="/src/ui/state.js"></script>
     <script src="/src/ui/data.js"></script>
     <script src="/src/ui/backend-data.js"></script>

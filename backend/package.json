@@ -12,7 +12,8 @@
     "worker": "node src/worker.js",
     "migrate": "node db/migrate.js",
     "seed": "node db/seed.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "telemetry-worker": "node src/telemetry-worker.js"
   },
   "dependencies": {
     "pg": "^8.13.1",
