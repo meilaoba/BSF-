@@ -41,10 +41,10 @@ test('collector uses a dedicated encrypted credential instead of a short-lived b
   assert.match(migration, /SELECT DISTINCT ON \(s\.user_id\)/);
 });
 
-test('collector applies the confirmed 3 minute and 10 minute intervals', () => {
-  assert.equal(collectorIntervalSeconds('master_admin', {}), 180);
-  assert.equal(collectorIntervalSeconds('client_admin', {}), 600);
-  assert.equal(collectorIntervalSeconds('user', {}), 600);
+test('collector applies the confirmed 30 minute vendor cadence', () => {
+  assert.equal(collectorIntervalSeconds('master_admin', {}), 1800);
+  assert.equal(collectorIntervalSeconds('client_admin', {}), 1800);
+  assert.equal(collectorIntervalSeconds('user', {}), 1800);
 });
 
 test('collector buckets samples without depending on browser activity', () => {
@@ -64,4 +64,10 @@ test('collector migration records sample source, interval and query index', () =
   assert.match(sql, /sample_interval_seconds/);
   assert.match(sql, /sample_source IN \('request', 'worker'\)/);
   assert.match(sql, /vendor_device_telemetry_worker_time_idx/);
+});
+
+test('collector migration allows the confirmed 30 minute interval', () => {
+  const sql = fs.readFileSync(path.join(root, 'db/migrations/011_vendor_collector_30minute_interval.sql'), 'utf8');
+  assert.match(sql, /1800/);
+  assert.match(sql, /vendor_device_telemetry_sample_interval_check/);
 });

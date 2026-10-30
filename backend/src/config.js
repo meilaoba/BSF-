@@ -100,8 +100,8 @@ export const config = {
   telemetryCollector: {
     enabled: bool('TELEMETRY_COLLECTOR_ENABLED', true),
     pollIntervalMs: num('TELEMETRY_COLLECTOR_POLL_INTERVAL_MS', 30000),
-    masterIntervalSeconds: num('TELEMETRY_COLLECTOR_MASTER_INTERVAL_SECONDS', 180),
-    clientIntervalSeconds: num('TELEMETRY_COLLECTOR_CLIENT_INTERVAL_SECONDS', 600),
+    masterIntervalSeconds: num('TELEMETRY_COLLECTOR_MASTER_INTERVAL_SECONDS', 1800),
+    clientIntervalSeconds: num('TELEMETRY_COLLECTOR_CLIENT_INTERVAL_SECONDS', 1800),
   },
 
   formula: {

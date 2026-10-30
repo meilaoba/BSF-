@@ -242,6 +242,7 @@ export function registerAnalyticsRoutes(router) {
     const requestedGroup = optionalString(url.searchParams.get('groupBy'), 'groupBy', { max: 10 });
     const groupBy = requestedGroup || defaultGroupBy(period);
     if (!GROUPS.has(groupBy)) throw new ValidationError('`groupBy` must be hour, day, or month');
+    const sourceGroupBy = groupBy === 'hour' ? 'hour' : 'day';
 
     const rows = await loadVendorTelemetrySummaries({
       vendorAccountId: context.vendorAccountId,
@@ -249,7 +250,7 @@ export function registerAnalyticsRoutes(router) {
       deviceIds: context.deviceIds,
       start: range.start,
       end: range.end,
-      groupBy,
+      groupBy: sourceGroupBy,
     });
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(rows, {
@@ -282,13 +283,14 @@ export function registerAnalyticsRoutes(router) {
     if (!PERIODS.has(period)) throw new ValidationError('`period` must be daily, monthly, or yearly');
     const range = dateRangeForRequest(url, period, new Date());
     const groupBy = defaultGroupBy(period);
+    const sourceGroupBy = groupBy === 'hour' ? 'hour' : 'day';
     const rows = await loadVendorTelemetrySummaries({
       vendorAccountId: context.vendorAccountId,
       includeAllAccounts: context.includeAllAccounts,
       deviceIds: context.deviceIds,
       start: range.start,
       end: range.end,
-      groupBy,
+      groupBy: sourceGroupBy,
     });
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(rows, {
@@ -312,13 +314,14 @@ export function registerAnalyticsRoutes(router) {
     }
     const range = dateRangeForRequest(url, period, new Date());
     const groupBy = period === 'yearly' ? 'month' : 'day';
+    const sourceGroupBy = 'day';
     const rows = await loadVendorTelemetrySummaries({
       vendorAccountId: context.vendorAccountId,
       includeAllAccounts: context.includeAllAccounts,
       deviceIds: context.deviceIds,
       start: range.start,
       end: range.end,
-      groupBy,
+      groupBy: sourceGroupBy,
     });
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(rows, {

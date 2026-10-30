@@ -241,6 +241,7 @@ export function aggregateTelemetrySnapshots(rows, {
     .sort((a, b) => a.capturedAt - b.capturedAt);
   const keys = bucketKeys(groupBy, start, end);
   const currentBucket = bucketKeyForDate(now, groupBy);
+  const currentDateKey = hongKongDateKey(now);
 
   const deviceDays = new Map();
   const deviceMonths = new Map();
@@ -315,6 +316,24 @@ export function aggregateTelemetrySnapshots(rows, {
   const foodByBucket = new Map();
   const energyByBucket = new Map();
   const ghgByBucket = new Map();
+  const dailyResults = new Map();
+
+  for (const day of deviceDays.values()) {
+    if (day.dateKey > currentDateKey) continue;
+    const wasteKg = tonsToKg(day.maxDailyInputT);
+    if (wasteKg === null) continue;
+    const energyKwh = day.hasStandby ? formulaNumber(formula, 'standbyEnergyKwh') : 0;
+    const ghgKg = ghgReducedKg(wasteKg, energyKwh, region, 1, formula);
+    if (ghgKg === null) continue;
+    dailyResults.set(`${day.deviceId}|${day.dateKey}`, {
+      deviceId: day.deviceId,
+      dateKey: day.dateKey,
+      monthKey: day.monthKey,
+      wasteKg,
+      energyKwh,
+      ghgKg,
+    });
+  }
 
   if (groupBy === 'hour') {
     // dailyInput is a cumulative day-to-date value. Convert consecutive hourly
@@ -346,26 +365,19 @@ export function aggregateTelemetrySnapshots(rows, {
       }
     }
   } else {
-    for (const [key, row] of readingsByBucketDevice) {
-      const separator = key.lastIndexOf('|');
-      const bucket = key.slice(0, separator);
-      if (bucket > currentBucket) continue;
-      const wasteKg = tonsToKg(groupBy === 'month' ? row.monthlyInputT : row.dailyInputT);
-      addToMap(foodByBucket, bucket, wasteKg);
+    for (const day of dailyResults.values()) {
+      const bucket = groupBy === 'month' ? day.monthKey : day.dateKey;
+      addToMap(foodByBucket, bucket, day.wasteKg);
+      addToMap(energyByBucket, bucket, day.energyKwh);
+      addToMap(ghgByBucket, bucket, day.ghgKg);
     }
   }
 
   for (const day of deviceDays.values()) {
-    if (!day.hasStandby) continue;
+    if (!day.hasStandby || groupBy !== 'hour') continue;
     const energy = formulaNumber(formula, 'standbyEnergyKwh');
-    if (groupBy === 'hour') {
-      const bucket = bucketKeyForDate(day.last.capturedAt, 'hour');
-      if (bucket <= currentBucket) addToMap(energyByBucket, bucket, energy);
-    } else if (groupBy === 'month') {
-      addToMap(energyByBucket, day.monthKey, energy);
-    } else {
-      addToMap(energyByBucket, day.dateKey, energy);
-    }
+    const bucket = bucketKeyForDate(day.last.capturedAt, 'hour');
+    if (bucket <= currentBucket) addToMap(energyByBucket, bucket, energy);
   }
 
   if (groupBy === 'hour') {
@@ -398,26 +410,6 @@ export function aggregateTelemetrySnapshots(rows, {
         }
       }
     }
-  } else if (groupBy === 'month') {
-    for (const month of deviceMonths.values()) {
-      if (month.monthKey > currentBucket || !keys.includes(month.monthKey)) continue;
-      const wasteKg = tonsToKg(month.maxMonthlyInputT);
-      if (wasteKg === null) continue;
-      const standbyDays = Array.from(deviceDays.values()).filter((day) => day.deviceId === month.deviceId && day.monthKey === month.monthKey && day.hasStandby).length;
-      const energyKwh = energyForStandbyDays(standbyDays, formula) || 0;
-      const observedDays = new Set(Array.from(deviceDays.values()).filter((day) => day.deviceId === month.deviceId && day.monthKey === month.monthKey).map((day) => day.dateKey)).size;
-      const value = ghgReducedKg(wasteKg, energyKwh, region, observedDays, formula);
-      if (value !== null) addToMap(ghgByBucket, month.monthKey, value);
-    }
-  } else {
-    for (const day of deviceDays.values()) {
-      if (day.dateKey > currentBucket) continue;
-      const wasteKg = tonsToKg(day.maxDailyInputT);
-      if (wasteKg === null) continue;
-      const energyKwh = day.hasStandby ? formulaNumber(formula, 'standbyEnergyKwh') : 0;
-      const value = ghgReducedKg(wasteKg, energyKwh, region, 1, formula);
-      if (value !== null) addToMap(ghgByBucket, day.dateKey, value);
-    }
   }
 
   const makeSeries = (source) => keys.map((key) => ({
@@ -438,39 +430,18 @@ export function aggregateTelemetrySnapshots(rows, {
     return { date: key, label: key, value: key > currentBucket || !stats ? null : stats.count ? stats.sum / stats.count : null };
   });
 
-  let wasteKg = null;
-  if (summaryMode === 'yearly') {
-    const yearly = Array.from(deviceYears.values());
-    if (yearly.some((row) => row.maxYearlyInputT !== null)) {
-      wasteKg = yearly.reduce((sum, row) => sum + (tonsToKg(row.maxYearlyInputT) || 0), 0);
-    } else {
-      const monthly = Array.from(deviceMonths.values());
-      if (monthly.some((row) => row.maxMonthlyInputT !== null)) {
-        wasteKg = monthly.reduce((sum, row) => sum + (tonsToKg(row.maxMonthlyInputT) || 0), 0);
-      }
-    }
-  } else if (summaryMode === 'monthly') {
-    const monthly = Array.from(deviceMonths.values());
-    if (monthly.some((row) => row.maxMonthlyInputT !== null)) {
-      wasteKg = monthly.reduce((sum, row) => sum + (tonsToKg(row.maxMonthlyInputT) || 0), 0);
-    }
-  } else {
-    const daily = Array.from(deviceDays.values());
-    if (daily.some((row) => row.maxDailyInputT !== null)) {
-      wasteKg = daily.reduce((sum, row) => sum + (tonsToKg(row.maxDailyInputT) || 0), 0);
-    }
-  }
-  if (wasteKg === null) {
-    const seriesTotal = items.reduce((sum, item) => sum + (item.value || 0), 0);
-    if (items.some((item) => item.value !== null)) wasteKg = seriesTotal;
-  }
-
+  const dailyValues = Array.from(dailyResults.values());
+  const wasteKg = dailyValues.length
+    ? dailyValues.reduce((sum, day) => sum + day.wasteKg, 0)
+    : null;
   const standbyDeviceDays = Array.from(deviceDays.values()).filter((day) => day.hasStandby).length;
-  const energyKwh = standbyDeviceDays ? energyForStandbyDays(standbyDeviceDays, formula) : (data.length ? 0 : null);
+  const energyKwh = dailyValues.length
+    ? dailyValues.reduce((sum, day) => sum + day.energyKwh, 0)
+    : null;
   const observedDeviceDays = deviceDays.size;
-  const ghgKg = wasteKg === null || energyKwh === null || !observedDeviceDays
-    ? null
-    : ghgReducedKg(wasteKg, energyKwh, region, observedDeviceDays, formula);
+  const ghgKg = dailyValues.length
+    ? dailyValues.reduce((sum, day) => sum + day.ghgKg, 0)
+    : null;
   const summary = {
     wasteKg,
     ghgKg,

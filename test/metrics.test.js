@@ -138,11 +138,41 @@ test('aggregates only real snapshots and emits nulls for missing and future buck
 
   assert.deepEqual(result.items.map((item) => item.value), [20, 30, null]);
   assert.deepEqual(result.tempItems.map((item) => item.value), [41, 44, null]);
-  assert.equal(result.summary.wasteKg, 300);
+  assert.equal(result.summary.wasteKg, 50);
   assert.equal(result.summary.standbyDeviceDays, 1);
   assert.equal(result.summary.energyKwh, 1.5);
-  assert.equal(result.summary.fertilizerKg, 36);
-  close(result.summary.ghgKg, 300 * 1.5 - 1.5 * 0.71 - FIXED_DAILY_ADJUSTMENT * 2);
+  assert.equal(result.summary.fertilizerKg, 6);
+  close(
+    result.summary.ghgKg,
+    (20 * 1.5 - 1.5 * 0.71 - FIXED_DAILY_ADJUSTMENT)
+      + (30 * 1.5 - FIXED_DAILY_ADJUSTMENT)
+  );
+});
+
+test('monthly and yearly results sum per-device daily values and retain negative GHG', () => {
+  const result = aggregateTelemetrySnapshots([
+    { capturedAt:'2026-01-01T03:00:00Z', deviceId:'device-a', dailyInputT:0, operatingStatusCode:1 },
+    { capturedAt:'2026-01-02T03:00:00Z', deviceId:'device-a', dailyInputT:0.01, operatingStatusCode:1 },
+    { capturedAt:'2026-02-01T03:00:00Z', deviceId:'device-b', dailyInputT:0.02, operatingStatusCode:2 },
+  ], {
+    groupBy:'month',
+    start:'2026-01-01',
+    end:'2026-12-31',
+    region:'non-hk',
+    summaryMode:'yearly',
+    now:new Date('2026-02-15T00:00:00Z'),
+  });
+  assert.equal(result.items[0].value, 10);
+  assert.equal(result.items[1].value, 20);
+  assert.equal(result.summary.wasteKg, 30);
+  assert.equal(result.summary.energyKwh, 3);
+  close(result.summary.fertilizerKg, 3.6);
+  const januaryGhg = -1.5 * 0.37 - FIXED_DAILY_ADJUSTMENT
+    + 10 * 1.5 - 1.5 * 0.37 - FIXED_DAILY_ADJUSTMENT;
+  const februaryGhg = 20 * 1.5 - FIXED_DAILY_ADJUSTMENT;
+  close(result.ghgItems[0].value, januaryGhg);
+  close(result.ghgItems[1].value, februaryGhg);
+  close(result.summary.ghgKg, januaryGhg + februaryGhg);
 });
 
 test('converts cumulative daily input into hourly increments without duplicating a day', () => {

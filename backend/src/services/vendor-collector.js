@@ -5,7 +5,7 @@ import { listAllVendorDevices } from '../providers/vendor-devices.js';
 import { fetchVendorRealtimeDevices, mergeRealtimeDevices } from '../providers/vendor-realtime.js';
 import { recordVendorTelemetrySamples } from './vendor-analytics.js';
 
-const DEFAULT_INTERVALS = Object.freeze({ master_admin: 180, client_admin: 600, user: 600 });
+const DEFAULT_INTERVALS = Object.freeze({ master_admin: 1800, client_admin: 1800, user: 1800 });
 
 export function collectorVendorAccountId(account) {
   const value = account?.vendor_user_id ?? account?.vendorUserId;

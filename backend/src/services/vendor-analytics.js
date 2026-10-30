@@ -43,8 +43,8 @@ export async function recordVendorTelemetrySamples(devices, {
   const roundedCapture = new Date(Math.floor(captureDate.getTime() / 1000) * 1000);
   const source = sampleSource === 'worker' ? 'worker' : 'request';
   const interval = source === 'worker' ? finiteNumber(sampleIntervalSeconds) : null;
-  if (source === 'worker' && ![180, 600].includes(interval)) {
-    throw new Error('worker telemetry samples require a 180 or 600 second interval');
+  if (source === 'worker' && ![180, 600, 1800].includes(interval)) {
+    throw new Error('worker telemetry samples require a 180, 600, or 1800 second interval');
   }
 
   return withTransaction(async (client) => {
