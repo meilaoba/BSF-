@@ -143,6 +143,7 @@ function graphClientInstanceId(){
 
 async function graphFetchJson(path, params){
   let lastError = null;
+  let refreshAttempted = false;
   for(let attempt = 0; attempt < 3; attempt += 1){
     try {
       const response = await fetch(path + graphQueryString(params), {
@@ -162,6 +163,12 @@ async function graphFetchJson(path, params){
     } catch(error) {
       lastError = error;
       const code = String(error && (error.code || error.status) || '');
+      if(code === 'VENDOR_SESSION_EXPIRED' && !refreshAttempted
+        && window.BSF_API && typeof window.BSF_API.refreshSession === 'function'){
+        refreshAttempted = true;
+        await window.BSF_API.refreshSession();
+        continue;
+      }
       const retryable = code === 'NETWORK_ERROR'
         || code === 'TIMEOUT'
         || code === '429'

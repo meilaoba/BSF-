@@ -11,6 +11,27 @@ const vendor = http.createServer(async (req, res) => {
   receivedBody = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   receivedContentType = req.headers['content-type'];
 
+  if (req.url === '/user/refresh') {
+    if (req.headers.token !== 'access-token' || receivedBody.refreshToken !== 'refresh-token') {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ code: 401, msg: 'refresh expired' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      code: 200,
+      msg: 'Request processed successfully',
+      data: {
+        id: 7,
+        userName: 'admin',
+        type: 1,
+        token: 'refreshed-access-token',
+        refreshToken: null,
+      },
+    }));
+    return;
+  }
+
   if (receivedBody.userPass !== 'E10ADC3949BA59ABBE56E057F20F883E') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ code: 401, msg: 'bad credentials' }));
@@ -42,9 +63,10 @@ process.env.VENDOR_AUTH_ENABLED = 'true';
 process.env.AUTH_REQUIRED = 'false';
 process.env.AUTH_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString('base64');
 process.env.VENDOR_LOGIN_URL = `http://127.0.0.1:${port}/user/login`;
+process.env.VENDOR_REFRESH_URL = `http://127.0.0.1:${port}/user/refresh`;
 process.env.VENDOR_LOGIN_FORMAT = 'json';
 
-const { loginWithVendor } = await import('../src/providers/vendor-auth.js');
+const { loginWithVendor, refreshVendorToken } = await import('../src/providers/vendor-auth.js');
 
 test.after(() => new Promise((resolve) => vendor.close(resolve)));
 
@@ -64,5 +86,20 @@ test('vendor rejection becomes a generic credential error', async () => {
   await assert.rejects(
     () => loginWithVendor('admin', 'wrong-password'),
     (err) => err.code === 'INVALID_CREDENTIALS' && err.status === 401
+  );
+});
+
+test('vendor refresh returns a new access token and preserves the original refresh token', async () => {
+  const result = await refreshVendorToken('access-token', 'refresh-token');
+  assert.equal(result.token, 'refreshed-access-token');
+  assert.equal(result.refreshToken, 'refresh-token');
+  assert.equal(receivedContentType, 'application/json');
+  assert.deepEqual(receivedBody, { refreshToken: 'refresh-token' });
+});
+
+test('invalid vendor refresh token fails closed', async () => {
+  await assert.rejects(
+    () => refreshVendorToken('access-token', 'expired-refresh-token'),
+    (error) => error.code === 'REFRESH_TOKEN_INVALID' && error.status === 401
   );
 });

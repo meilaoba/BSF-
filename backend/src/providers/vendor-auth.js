@@ -42,6 +42,22 @@ function validateVendorUrl() {
   return url;
 }
 
+function validateVendorRefreshUrl() {
+  let url;
+  try {
+    url = new URL(config.auth.vendor.refreshUrl);
+  } catch {
+    throw new AppError('AUTH_CONFIGURATION_ERROR', 'Vendor refresh URL is invalid', { status: 503 });
+  }
+  if (config.env === 'production' && url.protocol !== 'https:') {
+    throw new AppError('AUTH_CONFIGURATION_ERROR', 'Vendor refresh URL must use HTTPS', { status: 503 });
+  }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw new AppError('AUTH_CONFIGURATION_ERROR', 'Vendor refresh URL protocol is not allowed', { status: 503 });
+  }
+  return url;
+}
+
 async function readLimitedJson(response) {
   const declaredLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
@@ -162,5 +178,64 @@ export async function loginWithVendor(userName, password) {
     },
     token,
     refreshToken,
+  };
+}
+
+export async function refreshVendorToken(accessToken, refreshToken) {
+  const currentAccessToken = cleanText(accessToken, 8192);
+  const currentRefreshToken = cleanText(refreshToken, 8192);
+  if (!config.auth.enabled) {
+    throw new AppError('AUTH_NOT_CONFIGURED', 'Authentication is not configured', { status: 503 });
+  }
+  if (!currentAccessToken || !currentRefreshToken) {
+    throw new AppError('REFRESH_TOKEN_INVALID', 'Refresh token is unavailable. Please sign in again.', { status: 401 });
+  }
+
+  const url = validateVendorRefreshUrl();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.auth.vendor.timeoutMs);
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      redirect: 'error',
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        token: currentAccessToken,
+      },
+      body: JSON.stringify({ refreshToken: currentRefreshToken }),
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new ProviderError('AUTH_SERVICE_TIMEOUT', 'Authentication service timed out', { status: 504 });
+    }
+    throw new ProviderError('AUTH_SERVICE_UNAVAILABLE', 'Authentication service is unavailable', { status: 503 });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => {});
+    if ([400, 401, 403].includes(response.status)) {
+      throw new AppError('REFRESH_TOKEN_INVALID', 'Vendor session expired. Please sign in again.', { status: 401 });
+    }
+    throw new ProviderError('AUTH_SERVICE_UNAVAILABLE', 'Authentication service is unavailable', { status: 503 });
+  }
+
+  const body = await readLimitedJson(response);
+  if (Number(body?.code) !== 200) {
+    throw new AppError('REFRESH_TOKEN_INVALID', 'Vendor session expired. Please sign in again.', { status: 401 });
+  }
+  const data = body?.data;
+  const token = cleanText(data?.token, 8192);
+  if (!data || typeof data !== 'object' || Array.isArray(data) || !token) {
+    throw new ProviderError('VENDOR_AUTH_INVALID_RESPONSE', 'Vendor refresh response is incomplete');
+  }
+  return {
+    token,
+    refreshToken: cleanText(data.refreshToken, 8192) || currentRefreshToken,
+    vendorUser: data,
   };
 }

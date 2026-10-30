@@ -10,12 +10,14 @@ import {
   sendOk,
 } from '../lib/http.js';
 import { requireString } from '../lib/validate.js';
-import { loginWithVendor } from '../providers/vendor-auth.js';
+import { loginWithVendor, refreshVendorToken } from '../providers/vendor-auth.js';
 import {
   authCookies,
   clearAuthCookies,
   createSession,
+  getVendorTokenPair,
   parseCookies,
+  replaceVendorTokens,
   revokeCurrentSession,
 } from '../middleware/session.js';
 
@@ -292,9 +294,29 @@ export function registerAuthRoutes(router) {
     sendOk(res, { loggedOut: true });
   });
 
-  router.post('/api/v1/auth/refresh', async () => {
-    // The vendor has not supplied its refresh endpoint yet. Fail closed rather
-    // than pretending the session was refreshed.
-    throw new AppError('REFRESH_NOT_CONFIGURED', 'Token refresh is not configured yet', { status: 501 });
+  router.post('/api/v1/auth/refresh', async (req, res) => {
+    if (!req.auth) throw new AppError('UNAUTHORIZED', 'Authentication required', { status: 401 });
+    const existing = await getVendorTokenPair(req.auth);
+    const refreshed = await refreshVendorToken(existing.accessToken, existing.refreshToken);
+    await replaceVendorTokens(req.auth, {
+      accessToken: refreshed.token,
+      refreshToken: refreshed.refreshToken,
+    });
+    await audit({
+      actorType: 'user',
+      actorId: req.auth.user.id,
+      actorLabel: req.auth.user.userName,
+      action: 'auth.refresh.success',
+      entityType: 'session',
+      entityId: req.auth.sessionId,
+      metadata: { refreshTokenRotated: refreshed.refreshToken !== existing.refreshToken },
+      ip: clientIp(req),
+      userAgent: String(req.headers['user-agent'] || '').slice(0, 500),
+    });
+    sendOk(res, {
+      user: req.auth.user,
+      sessionExpiresAt: req.auth.expiresAt,
+      refreshed: true,
+    });
   });
 }

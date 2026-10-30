@@ -138,7 +138,7 @@ export const config = {
       deviceTimeoutMs: num('VENDOR_DEVICE_TIMEOUT_MS', 15000),
       accessTokenTtlDays: num('VENDOR_ACCESS_TOKEN_TTL_DAYS', 7),
       refreshTokenTtlDays: num('VENDOR_REFRESH_TOKEN_TTL_DAYS', 8),
-      refreshUrl: str('VENDOR_REFRESH_URL', ''),
+      refreshUrl: str('VENDOR_REFRESH_URL', 'https://iot.creekscomposter.com:8888/user/refresh'),
       dailyStatsUrl: str('VENDOR_DAILY_STATS_URL', ''),
       alertListUrl: str('VENDOR_ALERT_LIST_URL', ''),
     },

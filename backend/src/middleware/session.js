@@ -192,7 +192,7 @@ export async function getSessionFromRequest(req) {
   };
 }
 
-export async function getVendorAccessToken(session) {
+export async function getVendorTokenPair(session) {
   if (!session?.sessionId) {
     throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session is unavailable. Please sign in again.', {
       status: 401,
@@ -200,7 +200,7 @@ export async function getVendorAccessToken(session) {
   }
 
   const { rows } = await query(
-    `SELECT s.vendor_access_token_enc
+    `SELECT s.vendor_access_token_enc, s.vendor_refresh_token_enc, s.user_id
        FROM auth_sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.id = $1
@@ -211,22 +211,68 @@ export async function getVendorAccessToken(session) {
     [session.sessionId]
   );
 
-  const encrypted = rows[0]?.vendor_access_token_enc;
-  if (!encrypted) {
+  const accessEncrypted = rows[0]?.vendor_access_token_enc;
+  const refreshEncrypted = rows[0]?.vendor_refresh_token_enc;
+  if (!accessEncrypted || !refreshEncrypted) {
     throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session is unavailable. Please sign in again.', {
       status: 401,
     });
   }
 
   try {
-    const token = decryptSecret(encrypted, config.auth.tokenEncryptionKey);
-    if (!token) throw new Error('empty token');
-    return token;
+    const accessToken = decryptSecret(accessEncrypted, config.auth.tokenEncryptionKey);
+    const refreshToken = decryptSecret(refreshEncrypted, config.auth.tokenEncryptionKey);
+    if (!accessToken || !refreshToken) throw new Error('empty token');
+    return {
+      userId: rows[0].user_id,
+      accessToken,
+      refreshToken,
+    };
   } catch {
     throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session is unavailable. Please sign in again.', {
       status: 401,
     });
   }
+}
+
+export async function getVendorAccessToken(session) {
+  return (await getVendorTokenPair(session)).accessToken;
+}
+
+export async function replaceVendorTokens(session, tokens) {
+  if (!session?.sessionId || !session?.user?.id) {
+    throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session is unavailable. Please sign in again.', {
+      status: 401,
+    });
+  }
+  const accessTokenEnc = encryptSecret(tokens.accessToken, config.auth.tokenEncryptionKey);
+  const refreshTokenEnc = encryptSecret(tokens.refreshToken, config.auth.tokenEncryptionKey);
+  await withTransaction(async (client) => {
+    const updated = await client.query(
+      `UPDATE auth_sessions
+          SET vendor_access_token_enc = $2,
+              vendor_refresh_token_enc = $3
+        WHERE id = $1
+          AND revoked_at IS NULL
+          AND expires_at > now()`,
+      [session.sessionId, accessTokenEnc, refreshTokenEnc]
+    );
+    if (updated.rowCount !== 1) {
+      throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session is unavailable. Please sign in again.', {
+        status: 401,
+      });
+    }
+    await client.query(
+      `INSERT INTO vendor_collector_credentials
+         (user_id, vendor_access_token_enc, vendor_refresh_token_enc, updated_at)
+       VALUES ($1,$2,$3,now())
+       ON CONFLICT (user_id) DO UPDATE SET
+         vendor_access_token_enc = EXCLUDED.vendor_access_token_enc,
+         vendor_refresh_token_enc = EXCLUDED.vendor_refresh_token_enc,
+         updated_at = now()`,
+      [session.user.id, accessTokenEnc, refreshTokenEnc]
+    );
+  });
 }
 export async function requireAuthenticatedSession(req) {
   const session = await getSessionFromRequest(req);

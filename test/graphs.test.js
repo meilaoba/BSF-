@@ -113,6 +113,32 @@ test('graph requests retry transient failures and then recover', async () => {
   assert.equal(result.summary.pointCount, 0);
 });
 
+test('graph requests refresh an expired vendor session and retry once', async () => {
+  let calls = 0;
+  let refreshes = 0;
+  sandbox.window.BSF_API = { refreshSession:async () => { refreshes += 1; } };
+  sandbox.fetch = async () => {
+    calls += 1;
+    if(calls === 1){
+      return {
+        ok:false,
+        status:401,
+        json:async () => ({ error:{ code:'VENDOR_SESSION_EXPIRED', message:'expired' } })
+      };
+    }
+    return {
+      ok:true,
+      status:200,
+      json:async () => ({ ok:true, data:{ items:[], summary:{ pointCount:0 } } })
+    };
+  };
+  const result = await vm.runInContext("graphFetchJson('/api/v1/graphs', {})", sandbox);
+  assert.equal(refreshes, 1);
+  assert.equal(calls, 2);
+  assert.equal(result.summary.pointCount, 0);
+  delete sandbox.window.BSF_API;
+});
+
 test('line chart keeps the full axis but never plots future or missing buckets', () => {
   sandbox.rows = [
     { label:'00:00', value:1 },

@@ -79,3 +79,24 @@ test('classic API bootstrap rejects stale cross-origin API URLs', () => {
   assert.equal(config.baseUrl, '/api/v1');
   assert.ok(removedKeys.includes('bsf.delivery.apiBaseUrl'));
 });
+
+test('vendor session expiry refreshes once and retries the original request', async () => {
+  let calls = 0;
+  const sequence = [
+    { ok:false, status:401, json:async () => ({ error:{ code:'VENDOR_SESSION_EXPIRED', message:'expired' } }) },
+    { ok:true, status:200, json:async () => ({ ok:true, data:{ refreshed:true } }) },
+    { ok:true, status:200, json:async () => ({ ok:true, data:{ temperatureC:28, value:28 } }) },
+  ];
+  const { client, calls: requestCalls } = loadClient(async () => {
+    const response = sequence[calls];
+    calls += 1;
+    return response;
+  }, 'bsf_csrf=csrf-token');
+
+  const result = await client.getEnvironmentTemperature({ date:'2026-10-30' });
+  assert.equal(result.temperatureC, 28);
+  assert.equal(calls, 3);
+  assert.match(requestCalls[1].url, /\/auth\/refresh$/);
+  assert.equal(requestCalls[1].options.headers['X-CSRF-Token'], 'csrf-token');
+  assert.match(requestCalls[2].url, /\/environment-temperature\?date=2026-10-30$/);
+});

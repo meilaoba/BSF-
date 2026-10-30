@@ -69,9 +69,18 @@
   const runtime = Object.assign({}, DEFAULT_RUNTIME_CONFIG, {
     apiBaseUrl:storedApiBaseUrl() || DEFAULT_RUNTIME_CONFIG.apiBaseUrl
   });
+  let sessionRefreshPromise = null;
 
-  async function request(path, options){
+  function refreshVendorSession(){
+    if(sessionRefreshPromise) return sessionRefreshPromise;
+    sessionRefreshPromise = request('/auth/refresh', { method:'POST', data:{} }, false)
+      .finally(function(){ sessionRefreshPromise = null; });
+    return sessionRefreshPromise;
+  }
+
+  async function request(path, options, allowRefresh){
     const settings = options || {};
+    const canRefresh = allowRefresh !== false;
     const controller = new AbortController();
     const timer = setTimeout(function(){ controller.abort(); }, runtime.requestTimeoutMs);
     const method = settings.method || 'GET';
@@ -93,7 +102,16 @@
       const payload = await response.json().catch(function(){ return {}; });
       if(!response.ok){
         const apiError = payload && payload.error ? payload.error : {};
-        throw new BsfApiError(apiError.message || payload.message || ('HTTP ' + response.status), apiError.code || response.status, payload);
+        const error = new BsfApiError(
+          apiError.message || payload.message || ('HTTP ' + response.status),
+          apiError.code || response.status,
+          payload
+        );
+        if(canRefresh && path !== '/auth/refresh' && error.code === 'VENDOR_SESSION_EXPIRED'){
+          await refreshVendorSession();
+          return request(path, settings, false);
+        }
+        throw error;
       }
       if(payload && typeof payload === 'object' && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, 'data')) return payload.data;
       if(payload && typeof payload === 'object' && 'code' in payload){
