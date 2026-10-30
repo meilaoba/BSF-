@@ -65,8 +65,10 @@ test('realtime records are limited to devices authorized by the REST response', 
 test('realtime client sends the authenticated device subscription and filters foreign pushes', async () => {
   let receivedToken = null;
   let receivedSubscription = null;
+  let connectionClosed = null;
   const handler = (socket, req) => {
     receivedToken = new URL(req.url, 'http://localhost').searchParams.get('token');
+    connectionClosed = once(socket, 'close');
     socket.on('message', (raw) => {
       receivedSubscription = JSON.parse(raw.toString('utf8'));
       socket.send(JSON.stringify([
@@ -98,6 +100,10 @@ test('realtime client sends the authenticated device subscription and filters fo
     assert.deepEqual(receivedSubscription, { deviceId: '52' });
     assert.equal(live.size, 1);
     assert.equal(live.get('52').telemetry.CabinTemp, 46.9);
+    await Promise.race([
+      connectionClosed,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('realtime socket did not close')), 1000)),
+    ]);
   } finally {
     wss.off('connection', handler);
   }

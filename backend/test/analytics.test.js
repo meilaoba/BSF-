@@ -30,7 +30,7 @@ test('confirmed formula and polling defaults remain configurable', () => {
   assert.equal(config.formula.energyFactorOther, 0.37);
   assert.equal(config.formula.fertilizerRatio, 0.12);
   assert.equal(config.formula.humidityScale, 100);
-  assert.equal(config.auth.vendor.realtimeEnabled, false);
+  assert.equal(config.auth.vendor.realtimeEnabled, true);
   assert.equal(config.auth.vendor.accessTokenTtlDays, 7);
   assert.equal(config.auth.vendor.refreshTokenTtlDays, 8);
 });
