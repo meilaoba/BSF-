@@ -6,6 +6,9 @@ export const DEFAULT_FORMULA_CONFIG = Object.freeze({
   wasteReductionFactor: 1.5,
   energyFactorHkIsland: 0.71,
   energyFactorOther: 0.37,
+  dailyDistanceKm: null,
+  fuelConsumptionLPer100Km: 8.3,
+  fuelEmissionFactorKgPerL: 2.32,
   transportConstant: 1.93,
   transportMonths: 12,
   transportDays: 365,
@@ -172,6 +175,32 @@ export function energyForStandbyDays(standbyDays, formula = {}) {
   return days === null || days < 0 ? null : days * formulaNumber(formula, 'standbyEnergyKwh');
 }
 
+export function electricityCarbonKg(energyKwh, region, formula = {}) {
+  const energy = finiteNumber(energyKwh);
+  if (energy === null) return null;
+  return energy * regionalEnergyFactor(region, formula);
+}
+
+export function transportCarbonKg(dailyDistanceKm, adjustmentDays = 1, formula = {}) {
+  const distance = finiteNumber(dailyDistanceKm ?? formula.dailyDistanceKm);
+  const days = finiteNumber(adjustmentDays);
+  if (days === null || days < 0) return null;
+  // Keep the legacy transport allowance until the customer confirms a distance.
+  if (distance === null) return fixedDailyAdjustment(formula) * days;
+  if (distance < 0) return null;
+  return (distance / 100)
+    * formulaNumber(formula, 'fuelConsumptionLPer100Km')
+    * formulaNumber(formula, 'fuelEmissionFactorKgPerL')
+    * days;
+}
+
+export function machineCarbonKg(energyKwh, region, adjustmentDays = 1, formula = {}) {
+  const electricity = electricityCarbonKg(energyKwh, region, formula);
+  const transport = transportCarbonKg(null, adjustmentDays, formula);
+  if (electricity === null || transport === null) return null;
+  return electricity + transport;
+}
+
 export function fertilizerKg(wasteKg, formula = {}) {
   const waste = finiteNumber(wasteKg);
   return waste === null || waste < 0 ? null : waste * formulaNumber(formula, 'fertilizerRatio');
@@ -182,9 +211,9 @@ export function ghgReducedKg(wasteKg, energyKwh, region, adjustmentDays = 1, for
   const energy = finiteNumber(energyKwh);
   const days = finiteNumber(adjustmentDays);
   if (waste === null || energy === null || days === null || days < 0) return null;
-  return waste * formulaNumber(formula, 'wasteReductionFactor')
-    - energy * regionalEnergyFactor(region, formula)
-    - fixedDailyAdjustment(formula) * days;
+  const machineCarbon = machineCarbonKg(energy, region, days, formula);
+  if (machineCarbon === null) return null;
+  return waste * formulaNumber(formula, 'wasteReductionFactor') - machineCarbon;
 }
 
 function normalizeSnapshotRow(row, formula = {}) {

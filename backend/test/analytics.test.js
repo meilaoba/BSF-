@@ -28,6 +28,9 @@ test('confirmed formula and polling defaults remain configurable', () => {
   assert.equal(config.formula.wasteReductionFactor, 1.5);
   assert.equal(config.formula.energyFactorHkIsland, 0.71);
   assert.equal(config.formula.energyFactorOther, 0.37);
+  assert.equal(config.formula.dailyDistanceKm, null);
+  assert.equal(config.formula.fuelConsumptionLPer100Km, 8.3);
+  assert.equal(config.formula.fuelEmissionFactorKgPerL, 2.32);
   assert.equal(config.formula.fertilizerRatio, 0.12);
   assert.equal(config.formula.humidityScale, 100);
   assert.equal(config.auth.vendor.realtimeEnabled, true);

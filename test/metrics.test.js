@@ -6,13 +6,16 @@ import { fileURLToPath } from 'node:url';
 import {
   aggregateTelemetrySnapshots,
   bucketKeys,
+  electricityCarbonKg,
   energyForStandbyDays,
   fertilizerKg,
   FIXED_DAILY_ADJUSTMENT,
   ghgReducedKg,
   hongKongDateKey,
+  machineCarbonKg,
   periodRange,
   regionalEnergyFactor,
+  transportCarbonKg,
 } from '../src/shared/metrics.js';
 
 function close(actual, expected, epsilon = 1e-9) {
@@ -43,8 +46,25 @@ test('applies the confirmed GHG, fertilizer and standby energy formulas', () => 
   assert.equal(regionalEnergyFactor('non-hk'), 0.37);
   assert.equal(energyForStandbyDays(3), 4.5);
   assert.equal(fertilizerKg(125), 15);
+  assert.equal(electricityCarbonKg(2, 'non-hk'), 0.74);
+  close(transportCarbonKg(null), FIXED_DAILY_ADJUSTMENT);
+  close(machineCarbonKg(2, 'non-hk'), 0.74 + FIXED_DAILY_ADJUSTMENT);
   close(ghgReducedKg(10, 2, 'hk', 1), 10 * 1.5 - 2 * 0.71 - FIXED_DAILY_ADJUSTMENT);
   close(ghgReducedKg(10, 2, 'non-hk', 1), 10 * 1.5 - 2 * 0.37 - FIXED_DAILY_ADJUSTMENT);
+});
+
+test('transport formula accepts confirmed distance and fuel parameters when configured', () => {
+  const formula = {
+    dailyDistanceKm: 9.2,
+    fuelConsumptionLPer100Km: 8.3,
+    fuelEmissionFactorKgPerL: 2.32,
+  };
+  const expectedTransport = (9.2 / 100) * 8.3 * 2.32;
+  close(transportCarbonKg(null, 1, formula), expectedTransport);
+  close(
+    ghgReducedKg(2, 1.5, 'non-hk', 1, formula),
+    2 * 1.5 - 1.5 * 0.37 - expectedTransport
+  );
 });
 
 test('formula settings can be overridden without changing code', () => {
