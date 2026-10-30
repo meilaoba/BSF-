@@ -8,6 +8,7 @@ const {
   normalizeHkoCurrentResponse,
   normalizeHkoOfficialDailyResponse,
 } = await import('../src/providers/hko-weather.js');
+const { environmentSampleIsFresh } = await import('../src/services/environment-temperature.js');
 const { closePool } = await import('../src/db.js');
 
 test.after(async () => closePool());
@@ -38,4 +39,16 @@ test('normalizes the official daily mean and ignores incomplete rows', () => {
   assert.equal(result.temperatureC, 23.4);
   assert.equal(result.completeness, 'C');
   assert.equal(normalizeHkoOfficialDailyResponse({ data: [] }, '2026-10-28'), null);
+});
+
+test('environment temperature cache does not cross a Hong Kong date boundary', () => {
+  const now = new Date('2026-10-30T16:10:00Z');
+  assert.equal(environmentSampleIsFresh({
+    fetched_at: '2026-10-30T16:05:00Z',
+    observed_at: '2026-10-30T16:00:00Z'
+  }, '2026-10-31', now), true);
+  assert.equal(environmentSampleIsFresh({
+    fetched_at: '2026-10-30T15:55:00Z',
+    observed_at: '2026-10-30T15:50:00Z'
+  }, '2026-10-31', now), false);
 });

@@ -15,17 +15,24 @@ function validDateKey(value) {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-async function saveCurrentSample(now = new Date()) {
+export function environmentSampleIsFresh(sample, dateKey, now = new Date(), maxAgeMs = SAMPLE_CACHE_MS) {
+  const fetchedAt = new Date(sample?.fetched_at || sample?.fetchedAt || '');
+  const observedAt = new Date(sample?.observed_at || sample?.observedAt || '');
+  if (!Number.isFinite(fetchedAt.getTime()) || !Number.isFinite(observedAt.getTime())) return false;
+  if (hongKongDateKey(observedAt) !== dateKey) return false;
+  return now.getTime() - fetchedAt.getTime() < maxAgeMs;
+}
+
+async function saveCurrentSample(now = new Date(), dateKey = hongKongDateKey(now)) {
   const latest = await query(
-    `SELECT fetched_at
+    `SELECT fetched_at, observed_at
        FROM environment_temperature_samples
       WHERE station = $1
       ORDER BY fetched_at DESC
       LIMIT 1`,
     [config.environment.hkoStation]
   );
-  const fetchedAt = new Date(latest.rows[0]?.fetched_at || '');
-  if (Number.isFinite(fetchedAt.getTime()) && now.getTime() - fetchedAt.getTime() < SAMPLE_CACHE_MS) {
+  if (environmentSampleIsFresh(latest.rows[0], dateKey, now)) {
     return { cached: true };
   }
   const sample = await fetchHkoCurrentTemperature();
@@ -95,7 +102,7 @@ export async function getEnvironmentTemperature(dateKey, now = new Date()) {
   if (selectedDate === today) {
     let sampleUnavailable = false;
     try {
-      await saveCurrentSample(now);
+      await saveCurrentSample(now, selectedDate);
     } catch (error) {
       sampleUnavailable = true;
       console.warn('[hko] current temperature unavailable:', error.code || error.message);
