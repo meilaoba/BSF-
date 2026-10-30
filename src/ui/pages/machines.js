@@ -17,6 +17,24 @@ function machineHasCoordinates(device){
   return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
+function machineStatusValue(status){
+  const normalized = String(status || 'offline').toLowerCase();
+  return normalized === 'running' || normalized === 'standby' ? normalized : 'offline';
+}
+
+function machineStatusColor(status){
+  const normalized = machineStatusValue(status);
+  if(normalized === 'running') return '#3b82f6';
+  if(normalized === 'standby') return '#f59e0b';
+  return '#ef4444';
+}
+
+function machineStatusBadge(device){
+  const status = machineStatusValue(device && device.status);
+  const color = machineStatusColor(status);
+  return '<span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:' + color + '26;color:' + color + ';">' + machinePreviewEscape(status.toUpperCase()) + '</span>';
+}
+
 const machineMetricCache = new Map();
 const machineMetricRequests = new Map();
 const MACHINE_METRIC_TTL_MS = 60 * 1000;
@@ -128,6 +146,10 @@ function renderMachines(container){
   const filteredDevices = machineFilters.device
     ? clientDevices.filter(dev=>dev.id===machineFilters.device)
     : clientDevices;
+  const statusCounts = filteredDevices.reduce(function(counts, dev){
+    counts[machineStatusValue(dev.status)] += 1;
+    return counts;
+  }, { running:0, standby:0, offline:0 });
   const d = filteredDevices[0] || null;
   const previewDevices = filteredDevices.filter(machineHasCoordinates);
   const previewLats = previewDevices.map(function(dev){ return Number(dev.lat); });
@@ -141,8 +163,8 @@ function renderMachines(container){
     const lngRange = previewMaxLng - previewMinLng || 1;
     const left = previewDevices.length === 1 ? 50 : 12 + ((Number(dev.lng) - previewMinLng) / lngRange) * 76;
     const top = previewDevices.length === 1 ? 50 : 12 + ((previewMaxLat - Number(dev.lat)) / latRange) * 76;
-    const status = String(dev.status || 'offline').toLowerCase();
-    const color = status==='online' ? '#10b981' : status==='running' ? '#3b82f6' : status==='standby' ? '#f59e0b' : '#ef4444';
+    const status = machineStatusValue(dev.status);
+    const color = machineStatusColor(status);
     return '<div title="' + machinePreviewEscape(dev.id) + ' - ' + machinePreviewEscape(status.toUpperCase()) + '" style="position:absolute;top:' + top.toFixed(2) + '%;left:' + left.toFixed(2) + '%;transform:translate(-50%,-50%);width:14px;height:14px;background:' + color + ';border-radius:50%;box-shadow:0 0 0 4px ' + color + '33;border:2px solid #1e293b;"></div>';
   }).join('');
   const previewEmpty = d && !previewDevices.length ? '<p style="color:#64748b;font-size:12px;margin:8px 0 0;">GPS coordinates unavailable</p>' : '';
@@ -162,10 +184,12 @@ function renderMachines(container){
         </select>
       </label>
       <div style="display:flex;gap:8px;align-items:center;padding-bottom:11px;">
-        <span style="width:10px;height:10px;background:#10b981;border-radius:50%;display:inline-block;"></span>
-        <span style="font-size:13px;color:#94a3b8;">${filteredDevices.filter(dev=>dev.status==='online'||dev.status==='running'||dev.status==='standby').length} Online</span>
+        <span style="width:10px;height:10px;background:#3b82f6;border-radius:50%;display:inline-block;"></span>
+        <span style="font-size:13px;color:#94a3b8;">${statusCounts.running} Running</span>
+        <span style="width:10px;height:10px;background:#f59e0b;border-radius:50%;display:inline-block;margin-left:12px;"></span>
+        <span style="font-size:13px;color:#94a3b8;">${statusCounts.standby} Standby</span>
         <span style="width:10px;height:10px;background:#ef4444;border-radius:50%;display:inline-block;margin-left:12px;"></span>
-        <span style="font-size:13px;color:#94a3b8;">${filteredDevices.filter(dev=>dev.status==='offline').length} Offline</span>
+        <span style="font-size:13px;color:#94a3b8;">${statusCounts.offline} Offline</span>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
@@ -182,7 +206,7 @@ function renderMachines(container){
                 <p style="margin:4px 0 0;font-size:12px;color:#64748b;">${machinePreviewEscape(dev.name)}</p>
               </div>
               <div style="text-align:right;">
-                <span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${dev.status==='online'?'rgba(16,185,129,0.15)':dev.status==='running'?'rgba(59,130,246,0.15)':dev.status==='standby'?'rgba(245,158,11,0.15)':'rgba(239,68,68,0.15)'};color:${dev.status==='online'?'#10b981':dev.status==='running'?'#3b82f6':dev.status==='standby'?'#f59e0b':'#ef4444'};">${machinePreviewEscape(String(dev.status || '').toUpperCase())}</span>
+                ${machineStatusBadge(dev)}
                 <p style="margin:4px 0 0;font-size:11px;color:#64748b;">${machinePreviewEscape(dev.network)} · ${dev.signal === undefined || dev.signal === null || dev.signal === '' ? '—' : machinePreviewEscape(dev.signal) + '%'}</p>
               </div>
             </div>

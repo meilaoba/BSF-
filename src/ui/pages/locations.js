@@ -1,6 +1,10 @@
-function locationStatusColor(status){
+function locationStatusValue(status){
   const normalized = String(status || 'offline').toLowerCase();
-  if(normalized === 'online') return '#10b981';
+  return normalized === 'running' || normalized === 'standby' ? normalized : 'offline';
+}
+
+function locationStatusColor(status){
+  const normalized = locationStatusValue(status);
   if(normalized === 'running') return '#3b82f6';
   if(normalized === 'standby') return '#f59e0b';
   return '#ef4444';
@@ -121,20 +125,14 @@ function setLocationFilter(key, value){
 
 function setLocationSearch(value){
   locationFilters.search = value || '';
-  renderLocations(document.getElementById('page-content'));
-  const input = document.getElementById('location-search');
-  if(input){
-    input.focus();
-    const position = input.value.length;
-    try { input.setSelectionRange(position, position); } catch(error) {}
-  }
+  renderLocationFilterResults(document.getElementById('page-content'));
 }
 
 function filterLocationDevices(devices, filters){
   const searchText = String(filters && filters.search || '').trim().toLowerCase();
   return (Array.isArray(devices) ? devices : []).filter(function(device){
     const client = device.client || 'Unassigned';
-    const status = String(device.status || '').toLowerCase();
+    const status = locationStatusValue(device.status);
     if(filters && filters.client && client !== filters.client) return false;
     if(filters && filters.status && status !== filters.status) return false;
     if(searchText){
@@ -145,12 +143,8 @@ function filterLocationDevices(devices, filters){
     return true;
   });
 }
-function renderLocations(container){
-  const locationDevices = scopedDevices();
-  const clientScoped = isClientScopedRole();
-  const clientNames = scopedClientNames();
-  const filteredDevices = filterLocationDevices(locationDevices, locationFilters);
 
+function locationResultsMarkup(filteredDevices){
   const positioned = filteredDevices.map(function(device){
     const profile = locationProfile(device);
     return { device:device, profile:profile };
@@ -170,7 +164,7 @@ function renderLocations(container){
     const color = locationStatusColor(dev.status);
     const mapsUrl = locationMapsUrl(dev);
     const dot = '<span class="locations-static-marker" style="position:relative;width:18px;height:18px;display:block;background:' + color + ';border-radius:50%;box-shadow:0 0 0 6px ' + color + '33;border:3px solid #1e293b;"></span>';
-    const title = bsfEscapeHtml(dev.id + ' - ' + String(dev.status || 'offline').toUpperCase());
+    const title = bsfEscapeHtml(dev.id + ' - ' + locationStatusValue(dev.status).toUpperCase());
     return mapsUrl
       ? '<a class="locations-static-marker" href="' + bsfEscapeHtml(mapsUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Open ' + bsfEscapeHtml(dev.id) + ' in Google Maps" title="' + title + '" style="position:absolute;top:' + top.toFixed(2) + '%;left:' + left.toFixed(2) + '%;transform:translate(-50%,-50%);text-decoration:none;">' + dot + '</a>'
       : '<span class="locations-static-marker" title="' + title + '" style="position:absolute;top:' + top.toFixed(2) + '%;left:' + left.toFixed(2) + '%;transform:translate(-50%,-50%);">' + dot + '</span>';
@@ -181,25 +175,17 @@ function renderLocations(container){
   } else if(!positioned.length){
     mapNotice = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#64748b;"><div style="font-size:40px;margin-bottom:8px;">📍</div><p style="margin:0;font-size:13px;">GPS coordinates are not provided by device data</p></div>';
   }
-  const clientFilterMarkup = clientScoped
-    ? clientScopeBadge()
-    : '<select id="location-client-filter" onchange="setLocationFilter(\'client\',this.value)" style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option value=""' + (locationFilters.client ? '' : ' selected') + '>All Clients</option>' + clientNames.map(function(client){
-        return '<option value="' + bsfEscapeHtml(client) + '"' + (locationFilters.client === client ? ' selected' : '') + '>' + bsfEscapeHtml(client) + '</option>';
-      }).join('') + '</select>';
-  const statusOptions = ['', 'online', 'running', 'standby', 'offline'].map(function(value){
-    const label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'All';
-    return '<option value="' + value + '"' + (locationFilters.status === value ? ' selected' : '') + '>' + label + '</option>';
-  }).join('');
   const cards = filteredDevices.length ? filteredDevices.map(function(device){
     const profile = locationProfile(device);
-    const color = locationStatusColor(device.status);
+    const status = locationStatusValue(device.status);
+    const color = locationStatusColor(status);
     const coordinates = profile.lat === null ? '—' : profile.lat + ', ' + profile.lng;
     const mapsLink = profile.mapsUrl
       ? '<a href="' + bsfEscapeHtml(profile.mapsUrl) + '" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;color:#10b981;font-size:12px;font-weight:600;text-decoration:none;">Open Google Maps</a>'
       : '<p style="margin:8px 0 0;color:#64748b;font-size:12px;">Google Maps unavailable</p>';
     return '<div style="background:#1e293b;border-radius:12px;padding:16px;border:1px solid #334155;">' +
       '<div style="display:flex;justify-content:space-between;align-items:start;gap:12px;margin-bottom:12px;"><div><p style="margin:0;font-weight:700;color:#f8fafc;font-size:15px;">' + bsfEscapeHtml(device.id) + '</p><p style="margin:4px 0 0;font-size:12px;color:#64748b;">' + bsfEscapeHtml(device.name) + '</p></div>' +
-      '<span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:' + color + '26;color:' + color + ';">' + bsfEscapeHtml(String(device.status || 'offline').toUpperCase()) + '</span></div>' +
+      '<span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:' + color + '26;color:' + color + ';">' + bsfEscapeHtml(status.toUpperCase()) + '</span></div>' +
       '<p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Current Client:</span> ' + bsfEscapeHtml(device.client || 'Unassigned') + '</p>' +
       '<p style="margin:0 0 4px;font-size:13px;color:#94a3b8;"><span style="color:#64748b;">Location Preview:</span> ' + bsfEscapeHtml(coordinates) + '</p>' +
       (profile.address ? '<p style="margin:0 0 4px;font-size:13px;color:#94a3b8;">' + bsfEscapeHtml(profile.address) + '</p>' : '') +
@@ -207,6 +193,51 @@ function renderLocations(container){
       '<p style="margin:10px 0 0;font-size:11px;color:#475569;">Powered by: ' + bsfEscapeHtml(profile.poweredBy) + '</p>' +
       '<p style="margin:8px 0 0;font-size:12px;color:#64748b;">Last update: ' + bsfEscapeHtml(device.lastUpdate || '—') + '</p></div>';
   }).join('') : '<div style="grid-column:1/-1;background:#1e293b;border-radius:12px;padding:32px;text-align:center;color:#64748b;border:1px solid #334155;">No devices match the selected filters</div>';
+
+  return '<div style="background:#1e293b;border-radius:12px;padding:20px;border:1px solid #334155;margin-bottom:20px;">' +
+      '<div id="locations-map-canvas" style="background:#0f172a;border-radius:8px;height:480px;position:relative;overflow:hidden;border:1px solid #334155;">' +
+        '<div id="locations-map-static-bg" style="position:absolute;width:100%;height:100%;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);"></div>' +
+        markerHtml + mapNotice +
+        '<div style="position:absolute;bottom:20px;left:20px;background:rgba(30,41,59,0.95);padding:12px 16px;border-radius:8px;border:1px solid #334155;">' +
+          '<p style="margin:0 0 8px;font-size:12px;color:#94a3b8;font-weight:600;">Legend</p>' +
+          '<div style="display:flex;flex-direction:column;gap:6px;">' +
+            '<span style="font-size:12px;color:#e2e8f0;"><span style="width:10px;height:10px;background:#3b82f6;border-radius:50%;display:inline-block;margin-right:8px;"></span>Running</span>' +
+            '<span style="font-size:12px;color:#e2e8f0;"><span style="width:10px;height:10px;background:#f59e0b;border-radius:50%;display:inline-block;margin-right:8px;"></span>Standby</span>' +
+            '<span style="font-size:12px;color:#e2e8f0;"><span style="width:10px;height:10px;background:#ef4444;border-radius:50%;display:inline-block;margin-right:8px;"></span>Offline</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">' + cards + '</div>';
+}
+
+function renderLocationFilterResults(container){
+  if(!container) return;
+  const filteredDevices = filterLocationDevices(scopedDevices(), locationFilters);
+  const results = document.getElementById('locations-results');
+  if(!results){
+    renderLocations(container);
+    return;
+  }
+  results.innerHTML = locationResultsMarkup(filteredDevices);
+  initGoogleMapLocations(filteredDevices);
+}
+
+function renderLocations(container){
+  const locationDevices = scopedDevices();
+  const clientScoped = isClientScopedRole();
+  const clientNames = scopedClientNames();
+  const filteredDevices = filterLocationDevices(locationDevices, locationFilters);
+  const clientFilterMarkup = clientScoped
+    ? clientScopeBadge()
+    : '<select id="location-client-filter" onchange="setLocationFilter(\'client\',this.value)" style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option value=""' + (locationFilters.client ? '' : ' selected') + '>All Clients</option>' + clientNames.map(function(client){
+        return '<option value="' + bsfEscapeHtml(client) + '"' + (locationFilters.client === client ? ' selected' : '') + '>' + bsfEscapeHtml(client) + '</option>';
+      }).join('') + '</select>';
+  const statusOptions = ['', 'running', 'standby', 'offline'].map(function(value){
+    const label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'All';
+    return '<option value="' + value + '"' + (locationFilters.status === value ? ' selected' : '') + '>' + label + '</option>';
+  }).join('');
+
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Device Locations</h2>
@@ -218,21 +249,8 @@ function renderLocations(container){
         <select id="location-status-filter" onchange="setLocationFilter('status',this.value)" style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">${statusOptions}</select>
         <input id="location-search" type="text" value="${bsfEscapeHtml(locationFilters.search || '')}" placeholder="Search device..." oninput="setLocationSearch(this.value)" style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:200px;" />
       </div>
-      <div id="locations-map-canvas" style="background:#0f172a;border-radius:8px;height:480px;position:relative;overflow:hidden;border:1px solid #334155;">
-        <div id="locations-map-static-bg" style="position:absolute;width:100%;height:100%;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);"></div>
-        ${markerHtml}${mapNotice}
-        <div style="position:absolute;bottom:20px;left:20px;background:rgba(30,41,59,0.95);padding:12px 16px;border-radius:8px;border:1px solid #334155;">
-          <p style="margin:0 0 8px;font-size:12px;color:#94a3b8;font-weight:600;">Legend</p>
-          <div style="display:flex;flex-direction:column;gap:6px;">
-            <span style="font-size:12px;color:#e2e8f0;"><span style="width:10px;height:10px;background:#10b981;border-radius:50%;display:inline-block;margin-right:8px;"></span>Online</span>
-            <span style="font-size:12px;color:#e2e8f0;"><span style="width:10px;height:10px;background:#3b82f6;border-radius:50%;display:inline-block;margin-right:8px;"></span>Running</span>
-            <span style="font-size:12px;color:#e2e8f0;"><span style="width:10px;height:10px;background:#f59e0b;border-radius:50%;display:inline-block;margin-right:8px;"></span>Standby</span>
-            <span style="font-size:12px;color:#e2e8f0;"><span style="width:10px;height:10px;background:#ef4444;border-radius:50%;display:inline-block;margin-right:8px;"></span>Offline</span>
-          </div>
-        </div>
-      </div>
+      <div id="locations-results">${locationResultsMarkup(filteredDevices)}</div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">${cards}</div>
   `;
   initGoogleMapLocations(filteredDevices);
 }

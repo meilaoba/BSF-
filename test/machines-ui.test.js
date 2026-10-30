@@ -33,3 +33,11 @@ test('machines page restores the original eight-metric layout', () => {
   assert.doesNotMatch(source, /Total Added Material/);
   assert.doesNotMatch(source, /Total Discharged/);
 });
+
+test('machines page uses only running, standby and offline device statuses', () => {
+  assert.match(source, /Running/);
+  assert.match(source, /Standby/);
+  assert.match(source, /Offline/);
+  assert.doesNotMatch(source, /status==='online'/);
+  assert.doesNotMatch(source, />\s*Online\s*</);
+});

@@ -82,6 +82,14 @@ test('maps confirmed deviceOnline codes and humidity display scale', () => {
   sandbox.window.BSF_RUNTIME_CONFIG = {};
 });
 
+test('unknown device states fall back to offline instead of creating an online state', () => {
+  assert.equal(sandbox.bsfStatusFromDeviceState(9), 'offline');
+  assert.equal(
+    sandbox.bsfResolveStatus({ status: 'active' }, null, { operatingStatusCode: null }, {}),
+    'offline'
+  );
+});
+
 test('deduplicates a stored and live row with the same device timestamp', () => {
   const machine = {
     id: '11111111-1111-4111-8111-111111111111',

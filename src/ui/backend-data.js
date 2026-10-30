@@ -79,7 +79,7 @@ function bsfStatusFromDeviceState(state){
   if(value === 0) return 'offline';
   if(value === 1) return 'standby';
   if(value === 2) return 'running';
-  return 'online';
+  return 'offline';
 }
 
 function bsfRawState(status){
@@ -178,8 +178,8 @@ function bsfResolveStatus(machine, vendor, reading, stored){
   if(onlineCode === 2) return 'running';
   const deviceState = bsfField(stored, ['device_state', 'deviceState']);
   if(deviceState !== undefined) return bsfStatusFromDeviceState(deviceState);
-  if(reading.operatingStatusCode !== null) return bsfOperatingStateFromCode(reading.operatingStatusCode) || 'online';
-  return 'online';
+  if(reading.operatingStatusCode !== null) return bsfOperatingStateFromCode(reading.operatingStatusCode) || 'offline';
+  return 'offline';
 }
 
 function bsfLastUpdate(machine, vendor, stored, reading){
