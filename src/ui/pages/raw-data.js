@@ -171,6 +171,16 @@ function applyRawDataFilter(){
 }
 function rawCsvCell(value){ return '"' + bsfSpreadsheetSafeText(value).replace(/"/g,'""') + '"'; }
 function rawDataDisplay(value){ return bsfEscapeHtml(value === undefined || value === null || value === '' ? '—' : value); }
+function rawDeviceStateStyle(state){
+  const normalized = String(state || 'offline').toLowerCase();
+  if(normalized === 'running') return { background:'rgba(59,130,246,0.15)', color:'#3b82f6' };
+  if(normalized === 'standby') return { background:'rgba(245,158,11,0.15)', color:'#f59e0b' };
+  return { background:'rgba(239,68,68,0.15)', color:'#ef4444' };
+}
+function rawDeviceStateMarkup(state){
+  const style = rawDeviceStateStyle(state);
+  return '<span style="padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;background:' + style.background + ';color:' + style.color + ';">' + rawDataDisplay(state) + '</span>';
+}
 function rawDataToast(message){ let toast=document.getElementById('raw-data-toast'); if(!toast){toast=document.createElement('div');toast.id='raw-data-toast';document.body.appendChild(toast);} toast.textContent=message; toast.style.cssText='position:fixed;top:20px;right:20px;z-index:100000;padding:12px 18px;border-radius:8px;color:#e2e8f0;background:#065f46;border:1px solid #10b981;box-shadow:0 12px 30px rgba(0,0,0,.35);font-size:13px;font-weight:600;'; setTimeout(function(){if(toast)toast.remove();},3000); }
 async function rawDataLoadAllForExport(){
   const rows = [];
@@ -233,7 +243,7 @@ function rawDataCompactTableMarkup(rows){
     <tbody>${rows.map((row,i)=>`<tr style="border-bottom:1px solid #334155;background:${i%2===0?'#1e293b':'#1a2332'};">
       <td style="${td}">${rawDataDisplay(row.recordedAt)}</td>
       <td style="${td}font-weight:600;">${rawDataDisplay(row.device)}</td>
-      <td style="padding:10px 16px;"><span style="padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;background:${row.deviceState==='Running'?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)'};color:${row.deviceState==='Running'?'#10b981':'#f59e0b'};">${rawDataDisplay(row.deviceState)}</span></td>
+      <td style="padding:10px 16px;">${rawDeviceStateMarkup(row.deviceState)}</td>
       <td style="${td}">${rawDataDisplay(row.weight)}</td>
       <td style="${td}">${rawDataDisplay(row.temperature)}</td>
       <td style="${td}">${rawDataDisplay(row.humidity)}</td>
@@ -255,7 +265,7 @@ function rawDataFullTableMarkup(rows){
     </tr></thead>
     <tbody>${rows.map((row,i)=>`<tr style="border-bottom:1px solid #334155;background:${i%2===0?'#1e293b':'#1a2332'};">
       <td style="${td}">${rawDataDisplay(row.recordedAt)}</td><td style="${td}font-weight:600;">${rawDataDisplay(row.device)}</td>
-      <td style="padding:10px 16px;"><span style="padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;background:${row.deviceState==='Running'?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)'};color:${row.deviceState==='Running'?'#10b981':'#f59e0b'};">${rawDataDisplay(row.deviceState)}</span></td>
+      <td style="padding:10px 16px;">${rawDeviceStateMarkup(row.deviceState)}</td>
       <td style="${td}">${rawDataDisplay(row.operatingStatus)}</td><td style="${td}">${rawDataDisplay(row.fermentState)}</td><td style="${td}">${rawDataDisplay(row.runTime)}</td>
       <td style="${td}">${rawDataDisplay(row.weight)}</td><td style="${td}">${rawDataDisplay(row.totalAddMaterial)}</td><td style="${td}">${rawDataDisplay(row.singleAddMaterial)}</td>
       <td style="${td}">${rawDataDisplay(row.totalDischarge)}</td><td style="${td}">${rawDataDisplay(row.singleDischarge)}</td><td style="${td}">${rawDataDisplay(row.discharge)}</td>

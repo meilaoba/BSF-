@@ -133,6 +133,16 @@ test('analytics migration preserves source units and prevents duplicate captures
   assert.match(sql, /vendor_device_telemetry_device_time_idx/);
 });
 
+test('vendor telemetry migration preserves deviceOnline status at collection time', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sql = fs.readFileSync(
+    path.join(root, 'db/migrations/012_vendor_telemetry_device_status.sql'),
+    'utf8'
+  );
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS device_online_code SMALLINT/);
+  assert.match(sql, /vendor_device_telemetry_device_online_code_check/);
+});
+
 test('environment temperature migration stores HKO samples and daily values', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const sql = fs.readFileSync(path.join(root, 'db/migrations/010_environment_temperature.sql'), 'utf8');

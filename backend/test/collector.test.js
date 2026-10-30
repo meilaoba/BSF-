@@ -50,6 +50,12 @@ test('collector refreshes an expired vendor token and updates encrypted credenti
   assert.match(route, /loadCollectorCredentials/);
 });
 
+test('collector persists deviceOnline status with each telemetry sample', () => {
+  const source = fs.readFileSync(path.join(root, 'src/services/vendor-analytics.js'), 'utf8');
+  assert.match(source, /device_online_code/);
+  assert.match(source, /finiteNumber\(device\.onlineCode\)/);
+});
+
 test('collector applies the confirmed 30 minute vendor cadence', () => {
   assert.equal(collectorIntervalSeconds('master_admin', {}), 1800);
   assert.equal(collectorIntervalSeconds('client_admin', {}), 1800);

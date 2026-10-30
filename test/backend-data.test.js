@@ -366,6 +366,25 @@ test('maps scheduled raw samples to the compact six-column contract with real fi
   assert.equal(row.network, 'Scheduled collector');
 });
 
+test('raw samples use the collected deviceOnline status before operating status', () => {
+  const rawSampleRow = sandbox.window.BSF_BACKEND_DATA.rawSampleRow;
+  const row = rawSampleRow({
+    deviceId: 'vendor-300',
+    capturedAt: '2026-10-30T22:30:00+08:00',
+    normalized: {
+      onlineCode: 1,
+      operatingStatusCode: 0
+    },
+    telemetry: {}
+  }, {
+    id: 'KW-300',
+    vendorDeviceId: 'vendor-300',
+    status: 'offline'
+  });
+
+  assert.equal(row.deviceState, 'Standby');
+});
+
 test('leaves missing raw sample fields empty instead of fabricating values', () => {
   const rawSampleRow = sandbox.window.BSF_BACKEND_DATA.rawSampleRow;
   const row = rawSampleRow({

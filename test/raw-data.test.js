@@ -63,6 +63,15 @@ test('master admin keeps the full raw table', () => {
   assert.match(html, />Total Add\(kg\)</);
 });
 
+test('raw data uses blue running, amber standby and red offline status badges', () => {
+  const running = sandbox.rawDeviceStateMarkup('Running');
+  const standby = sandbox.rawDeviceStateMarkup('Standby');
+  const offline = sandbox.rawDeviceStateMarkup('Offline');
+  assert.match(running, /#3b82f6/);
+  assert.match(standby, /#f59e0b/);
+  assert.match(offline, /#ef4444/);
+});
+
 test('raw data uses saved samples and paginates exports instead of requesting 5000 rows', () => {
   assert.match(source, /BSF_LOAD_RAW_SAMPLES/);
   assert.match(source, /rawDataLoadAllForExport/);

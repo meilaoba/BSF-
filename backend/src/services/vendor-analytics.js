@@ -63,11 +63,11 @@ export async function recordVendorTelemetrySamples(devices, {
            vendor_account_id, vendor_device_id, vendor_device_name, captured_at,
            sample_source, sample_interval_seconds,
            source_recorded_at, cabin_temp_c, humidity_pct, real_time_weight_kg,
-           operating_status_code, daily_input_t, weekly_input_t, monthly_input_t,
+           operating_status_code, device_online_code, daily_input_t, weekly_input_t, monthly_input_t,
            yearly_input_t, daily_output_t, weekly_output_t, monthly_output_t,
            yearly_output_t, telemetry, input_data, output_data
          ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
          )
          ON CONFLICT (vendor_account_id, vendor_device_id, captured_at) DO UPDATE SET
            vendor_device_name = EXCLUDED.vendor_device_name,
@@ -78,6 +78,7 @@ export async function recordVendorTelemetrySamples(devices, {
            humidity_pct = EXCLUDED.humidity_pct,
            real_time_weight_kg = EXCLUDED.real_time_weight_kg,
            operating_status_code = EXCLUDED.operating_status_code,
+           device_online_code = COALESCE(EXCLUDED.device_online_code, vendor_device_telemetry.device_online_code),
            daily_input_t = EXCLUDED.daily_input_t,
            weekly_input_t = EXCLUDED.weekly_input_t,
            monthly_input_t = EXCLUDED.monthly_input_t,
@@ -101,6 +102,7 @@ export async function recordVendorTelemetrySamples(devices, {
           finiteNumber(telemetry.Humidity ?? telemetry.humidity),
           finiteNumber(telemetry.RealTimeWeight ?? telemetry.realTimeWeight),
           finiteNumber(telemetry.OperatingStatus ?? telemetry.operatingStatus),
+          finiteNumber(device.onlineCode),
           finiteNumber(input.dailyInput),
           finiteNumber(input.weeklyInput),
           finiteNumber(input.monthlyInput),
@@ -155,7 +157,7 @@ export async function loadVendorTelemetrySamples({
   const { rows } = await query(
     `SELECT id, vendor_account_id, vendor_device_id, vendor_device_name,
             captured_at, source_recorded_at, sample_interval_seconds,
-            cabin_temp_c, humidity_pct, real_time_weight_kg, operating_status_code,
+            cabin_temp_c, humidity_pct, real_time_weight_kg, operating_status_code, device_online_code,
             daily_input_t, weekly_input_t, monthly_input_t, yearly_input_t,
             daily_output_t, weekly_output_t, monthly_output_t, yearly_output_t,
             telemetry, input_data, output_data,
@@ -186,6 +188,7 @@ export async function loadVendorTelemetrySamples({
         humidityPct: row.humidity_pct,
         realTimeWeightKg: row.real_time_weight_kg,
         operatingStatusCode: row.operating_status_code,
+        onlineCode: row.device_online_code,
         dailyInputT: row.daily_input_t,
         weeklyInputT: row.weekly_input_t,
         monthlyInputT: row.monthly_input_t,

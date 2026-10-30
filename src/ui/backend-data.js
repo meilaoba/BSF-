@@ -569,13 +569,18 @@ function bsfRawSampleRow(sample, device){
     cabin_temp_c:bsfField(normalized, ['cabinTempC']),
     humidity_pct:bsfField(normalized, ['humidityPct']),
     real_time_weight_kg:bsfField(normalized, ['realTimeWeightKg']),
-    operating_status_code:bsfField(normalized, ['operatingStatusCode'])
+    operating_status_code:bsfField(normalized, ['operatingStatusCode']),
+    device_online_code:bsfField(normalized, ['onlineCode', 'deviceOnlineCode'])
   });
   const reading = bsfReadTelemetry(data);
   const rawRecordedAt = bsfField(sample, ['recordedAt', 'capturedAt']);
   const recordedAt = bsfDate(rawRecordedAt);
   if(!recordedAt) return null;
-  const state = bsfOperatingStateFromCode(reading.operatingStatusCode) || (device && device.status) || 'offline';
+  const onlineCode = bsfField(normalized, ['onlineCode', 'deviceOnlineCode']);
+  const sampleStatus = onlineCode === undefined || onlineCode === null || onlineCode === ''
+    ? null
+    : bsfStatusFromDeviceState(onlineCode);
+  const state = sampleStatus || (device && device.status) || bsfOperatingStateFromCode(reading.operatingStatusCode) || 'offline';
   return {
     recordedAt:bsfFormatTime(recordedAt),
     receivedAtSeconds:bsfEpochSeconds(recordedAt),
