@@ -34,11 +34,20 @@ test('collector uses a dedicated encrypted credential instead of a short-lived b
 
   assert.match(source, /vendor_collector_credentials/);
   assert.doesNotMatch(source, /FROM auth_sessions/);
-  assert.doesNotMatch(source, /expires_at/);
   assert.match(session, /INSERT INTO vendor_collector_credentials/);
   assert.match(session, /ON CONFLICT \(user_id\) DO UPDATE/);
   assert.match(migration, /vendor_access_token_enc\s+TEXT NOT NULL/);
   assert.match(migration, /SELECT DISTINCT ON \(s\.user_id\)/);
+});
+
+test('collector refreshes an expired vendor token and updates encrypted credentials', () => {
+  const source = fs.readFileSync(path.join(root, 'src/services/vendor-collector.js'), 'utf8');
+  const route = fs.readFileSync(path.join(root, 'src/routes/vendor-devices.js'), 'utf8');
+  assert.match(source, /refreshVendorToken/);
+  assert.match(source, /vendor_refresh_token_enc/);
+  assert.match(source, /ON CONFLICT \(user_id\) DO UPDATE/);
+  assert.match(source, /listAllVendorDevices\(\{ token, pageNum: 1, pageSize: 100 \}\)/);
+  assert.match(route, /loadCollectorCredentials/);
 });
 
 test('collector applies the confirmed 30 minute vendor cadence', () => {

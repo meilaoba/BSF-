@@ -110,7 +110,6 @@ export function registerDirectoryRoutes(router) {
         optionalDisplayText(body.address, 'address', { max: 500 }),
         optionalDisplayText(body.region, 'region', { max: 80 }),
         JSON.stringify(body.metadata ?? {}),
-        optionalDisplayText(body.vendorDeviceId, 'vendorDeviceId', { max: 160 }),
       ]
     );
 

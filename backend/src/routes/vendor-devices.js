@@ -12,6 +12,7 @@ import {
   loadLatestVendorTelemetrySnapshots,
   vendorAccountIdForSession,
 } from '../services/vendor-analytics.js';
+import { loadCollectorCredentials } from '../services/vendor-collector.js';
 
 export function mergeLatestVendorTelemetry(devices, latestByDevice) {
   return devices.map((device) => {
@@ -149,7 +150,14 @@ export function registerVendorDeviceRoutes(router) {
     const pageNum = optionalInt(body.pageNum, 'pageNum', { min: 1, max: 10000 }) ?? 1;
     const pageSize = optionalInt(body.pageSize, 'pageSize', { min: 1, max: 100 }) ?? 100;
 
-    const token = await getVendorAccessToken(req.auth);
+    const token = req.auth
+      ? await getVendorAccessToken(req.auth)
+      : (await loadCollectorCredentials())?.accessToken;
+    if (!token) {
+      throw new AppError('VENDOR_SESSION_EXPIRED', 'No collector credential is available for synchronization', {
+        status: 401,
+      });
+    }
     const result = await listVendorDevices({ token, pageNum, pageSize });
     const devices = await upsertVendorDevices(result.records);
     sendOk(res, { synced: devices.length, devices }, result.pagination);

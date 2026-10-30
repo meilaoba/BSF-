@@ -1,8 +1,9 @@
 import { config } from '../config.js';
 import { query } from '../db.js';
-import { decryptSecret } from '../lib/crypto.js';
+import { decryptSecret, encryptSecret } from '../lib/crypto.js';
 import { listAllVendorDevices } from '../providers/vendor-devices.js';
 import { fetchVendorRealtimeDevices, mergeRealtimeDevices } from '../providers/vendor-realtime.js';
+import { refreshVendorToken } from '../providers/vendor-auth.js';
 import { recordVendorTelemetrySamples } from './vendor-analytics.js';
 
 const DEFAULT_INTERVALS = Object.freeze({ master_admin: 1800, client_admin: 1800, user: 1800 });
@@ -31,7 +32,8 @@ async function collectorAccounts() {
     `SELECT u.id AS user_id,
             u.vendor_user_id,
             u.role,
-            c.vendor_access_token_enc
+            c.vendor_access_token_enc,
+            c.vendor_refresh_token_enc
        FROM vendor_collector_credentials c
        JOIN users u ON u.id = c.user_id
       WHERE c.vendor_access_token_enc IS NOT NULL
@@ -39,6 +41,59 @@ async function collectorAccounts() {
       ORDER BY u.id`
   );
   return rows;
+}
+
+export async function loadCollectorCredentials({ vendorUserId = null } = {}) {
+  const { rows } = await query(
+    `SELECT c.user_id, c.vendor_access_token_enc, c.vendor_refresh_token_enc,
+            u.vendor_user_id, u.role
+       FROM vendor_collector_credentials c
+       JOIN users u ON u.id = c.user_id
+      WHERE u.status = 'active'
+        AND c.vendor_access_token_enc IS NOT NULL
+        AND c.vendor_refresh_token_enc IS NOT NULL
+        AND ($1::text IS NULL OR u.vendor_user_id = $1)
+      ORDER BY c.updated_at DESC
+      LIMIT 1`,
+    [vendorUserId ? String(vendorUserId) : null]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    userId: row.user_id,
+    vendorUserId: row.vendor_user_id,
+    role: row.role,
+    accessToken: decryptSecret(row.vendor_access_token_enc, config.auth.tokenEncryptionKey),
+    refreshToken: decryptSecret(row.vendor_refresh_token_enc, config.auth.tokenEncryptionKey),
+  };
+}
+
+async function refreshCollectorAccount(account, currentAccessToken) {
+  const refreshToken = decryptSecret(account.vendor_refresh_token_enc, config.auth.tokenEncryptionKey);
+  const refreshed = await refreshVendorToken(currentAccessToken, refreshToken);
+  const accessTokenEnc = encryptSecret(refreshed.token, config.auth.tokenEncryptionKey);
+  const refreshTokenEnc = encryptSecret(refreshed.refreshToken, config.auth.tokenEncryptionKey);
+  await query(
+    `INSERT INTO vendor_collector_credentials
+       (user_id, vendor_access_token_enc, vendor_refresh_token_enc, updated_at)
+     VALUES ($1,$2,$3,now())
+     ON CONFLICT (user_id) DO UPDATE SET
+       vendor_access_token_enc = EXCLUDED.vendor_access_token_enc,
+       vendor_refresh_token_enc = EXCLUDED.vendor_refresh_token_enc,
+       updated_at = now()`,
+    [account.user_id, accessTokenEnc, refreshTokenEnc]
+  );
+  await query(
+    `UPDATE auth_sessions
+        SET vendor_access_token_enc = $2,
+            vendor_refresh_token_enc = $3
+      WHERE user_id = $1
+        AND revoked_at IS NULL
+        AND expires_at > now()`,
+    [account.user_id, accessTokenEnc, refreshTokenEnc]
+  );
+  console.info('[telemetry-worker] vendor token refreshed');
+  return refreshed.token;
 }
 async function sampleExists({ vendorAccountId, capturedAt }) {
   const { rows } = await query(
@@ -70,7 +125,14 @@ async function collectAccount(account, now) {
   }
   if (!token) throw new Error('VENDOR_SESSION_UNREADABLE');
 
-  const result = await listAllVendorDevices({ token, pageNum: 1, pageSize: 100 });
+  let result;
+  try {
+    result = await listAllVendorDevices({ token, pageNum: 1, pageSize: 100 });
+  } catch (error) {
+    if (error?.code !== 'VENDOR_SESSION_EXPIRED') throw error;
+    token = await refreshCollectorAccount(account, token);
+    result = await listAllVendorDevices({ token, pageNum: 1, pageSize: 100 });
+  }
   let devices = result.records;
   if (config.auth.vendor.realtimeEnabled && devices.length) {
     try {
