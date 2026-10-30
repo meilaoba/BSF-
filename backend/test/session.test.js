@@ -17,6 +17,7 @@ test('session and CSRF cookies are HttpOnly/SameSite protected', () => {
   assert.match(cookies[0], /HttpOnly/);
   assert.match(cookies[0], /SameSite=Strict/);
   assert.doesNotMatch(cookies[1], /HttpOnly/);
+  assert.equal(config.auth.sessionTtlSeconds, 8 * 24 * 60 * 60);
 });
 
 test('cookie parsing and CSRF validation reject a mismatched token', () => {

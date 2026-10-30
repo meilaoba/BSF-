@@ -142,7 +142,7 @@ export const config = {
       dailyStatsUrl: str('VENDOR_DAILY_STATS_URL', ''),
       alertListUrl: str('VENDOR_ALERT_LIST_URL', ''),
     },
-    sessionTtlSeconds: num('AUTH_SESSION_TTL_SECONDS', 8 * 60 * 60),
+    sessionTtlSeconds: num('AUTH_SESSION_TTL_SECONDS', 8 * 24 * 60 * 60),
     cookieName: str('AUTH_SESSION_COOKIE', 'bsf_session'),
     csrfCookieName: str('AUTH_CSRF_COOKIE', 'bsf_csrf'),
     cookieSecure: bool('AUTH_COOKIE_SECURE', productionMode),

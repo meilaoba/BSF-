@@ -99,7 +99,7 @@ export async function createSession({ user, vendorTokens, req }) {
   const csrfToken = randomToken(32);
   const sessionHash = sha256Hex(sessionToken);
   const csrfHash = sha256Hex(csrfToken);
-  const ttl = Math.max(300, Math.min(Number(config.auth.sessionTtlSeconds) || 28800, 86400));
+  const ttl = Math.max(300, Math.min(Number(config.auth.sessionTtlSeconds) || 8 * 24 * 60 * 60, 8 * 24 * 60 * 60));
   const userAgent = String(req.headers['user-agent'] || '').slice(0, 500);
   const ip = clientIp(req);
 
