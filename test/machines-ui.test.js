@@ -41,3 +41,8 @@ test('machines page uses only running, standby and offline device statuses', () 
   assert.doesNotMatch(source, /status==='online'/);
   assert.doesNotMatch(source, />\s*Online\s*</);
 });
+
+test('machines metrics use one monthly graph request for daily and monthly cards', () => {
+  assert.match(source, /getGraphs\(Object\.assign\(\{ period:'monthly' \}, identity\)\)/);
+  assert.doesNotMatch(source, /getGraphs\(Object\.assign\(\{ period:'daily'/);
+});

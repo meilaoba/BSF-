@@ -2,7 +2,7 @@ import { AppError, NotFoundError, ValidationError } from '../lib/errors.js';
 import { sendOk } from '../lib/http.js';
 import { optionalInt, optionalString } from '../lib/validate.js';
 import { getVendorAccessToken } from '../middleware/session.js';
-import { listAllVendorDevices } from '../providers/vendor-devices.js';
+import { listAllVendorDevicesCached } from '../providers/vendor-devices.js';
 import { fetchVendorDailyStats } from '../providers/vendor-daily-stats.js';
 import { fetchVendorTemplates } from '../providers/vendor-templates.js';
 import { validateHistoryRange } from '../providers/vendor-history.js';
@@ -40,7 +40,7 @@ export function registerVendorInformationRoutes(router) {
     const pageSize = optionalInt(url.searchParams.get('pageSize'), 'pageSize', { min: 1, max: 100 }) ?? 20;
 
     const token = await getVendorAccessToken(req.auth);
-    const vendorDevices = await listAllVendorDevices({ token, pageNum: 1, pageSize: 100 });
+    const vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
     const device = vendorDevices.records.find((record) => (
       String(record.id) === String(deviceId)
       || String(record.serialNumber) === String(deviceId)

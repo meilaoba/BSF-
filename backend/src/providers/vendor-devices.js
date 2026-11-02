@@ -1,8 +1,15 @@
 import { config } from '../config.js';
 import { AppError, ProviderError, ValidationError } from '../lib/errors.js';
+import { createHash } from 'node:crypto';
 
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const DEFAULT_PAGE_SIZE = 10;
+const DEVICE_LIST_CACHE_MS = 5 * 60 * 1000;
+const deviceListCache = new Map();
+
+function deviceCacheKey(token) {
+  return createHash('sha256').update(String(token || '')).digest('hex');
+}
 
 function cleanText(value, max = 500) {
   if (value === undefined || value === null) return null;
@@ -294,4 +301,23 @@ export async function listAllVendorDevices(input = {}) {
       total: Math.max(first.pagination.total, unique.size),
     },
   };
+}
+
+export async function listAllVendorDevicesCached(input = {}, {
+  ttlMs = DEVICE_LIST_CACHE_MS,
+} = {}) {
+  const token = cleanText(input.token, 8192);
+  if (!token) throw new ValidationError('A vendor access token is required');
+  const key = deviceCacheKey(token);
+  const cached = deviceListCache.get(key);
+  if (cached && Date.now() - cached.createdAt < ttlMs) return cached.value;
+
+  const value = listAllVendorDevices(input);
+  deviceListCache.set(key, { createdAt: Date.now(), value });
+  try {
+    return await value;
+  } catch (error) {
+    deviceListCache.delete(key);
+    throw error;
+  }
 }

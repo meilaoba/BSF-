@@ -1,8 +1,16 @@
 import { config } from '../config.js';
 import { AppError, ProviderError, ValidationError } from '../lib/errors.js';
 import { httpRequest } from './http-client.js';
+import { createHash } from 'node:crypto';
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const DAILY_STATS_CACHE_MS = 5 * 60 * 1000;
+const dailyStatsCache = new Map();
+
+function dailyStatsCacheKey({ token, deviceName, startTime, endTime, pageSize }) {
+  const tokenHash = createHash('sha256').update(String(token || '')).digest('hex');
+  return [tokenHash, deviceName, startTime, endTime, pageSize].join('|');
+}
 
 function cleanText(value, max = 500) {
   if (value === undefined || value === null) return null;
@@ -127,21 +135,34 @@ export async function fetchAllVendorDailyStats({
   pageSize = 100,
   maxPages = 20,
 } = {}) {
-  const records = [];
-  let pageNum = 1;
-  let totalPages = 1;
-  do {
-    const result = await fetchVendorDailyStats({
-      token,
-      deviceName,
-      startTime,
-      endTime,
-      pageNum,
-      pageSize,
-    });
-    records.push(...result.records);
-    totalPages = result.pagination.totalPages;
-    pageNum += 1;
-  } while (pageNum <= totalPages && pageNum <= maxPages);
-  return records;
+  const key = dailyStatsCacheKey({ token, deviceName, startTime, endTime, pageSize });
+  const cached = dailyStatsCache.get(key);
+  if (cached && Date.now() - cached.createdAt < DAILY_STATS_CACHE_MS) return cached.value;
+
+  const request = (async () => {
+    const records = [];
+    let pageNum = 1;
+    let totalPages = 1;
+    do {
+      const result = await fetchVendorDailyStats({
+        token,
+        deviceName,
+        startTime,
+        endTime,
+        pageNum,
+        pageSize,
+      });
+      records.push(...result.records);
+      totalPages = result.pagination.totalPages;
+      pageNum += 1;
+    } while (pageNum <= totalPages && pageNum <= maxPages);
+    return records;
+  })();
+  dailyStatsCache.set(key, { createdAt: Date.now(), value: request });
+  try {
+    return await request;
+  } catch (error) {
+    dailyStatsCache.delete(key);
+    throw error;
+  }
 }

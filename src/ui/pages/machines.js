@@ -108,18 +108,23 @@ async function loadMachineMetrics(device){
     : Promise.resolve(null);
   const request = Promise.all([
     window.BSF_API.getGraphs(Object.assign({ period:'monthly' }, identity)),
-    window.BSF_API.getGraphs(Object.assign({ period:'daily', date:today }, identity)),
     environmentRequest
   ]).then(function(results){
-    const monthlySummary = results[0] && results[0].summary ? results[0].summary : {};
-    const dailySummary = results[1] && results[1].summary ? results[1].summary : {};
-    const environment = results[2] || {};
+    const monthly = results[0] || {};
+    const monthlySummary = monthly.summary || {};
+    const dailyWaste = Array.isArray(monthly.items)
+      ? monthly.items.find(function(item){ return item.date === today; })
+      : null;
+    const dailyEnergy = Array.isArray(monthly.energyItems)
+      ? monthly.energyItems.find(function(item){ return item.date === today; })
+      : null;
+    const environment = results[1] || {};
     const data = {
       wasteKg:monthlySummary.wasteKg,
       ghgKg:monthlySummary.ghgKg,
       fertilizerKg:monthlySummary.fertilizerKg,
-      dailyWasteKg:dailySummary.wasteKg,
-      dailyEnergyKwh:dailySummary.energyKwh,
+      dailyWasteKg:dailyWaste ? dailyWaste.value : null,
+      dailyEnergyKwh:dailyEnergy ? dailyEnergy.value : null,
       environmentTempC:environment.temperatureC
     };
     machineMetricCache.set(key, { savedAt:Date.now(), data:data });

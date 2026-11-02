@@ -135,3 +135,23 @@ test('daily stats helper follows all pagination pages', async () => {
   assert.equal(records.length, 1);
   assert.equal(records[0].statDate, '2026-10-16');
 });
+
+test('daily stats helper caches the same device and date range', async () => {
+  const before = requests.filter((request) => request.url === '/historyData/deviceList').length;
+  await fetchAllVendorDailyStats({
+    token: 'cache-token',
+    deviceName: 'CR-30S_QX2026124',
+    startTime: '2026-10-01',
+    endTime: '2026-10-31',
+  });
+  const afterFirst = requests.filter((request) => request.url === '/historyData/deviceList').length;
+  await fetchAllVendorDailyStats({
+    token: 'cache-token',
+    deviceName: 'CR-30S_QX2026124',
+    startTime: '2026-10-01',
+    endTime: '2026-10-31',
+  });
+  const afterSecond = requests.filter((request) => request.url === '/historyData/deviceList').length;
+  assert.ok(afterFirst > before);
+  assert.equal(afterSecond, afterFirst);
+});

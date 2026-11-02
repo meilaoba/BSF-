@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 
 let lastRequest = null;
+let listRequestCount = 0;
 
 const vendor = http.createServer(async (req, res) => {
   const chunks = [];
@@ -19,6 +20,7 @@ const vendor = http.createServer(async (req, res) => {
     return;
   }
 
+  listRequestCount += 1;
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     code: 200,
@@ -68,7 +70,10 @@ process.env.AUTH_REQUIRED = 'false';
 process.env.AUTH_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 4).toString('base64');
 process.env.VENDOR_DEVICE_LIST_URL = `http://127.0.0.1:${port}/emDevice/queryListData`;
 
-const { listVendorDevices } = await import('../src/providers/vendor-devices.js');
+const {
+  listAllVendorDevicesCached,
+  listVendorDevices,
+} = await import('../src/providers/vendor-devices.js');
 
 test.after(() => new Promise((resolve) => vendor.close(resolve)));
 
@@ -122,4 +127,13 @@ test('invalid pagination fails before calling the vendor', async () => {
     (err) => err.code === 'VALIDATION_ERROR' && err.status === 422
   );
   assert.equal(lastRequest, previous);
+});
+
+test('cached all-device lookup reuses the vendor response for five minutes', async () => {
+  const before = listRequestCount;
+  await listAllVendorDevicesCached({ token: 'cache-access-token', pageNum: 1, pageSize: 100 });
+  const afterFirst = listRequestCount;
+  await listAllVendorDevicesCached({ token: 'cache-access-token', pageNum: 1, pageSize: 100 });
+  assert.ok(afterFirst > before);
+  assert.equal(listRequestCount, afterFirst);
 });

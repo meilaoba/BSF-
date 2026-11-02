@@ -16,7 +16,7 @@ import {
 } from '../services/vendor-analytics.js';
 import { getEnvironmentTemperature } from '../services/environment-temperature.js';
 import { getVendorAccessToken } from '../middleware/session.js';
-import { listAllVendorDevices } from '../providers/vendor-devices.js';
+import { listAllVendorDevicesCached } from '../providers/vendor-devices.js';
 import { loadVendorDailyStatSnapshots } from '../services/vendor-daily-stats-analytics.js';
 
 const PERIODS = new Set(['daily', 'monthly', 'yearly']);
@@ -146,7 +146,7 @@ async function loadAnalyticsRows(req, context, range) {
 
   try {
     const token = await getVendorAccessToken(req.auth);
-    const vendorDevices = await listAllVendorDevices({ token, pageNum: 1, pageSize: 100 });
+    const vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
     const allowedIds = Array.isArray(context.deviceIds)
       ? new Set(context.deviceIds.map(String))
       : null;
