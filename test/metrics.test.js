@@ -262,6 +262,33 @@ test('daily aggregate rows use vendor waste and measured power instead of estima
   close(result.summary.ghgKg, 5 * 1.5 - 1.5 * 0.37 - transport);
 });
 
+test('daily aggregate zero power suppresses legacy standby estimates for the same day', () => {
+  const result = aggregateTelemetrySnapshots([
+    {
+      capturedAt: '2026-10-28T12:00:00+08:00',
+      deviceId: 'cic',
+      wasteKg: 0,
+      energyKwh: 0,
+      runTimeHours: 0,
+      operatingStatusCode: 0,
+      dailyAggregate: true
+    },
+    {
+      capturedAt: '2026-10-28T12:00:00+08:00',
+      deviceId: 'cic',
+      dailyInputT: 0,
+      operatingStatusCode: 1
+    }
+  ], {
+    groupBy: 'day',
+    start: '2026-10-28',
+    end: '2026-10-28',
+    summaryMode: 'daily',
+    now: new Date('2026-10-29T00:00:00.000Z')
+  });
+  assert.equal(result.summary.energyKwh, 0);
+});
+
 test('converts cumulative daily input into hourly increments without duplicating a day', () => {
   const result = aggregateTelemetrySnapshots([
     { capturedAt: '2026-10-01T02:10:00.000Z', deviceId: 'device-a', dailyInputT: 0.010, operatingStatusCode: 1 },

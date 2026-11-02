@@ -285,7 +285,7 @@ export function aggregateTelemetrySnapshots(rows, {
   const normalized = (Array.isArray(rows) ? rows : []).map((row) => normalizeSnapshotRow(row, formula)).filter(Boolean);
   const unique = new Map();
   for (const row of normalized) {
-    const key = `${row.deviceId}|${Math.floor(row.capturedAt.getTime() / 1000)}`;
+    const key = `${row.deviceId}|${Math.floor(row.capturedAt.getTime() / 1000)}|${row.dailyAggregate ? 'daily' : 'sample'}`;
     unique.set(key, row);
   }
   const nowDate = asDate(now) || new Date();
@@ -389,9 +389,11 @@ export function aggregateTelemetrySnapshots(rows, {
     if (wasteKg === null) continue;
     const dayFormula = mergeFormulaConfig(formula, day.siteFormula);
     const dayRegion = day.siteRegion || region;
-    const energyKwh = day.energyKwh !== null
-      ? day.energyKwh
-      : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0);
+    const energyKwh = day.dailyAggregate
+      ? (day.energyKwh ?? 0)
+      : (day.energyKwh !== null
+        ? day.energyKwh
+        : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0));
     const ghgKg = ghgReducedKg(wasteKg, energyKwh, dayRegion, 1, dayFormula);
     if (ghgKg === null) continue;
     dailyResults.set(`${day.deviceId}|${day.dateKey}`, {
@@ -453,9 +455,11 @@ export function aggregateTelemetrySnapshots(rows, {
   for (const day of deviceDays.values()) {
     if (groupBy !== 'hour') continue;
     const dayFormula = mergeFormulaConfig(formula, day.siteFormula);
-    const energy = day.energyKwh !== null
-      ? day.energyKwh
-      : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0);
+    const energy = day.dailyAggregate
+      ? (day.energyKwh ?? 0)
+      : (day.energyKwh !== null
+        ? day.energyKwh
+        : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0));
     if (energy === 0) continue;
     const bucket = bucketKeyForDate(day.last.capturedAt, 'hour');
     if (bucket <= currentBucket) addToMap(energyByBucket, bucket, energy);
