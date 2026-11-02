@@ -289,6 +289,39 @@ test('daily aggregate zero power suppresses legacy standby estimates for the sam
   assert.equal(result.summary.energyKwh, 0);
 });
 
+test('daily aggregate zero is plotted once at noon without copying GHG forward', () => {
+  const result = aggregateTelemetrySnapshots([
+    {
+      capturedAt: '2026-10-31T12:00:00+08:00',
+      deviceId: 'cic',
+      wasteKg: 0,
+      energyKwh: 0,
+      runTimeHours: 0,
+      operatingStatusCode: 0,
+      dailyAggregate: true,
+      clientRegion: 'non-hk',
+      ghgFormula: { monthlyDistanceKm: 140, dailyElectricityKwh: 1.5 },
+    },
+  ], {
+    groupBy: 'hour',
+    start: '2026-10-31',
+    end: '2026-10-31',
+    summaryMode: 'daily',
+    now: new Date('2026-11-02T04:00:00.000Z'),
+  });
+
+  assert.equal(result.items[12].date, '2026-10-31 12:00');
+  assert.equal(result.items[12].value, 0);
+  assert.equal(result.summary.pointCount, 1);
+  assert.equal(result.ghgItems[12].value, result.summary.ghgKg);
+  assert.deepEqual(
+    result.ghgItems
+      .map((item, index) => item.value === null ? null : index)
+      .filter((index) => index !== null),
+    [12],
+  );
+});
+
 test('converts cumulative daily input into hourly increments without duplicating a day', () => {
   const result = aggregateTelemetrySnapshots([
     { capturedAt: '2026-10-01T02:10:00.000Z', deviceId: 'device-a', dailyInputT: 0.010, operatingStatusCode: 1 },

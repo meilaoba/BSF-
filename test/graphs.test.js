@@ -167,6 +167,22 @@ test('line chart renders numeric y-axis labels including negative values', () =>
   assert.match(svg, /stroke="#64748b" stroke-width="1"/);
 });
 
+test('line chart labels a single daily value instead of drawing a fake line', () => {
+  sandbox.rows = [
+    { label:'2026-10-31 12:00', value:0 },
+  ];
+  const svg = vm.runInContext("buildLineChartSvg(rows, 'value', '#3b82f6')", sandbox);
+  assert.equal((svg.match(/<circle/g) || []).length, 1);
+  assert.equal((svg.match(/<path/g) || []).length, 0);
+  assert.match(svg, /data-single-value="true"[^>]*>0\.0<\/text>/);
+});
+
+test('graph status exposes sampled telemetry fallback', () => {
+  vm.runInContext("graphApiLoading=false;graphApiError='';graphApiKey=graphRequestKey();graphApiData={summary:{pointCount:1},dataSources:{dailyStats:{status:'fallback'}}};", sandbox);
+  const markup = vm.runInContext('graphStatusMarkup()', sandbox);
+  assert.match(markup, /Vendor daily stats unavailable; showing sampled telemetry instead\./);
+});
+
 test('daily x-axis uses short labels and avoids the forced overlapping final tick', () => {
   sandbox.rows = Array.from({ length:24 }, function(_, hour){
     return {

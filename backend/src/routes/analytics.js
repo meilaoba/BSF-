@@ -156,17 +156,30 @@ async function loadAnalyticsRows(req, context, range) {
     const settingsByDevice = await loadVendorDeviceReportSettings({
       deviceIds: context.deviceIds,
     });
-    const dailyRows = await loadVendorDailyStatSnapshots({
+    const dailyResult = await loadVendorDailyStatSnapshots({
       token,
       devices,
       start: range.start,
       end: range.end,
       settingsByDevice,
     });
-    return [...dailyRows, ...sampleRows];
+    const dailyStatsStatus = dailyResult.unavailableDeviceCount > 0
+      ? (dailyResult.snapshots.length ? 'partial' : 'fallback')
+      : 'vendor';
+    return {
+      rows: [...dailyResult.snapshots, ...sampleRows],
+      dataSources: {
+        dailyStats: { status: dailyStatsStatus },
+      },
+    };
   } catch (error) {
     console.warn('[analytics] vendor daily stats unavailable:', error.code || error.message);
-    return sampleRows;
+    return {
+      rows: sampleRows,
+      dataSources: {
+        dailyStats: { status: 'fallback' },
+      },
+    };
   }
 }
 
@@ -284,9 +297,9 @@ export function registerAnalyticsRoutes(router) {
     if (!GROUPS.has(groupBy)) throw new ValidationError('`groupBy` must be hour, day, or month');
     const sourceGroupBy = groupBy === 'hour' ? 'hour' : 'day';
 
-    const rows = await loadAnalyticsRows(req, context, range);
+    const analytics = await loadAnalyticsRows(req, context, range);
     const region = await resolveReportRegion({ clientId: context.clientId });
-    const result = aggregateTelemetrySnapshots(rows, {
+    const result = aggregateTelemetrySnapshots(analytics.rows, {
       groupBy,
       start: range.start,
       end: range.end,
@@ -306,6 +319,7 @@ export function registerAnalyticsRoutes(router) {
       humidityItems: result.humidityItems,
       summary: result.summary,
       empty: result.summary.pointCount === 0,
+      dataSources: analytics.dataSources,
     });
   });
 
@@ -317,9 +331,9 @@ export function registerAnalyticsRoutes(router) {
     const range = dateRangeForRequest(url, period, new Date());
     const groupBy = defaultGroupBy(period);
     const sourceGroupBy = groupBy === 'hour' ? 'hour' : 'day';
-    const rows = await loadAnalyticsRows(req, context, range);
+    const analytics = await loadAnalyticsRows(req, context, range);
     const region = await resolveReportRegion({ clientId: context.clientId });
-    const result = aggregateTelemetrySnapshots(rows, {
+    const result = aggregateTelemetrySnapshots(analytics.rows, {
       groupBy,
       start: range.start,
       end: range.end,
@@ -328,7 +342,14 @@ export function registerAnalyticsRoutes(router) {
       now: new Date(),
       formula: config.formula,
     });
-    sendOk(res, { period, groupBy, range, ...result, empty: result.summary.pointCount === 0 });
+    sendOk(res, {
+      period,
+      groupBy,
+      range,
+      ...result,
+      empty: result.summary.pointCount === 0,
+      dataSources: analytics.dataSources,
+    });
   });
 
   router.get('/api/v1/reports', async (req, res) => {
@@ -341,9 +362,9 @@ export function registerAnalyticsRoutes(router) {
     const range = dateRangeForRequest(url, period, new Date());
     const groupBy = period === 'yearly' ? 'month' : 'day';
     const sourceGroupBy = 'day';
-    const rows = await loadAnalyticsRows(req, context, range);
+    const analytics = await loadAnalyticsRows(req, context, range);
     const region = await resolveReportRegion({ clientId: context.clientId });
-    const result = aggregateTelemetrySnapshots(rows, {
+    const result = aggregateTelemetrySnapshots(analytics.rows, {
       groupBy,
       start: range.start,
       end: range.end,
@@ -364,6 +385,7 @@ export function registerAnalyticsRoutes(router) {
       humidityItems: result.humidityItems,
       summary: result.summary,
       empty: result.summary.pointCount === 0,
+      dataSources: analytics.dataSources,
     });
   });
 }

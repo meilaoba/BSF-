@@ -37,9 +37,12 @@ export async function loadVendorDailyStatSnapshots({
   end,
   settingsByDevice = new Map(),
 } = {}) {
-  if (!Array.isArray(devices) || !devices.length) return [];
+  if (!Array.isArray(devices) || !devices.length) {
+    return { snapshots: [], unavailableDeviceCount: 0 };
+  }
   const today = hongKongDateKey(new Date());
   const snapshots = [];
+  let unavailableDeviceCount = 0;
   for (const device of devices) {
     if (!device?.deviceName) continue;
     let records;
@@ -51,6 +54,7 @@ export async function loadVendorDailyStatSnapshots({
         endTime: end,
       });
     } catch (error) {
+      unavailableDeviceCount += 1;
       console.warn(
         `[vendor-daily-stats] device ${device.id || 'unknown'} unavailable:`,
         error.code || error.message
@@ -63,5 +67,5 @@ export async function loadVendorDailyStatSnapshots({
       snapshots.push(dailyStatSnapshot(record, device.id, settings));
     }
   }
-  return snapshots;
+  return { snapshots, unavailableDeviceCount };
 }

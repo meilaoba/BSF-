@@ -216,12 +216,23 @@ function graphErrorMessage(error){
 function graphStatusMarkup(){
   let text = '';
   let color = '#64748b';
+  const hasCurrentGraphData = graphApiData && graphApiKey === graphRequestKey();
+  const dailyStatsStatus = hasCurrentGraphData
+    && graphApiData.dataSources
+    && graphApiData.dataSources.dailyStats
+    && graphApiData.dataSources.dailyStats.status;
   if(graphApiLoading){
     text = 'Loading chart data...';
   } else if(graphApiError){
     text = graphApiError;
     color = '#f59e0b';
-  } else if(graphApiData && graphApiKey === graphRequestKey()){
+  } else if(dailyStatsStatus === 'fallback'){
+    text = 'Vendor daily stats unavailable; showing sampled telemetry instead.';
+    color = '#f59e0b';
+  } else if(dailyStatsStatus === 'partial'){
+    text = 'Some vendor daily stats are unavailable; sampled telemetry is shown where needed.';
+    color = '#f59e0b';
+  } else if(hasCurrentGraphData){
     const count = Number(graphApiData.summary && graphApiData.summary.pointCount) || 0;
     text = count ? count + ' data point' + (count === 1 ? '' : 's') + ' loaded' : 'No data for the selected period';
   }
@@ -338,12 +349,18 @@ function buildLineChartSvg(rows, valueKey, color){
       current = '';
     }
   });
-  const paths = segments.map(function(segment){
-    return '<path d="' + segment + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>';
-  }).join('');
+  const paths = valid.length > 1
+    ? segments.map(function(segment){
+      return '<path d="' + segment + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>';
+    }).join('')
+    : '';
   const dots = points.filter(Boolean).map(function(point){
-    return '<circle cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) + '" r="3.5" fill="' + color + '"><title>' + graphEscape(point.label) + ': ' + point.value.toFixed(1) + '</title></circle>';
+    return '<circle cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) + '" r="' + (valid.length === 1 ? '4.5' : '3.5') + '" fill="' + color + '"><title>' + graphEscape(point.label) + ': ' + point.value.toFixed(1) + '</title></circle>';
   }).join('');
+  const singlePoint = valid.length === 1 ? points.find(Boolean) : null;
+  const singlePointLabel = singlePoint
+    ? '<text data-single-value="true" x="' + singlePoint.x.toFixed(1) + '" y="' + (singlePoint.y > top + 18 ? singlePoint.y - 10 : singlePoint.y + 18).toFixed(1) + '" text-anchor="middle" fill="' + color + '" font-size="11" font-weight="600">' + graphEscape(singlePoint.value.toFixed(1)) + '</text>'
+    : '';
   const xAxisIndices = new Set(graphXAxisIndices(data.length, 7));
   const labels = data.map(function(row, index){
     if(!xAxisIndices.has(index)) return '';
@@ -358,7 +375,7 @@ function buildLineChartSvg(rows, valueKey, color){
   }).join('');
   const grid = yAxis +
     '<line x1="' + left + '" y1="' + top + '" x2="' + left + '" y2="' + (top + plotHeight) + '" stroke="#334155" stroke-width="1" />';
-  return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:180px;display:block;" role="img" aria-label="Line chart">' + grid + paths + dots + labels + '</svg>';
+  return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:180px;display:block;" role="img" aria-label="Line chart">' + grid + paths + dots + singlePointLabel + labels + '</svg>';
 }
 
 function graphChartTitle(kind){

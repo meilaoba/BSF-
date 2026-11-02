@@ -441,7 +441,9 @@ export function aggregateTelemetrySnapshots(rows, {
     }
     for (const day of dailyResults.values()) {
       if (!day.dailyAggregate) continue;
-      addToMap(foodByBucket, `${day.dateKey} 12`, day.wasteKg);
+      const bucket = `${day.dateKey} 12:00`;
+      addToMap(foodByBucket, bucket, day.wasteKg);
+      addToMap(ghgByBucket, bucket, day.ghgKg);
     }
   } else {
     for (const day of dailyResults.values()) {
@@ -461,11 +463,15 @@ export function aggregateTelemetrySnapshots(rows, {
         ? day.energyKwh
         : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0));
     if (energy === 0) continue;
-    const bucket = bucketKeyForDate(day.last.capturedAt, 'hour');
+    const bucket = day.dailyAggregate
+      ? `${day.dateKey} 12:00`
+      : bucketKeyForDate(day.last.capturedAt, 'hour');
     if (bucket <= currentBucket) addToMap(energyByBucket, bucket, energy);
   }
 
-  if (groupBy === 'hour') {
+  const hasDailyAggregates = Array.from(dailyResults.values())
+    .some((day) => day.dailyAggregate);
+  if (groupBy === 'hour' && !hasDailyAggregates) {
     const keysByDay = new Map();
     for (const key of keys) {
       const day = key.slice(0, 10);
@@ -476,16 +482,15 @@ export function aggregateTelemetrySnapshots(rows, {
     for (const dayKeys of keysByDay.values()) {
       let cumulativeWaste = 0;
       let cumulativeEnergy = 0;
-      let seenWaste = false;
       for (const key of dayKeys) {
         if (key > currentBucket) continue;
         const waste = foodByBucket.get(key);
+        const energy = energyByBucket.get(key);
         if (waste !== undefined) {
           cumulativeWaste += waste;
-          seenWaste = true;
         }
-        cumulativeEnergy += energyByBucket.get(key) || 0;
-        if (seenWaste) {
+        if (energy !== undefined) cumulativeEnergy += energy;
+        if (waste !== undefined || energy !== undefined) {
           ghgByBucket.set(
             key,
             cumulativeWaste * 1.5
