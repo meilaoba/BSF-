@@ -29,8 +29,10 @@ test('confirmed formula and polling defaults remain configurable', () => {
   assert.equal(config.formula.energyFactorHkIsland, 0.71);
   assert.equal(config.formula.energyFactorOther, 0.37);
   assert.equal(config.formula.dailyDistanceKm, null);
+  assert.equal(config.formula.monthlyDistanceKm, null);
   assert.equal(config.formula.fuelConsumptionLPer100Km, 8.3);
   assert.equal(config.formula.fuelEmissionFactorKgPerL, 2.32);
+  assert.equal(config.formula.dailyElectricityKwh, 1.5);
   assert.equal(config.formula.fertilizerRatio, 0.12);
   assert.equal(config.formula.humidityScale, 100);
   assert.equal(config.auth.vendor.realtimeEnabled, true);
@@ -141,6 +143,23 @@ test('vendor telemetry migration preserves deviceOnline status at collection tim
   );
   assert.match(sql, /ADD COLUMN IF NOT EXISTS device_online_code SMALLINT/);
   assert.match(sql, /vendor_device_telemetry_device_online_code_check/);
+});
+
+test('site carbon formula migration seeds CIC and HSITP defaults', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sql = fs.readFileSync(
+    path.join(root, 'db/migrations/013_site_carbon_formula_defaults.sql'),
+    'utf8'
+  );
+  const service = fs.readFileSync(
+    path.join(root, 'src/services/vendor-analytics.js'),
+    'utf8'
+  );
+  assert.match(sql, /"monthlyDistanceKm":140,"dailyElectricityKwh":1\.5/);
+  assert.match(sql, /"monthlyDistanceKm":24,"dailyElectricityKwh":-1\.5/);
+  assert.match(sql, /metadata->'ghgFormula'/);
+  assert.match(service, /m\.metadata->'ghgFormula'/);
+  assert.match(service, /c\.metadata->'ghgFormula'/);
 });
 
 test('environment temperature migration stores HKO samples and daily values', () => {

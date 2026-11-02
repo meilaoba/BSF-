@@ -131,6 +131,14 @@ export function optionalBool(value, field) {
   throw new ValidationError(`\`${field}\` must be a boolean`, { field });
 }
 
+export function optionalObject(value, field) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new ValidationError(`\`${field}\` must be an object`, { field });
+  }
+  return value;
+}
+
 export function clampLimit(value, { def = 50, max = 200 } = {}) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return def;

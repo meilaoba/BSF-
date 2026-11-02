@@ -1,18 +1,21 @@
 export const HONG_KONG_TIME_ZONE = 'Asia/Hong_Kong';
 export const FIXED_DAILY_ADJUSTMENT = (1.93 * 12) / 365;
 export const FERTILIZER_RATIO = 0.12;
-export const ENERGY_PER_STANDBY_DAY_KWH = 1.5;
+export const ENERGY_PER_OPERATING_DAY_KWH = 1.5;
+export const ENERGY_PER_STANDBY_DAY_KWH = ENERGY_PER_OPERATING_DAY_KWH;
 export const DEFAULT_FORMULA_CONFIG = Object.freeze({
   wasteReductionFactor: 1.5,
   energyFactorHkIsland: 0.71,
   energyFactorOther: 0.37,
   dailyDistanceKm: null,
+  monthlyDistanceKm: null,
   fuelConsumptionLPer100Km: 8.3,
   fuelEmissionFactorKgPerL: 2.32,
   transportConstant: 1.93,
   transportMonths: 12,
   transportDays: 365,
   fertilizerRatio: FERTILIZER_RATIO,
+  dailyElectricityKwh: ENERGY_PER_OPERATING_DAY_KWH,
   standbyEnergyKwh: ENERGY_PER_STANDBY_DAY_KWH,
   humidityScale: 1,
 });
@@ -175,6 +178,16 @@ export function energyForStandbyDays(standbyDays, formula = {}) {
   return days === null || days < 0 ? null : days * formulaNumber(formula, 'standbyEnergyKwh');
 }
 
+export function averageDailyDistanceKm(formula = {}) {
+  const directDistance = finiteNumber(formula.dailyDistanceKm);
+  if (directDistance !== null) return directDistance >= 0 ? directDistance : null;
+  const monthlyDistance = finiteNumber(formula.monthlyDistanceKm);
+  if (monthlyDistance === null || monthlyDistance < 0) return null;
+  const months = formulaNumber(formula, 'transportMonths');
+  const days = formulaNumber(formula, 'transportDays');
+  return days > 0 ? (monthlyDistance * months) / days : null;
+}
+
 export function electricityCarbonKg(energyKwh, region, formula = {}) {
   const energy = finiteNumber(energyKwh);
   if (energy === null) return null;
@@ -182,7 +195,7 @@ export function electricityCarbonKg(energyKwh, region, formula = {}) {
 }
 
 export function transportCarbonKg(dailyDistanceKm, adjustmentDays = 1, formula = {}) {
-  const distance = finiteNumber(dailyDistanceKm ?? formula.dailyDistanceKm);
+  const distance = finiteNumber(dailyDistanceKm ?? averageDailyDistanceKm(formula));
   const days = finiteNumber(adjustmentDays);
   if (days === null || days < 0) return null;
   // Keep the legacy transport allowance until the customer confirms a distance.
@@ -192,6 +205,11 @@ export function transportCarbonKg(dailyDistanceKm, adjustmentDays = 1, formula =
     * formulaNumber(formula, 'fuelConsumptionLPer100Km')
     * formulaNumber(formula, 'fuelEmissionFactorKgPerL')
     * days;
+}
+
+export function mergeFormulaConfig(base = {}, override = {}) {
+  if (!override || typeof override !== 'object' || Array.isArray(override)) return { ...base };
+  return { ...base, ...override };
 }
 
 export function machineCarbonKg(energyKwh, region, adjustmentDays = 1, formula = {}) {
@@ -232,6 +250,8 @@ function normalizeSnapshotRow(row, formula = {}) {
     dailyInputT: finiteNumber(row.dailyInputT ?? row.daily_input_t),
     monthlyInputT: finiteNumber(row.monthlyInputT ?? row.monthly_input_t),
     yearlyInputT: finiteNumber(row.yearlyInputT ?? row.yearly_input_t),
+    siteFormula: row.ghgFormula ?? row.siteFormula ?? null,
+    siteRegion: row.clientRegion ?? row.siteRegion ?? row.region ?? null,
   };
 }
 
@@ -297,10 +317,16 @@ export function aggregateTelemetrySnapshots(rows, {
       last: row,
       maxDailyInputT: null,
       hasStandby: false,
+      isOperatingDay: false,
+      siteFormula: null,
+      siteRegion: null,
     };
     day.last = row;
     day.maxDailyInputT = maxKnown(day.maxDailyInputT, row.dailyInputT);
     day.hasStandby = day.hasStandby || row.operatingStatusCode === 1;
+    day.isOperatingDay = day.isOperatingDay || row.operatingStatusCode === 1 || row.operatingStatusCode === 2;
+    day.siteFormula = mergeFormulaConfig(day.siteFormula || {}, row.siteFormula);
+    day.siteRegion = day.siteRegion || row.siteRegion;
     deviceDays.set(dayKey, day);
 
     const month = deviceMonths.get(`${row.deviceId}|${monthKey}`) || {
@@ -351,8 +377,10 @@ export function aggregateTelemetrySnapshots(rows, {
     if (day.dateKey > currentDateKey) continue;
     const wasteKg = tonsToKg(day.maxDailyInputT);
     if (wasteKg === null) continue;
-    const energyKwh = day.hasStandby ? formulaNumber(formula, 'standbyEnergyKwh') : 0;
-    const ghgKg = ghgReducedKg(wasteKg, energyKwh, region, 1, formula);
+    const dayFormula = mergeFormulaConfig(formula, day.siteFormula);
+    const dayRegion = day.siteRegion || region;
+    const energyKwh = day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0;
+    const ghgKg = ghgReducedKg(wasteKg, energyKwh, dayRegion, 1, dayFormula);
     if (ghgKg === null) continue;
     dailyResults.set(`${day.deviceId}|${day.dateKey}`, {
       deviceId: day.deviceId,
@@ -403,8 +431,9 @@ export function aggregateTelemetrySnapshots(rows, {
   }
 
   for (const day of deviceDays.values()) {
-    if (!day.hasStandby || groupBy !== 'hour') continue;
-    const energy = formulaNumber(formula, 'standbyEnergyKwh');
+    if (!day.isOperatingDay || groupBy !== 'hour') continue;
+    const dayFormula = mergeFormulaConfig(formula, day.siteFormula);
+    const energy = formulaNumber(dayFormula, 'dailyElectricityKwh');
     const bucket = bucketKeyForDate(day.last.capturedAt, 'hour');
     if (bucket <= currentBucket) addToMap(energyByBucket, bucket, energy);
   }
@@ -464,6 +493,7 @@ export function aggregateTelemetrySnapshots(rows, {
     ? dailyValues.reduce((sum, day) => sum + day.wasteKg, 0)
     : null;
   const standbyDeviceDays = Array.from(deviceDays.values()).filter((day) => day.hasStandby).length;
+  const operatingDeviceDays = Array.from(deviceDays.values()).filter((day) => day.isOperatingDay).length;
   const energyKwh = dailyValues.length
     ? dailyValues.reduce((sum, day) => sum + day.energyKwh, 0)
     : null;
@@ -481,6 +511,7 @@ export function aggregateTelemetrySnapshots(rows, {
     maxTempC: maxTemp,
     avgHumidityPct: humidityCount ? humiditySum / humidityCount : null,
     standbyDeviceDays,
+    operatingDeviceDays,
     observedDeviceDays,
     pointCount: items.filter((item) => item.value !== null).length,
   };

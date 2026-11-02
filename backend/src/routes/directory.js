@@ -8,6 +8,7 @@ import {
   optionalDisplayText,
   optionalEmail,
   optionalInt,
+  optionalObject,
   optionalNumber,
   optionalPhone,
   optionalString,
@@ -97,6 +98,7 @@ export function registerDirectoryRoutes(router) {
   router.post('/api/v1/clients', async (req, res) => {
     requireApiKey(req);
     const body = await readJsonBody(req);
+    const metadata = optionalObject(body.metadata, 'metadata') ?? {};
 
     const { rows } = await query(
       `INSERT INTO clients (name, code, contact_email, contact_phone, address, region, metadata)
@@ -109,7 +111,7 @@ export function registerDirectoryRoutes(router) {
         optionalPhone(body.contactPhone, 'contactPhone'),
         optionalDisplayText(body.address, 'address', { max: 500 }),
         optionalDisplayText(body.region, 'region', { max: 80 }),
-        JSON.stringify(body.metadata ?? {}),
+        JSON.stringify(metadata),
       ]
     );
 
@@ -128,6 +130,7 @@ export function registerDirectoryRoutes(router) {
     requireApiKey(req);
     const body = await readJsonBody(req);
     const clientId = optionalUuid(body.id, 'id');
+    const metadata = optionalObject(body.metadata, 'metadata');
     if (!clientId) throw new ValidationError('`id` is required');
 
     const before = await query('SELECT * FROM clients WHERE id = $1', [clientId]);
@@ -141,7 +144,8 @@ export function registerDirectoryRoutes(router) {
               contact_phone = COALESCE($5, contact_phone),
               address = COALESCE($6, address),
               region = COALESCE($7, region),
-              status = COALESCE($8, status)
+              status = COALESCE($8, status),
+              metadata = COALESCE(metadata || $9::jsonb, metadata)
         WHERE id = $1
         RETURNING *`,
       [
@@ -153,6 +157,7 @@ export function registerDirectoryRoutes(router) {
         optionalDisplayText(body.address, 'address', { max: 500 }),
         optionalDisplayText(body.region, 'region', { max: 80 }),
         body.status ? requireEnum(body.status, 'status', ['active', 'inactive', 'archived']) : null,
+        metadata ? JSON.stringify(metadata) : null,
       ]
     );
 

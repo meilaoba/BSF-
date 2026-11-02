@@ -280,39 +280,47 @@ export async function loadVendorTelemetrySummaries({
 } = {}) {
   if (Array.isArray(deviceIds) && !deviceIds.length) return [];
   const params = [start, end];
-  const where = [`captured_at >= ($1::date::timestamp AT TIME ZONE 'Asia/Hong_Kong')`, `captured_at < (($2::date + 1)::timestamp AT TIME ZONE 'Asia/Hong_Kong')`];
+  const where = [`t.captured_at >= ($1::date::timestamp AT TIME ZONE 'Asia/Hong_Kong')`, `t.captured_at < (($2::date + 1)::timestamp AT TIME ZONE 'Asia/Hong_Kong')`];
 
   // Parameters 1 and 2 are the Hong Kong date boundaries.
 
 
   if (!includeAllAccounts) {
     params.push(vendorAccountId);
-    where.push(`vendor_account_id = $${params.length}`);
+    where.push(`t.vendor_account_id = $${params.length}`);
   }
   if (Array.isArray(deviceIds)) {
     params.push(deviceIds);
-    where.push(`vendor_device_id = ANY($${params.length}::text[])`);
+    where.push(`t.vendor_device_id = ANY($${params.length}::text[])`);
   }
 
   const bucketExpression = groupBy === 'hour'
-    ? `to_char(captured_at AT TIME ZONE 'Asia/Hong_Kong', 'YYYY-MM-DD HH24:00')`
-    : `to_char(captured_at AT TIME ZONE 'Asia/Hong_Kong', 'YYYY-MM-DD')`;
+    ? `to_char(t.captured_at AT TIME ZONE 'Asia/Hong_Kong', 'YYYY-MM-DD HH24:00')`
+    : `to_char(t.captured_at AT TIME ZONE 'Asia/Hong_Kong', 'YYYY-MM-DD')`;
 
   const { rows } = await query(
     `SELECT
        ${bucketExpression} AS bucket_key,
-       vendor_device_id,
-       max(daily_input_t) AS daily_input_t,
-       max(monthly_input_t) AS monthly_input_t,
-       max(yearly_input_t) AS yearly_input_t,
-       bool_or(operating_status_code = 1) AS had_standby,
-       avg(cabin_temp_c) AS cabin_temp_c,
-       avg(humidity_pct) AS humidity_pct,
+       t.vendor_device_id,
+       max(t.daily_input_t) AS daily_input_t,
+       max(t.monthly_input_t) AS monthly_input_t,
+       max(t.yearly_input_t) AS yearly_input_t,
+       bool_or(t.operating_status_code IN (1, 2)) AS had_operation,
+       bool_or(t.operating_status_code = 1) AS had_standby,
+       bool_or(t.operating_status_code = 2) AS had_running,
+       avg(t.cabin_temp_c) AS cabin_temp_c,
+       avg(t.humidity_pct) AS humidity_pct,
+       c.region AS site_region,
+       c.metadata->'ghgFormula' AS client_formula,
+       m.metadata->'ghgFormula' AS machine_formula,
        count(*)::bigint AS sample_count
-     FROM vendor_device_telemetry
+     FROM vendor_device_telemetry t
+     LEFT JOIN machines m ON m.vendor_device_id = t.vendor_device_id
+     LEFT JOIN clients c ON c.id = m.client_id
      WHERE ${where.join(' AND ')}
-     GROUP BY bucket_key, vendor_device_id
-     ORDER BY bucket_key ASC, vendor_device_id ASC`,
+     GROUP BY bucket_key, t.vendor_device_id, c.region,
+              m.metadata->'ghgFormula', c.metadata->'ghgFormula'
+     ORDER BY bucket_key ASC, t.vendor_device_id ASC`,
     params
   );
 
@@ -324,9 +332,14 @@ export async function loadVendorTelemetrySummaries({
     dailyInputT: row.daily_input_t,
     monthlyInputT: row.monthly_input_t,
     yearlyInputT: row.yearly_input_t,
-    operatingStatusCode: row.had_standby ? 1 : 0,
+    operatingStatusCode: row.had_operation ? (row.had_running ? 2 : 1) : 0,
     cabinTempC: row.cabin_temp_c,
     humidityPct: row.humidity_pct,
+    clientRegion: row.site_region,
+    ghgFormula: {
+      ...(row.client_formula || {}),
+      ...(row.machine_formula || {}),
+    },
     sampleCount: row.sample_count,
   }));
 }
