@@ -159,6 +159,8 @@
     getGraphs:function(params){ return get('/graphs', params); },
     getFoodWaste:function(params){ return get('/graphs/food-waste', params); },
     getEnvironmentTemperature:function(params){ return get('/environment-temperature', params); },
+    getVendorTemplates:function(params){ return get('/vendor-templates', params); },
+    getVendorDailyStats:function(params){ return get('/vendor-daily-stats', params); },
     getDeviceData:function(params){ return get('/device-data', params); },
     getRawData:function(params){ return get('/device-data', params); },
     getRawSamples:function(params){ return get('/raw-data-samples', params); },

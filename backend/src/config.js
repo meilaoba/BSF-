@@ -140,6 +140,7 @@ export const config = {
     vendor: {
       loginUrl: str('VENDOR_LOGIN_URL', 'https://iot.creekscomposter.com:8888/user/login'),
       deviceListUrl: str('VENDOR_DEVICE_LIST_URL', 'https://iot.creekscomposter.com:8888/emDevice/queryListData'),
+      templateListUrl: str('VENDOR_TEMPLATE_LIST_URL', 'https://iot.creekscomposter.com:8888/emTemplate/list'),
       realtimeEnabled: bool('VENDOR_REALTIME_ENABLED', true),
       realtimeUrl: str('VENDOR_REALTIME_WS_URL', 'wss://iot.creekscomposter.com:8888/ws'),
       realtimeTimeoutMs: num('VENDOR_REALTIME_TIMEOUT_MS', 4000),
@@ -151,7 +152,7 @@ export const config = {
       accessTokenTtlDays: num('VENDOR_ACCESS_TOKEN_TTL_DAYS', 7),
       refreshTokenTtlDays: num('VENDOR_REFRESH_TOKEN_TTL_DAYS', 8),
       refreshUrl: str('VENDOR_REFRESH_URL', 'https://iot.creekscomposter.com:8888/user/refresh'),
-      dailyStatsUrl: str('VENDOR_DAILY_STATS_URL', ''),
+      dailyStatsUrl: str('VENDOR_DAILY_STATS_URL', 'https://iot.creekscomposter.com:8888/historyData/deviceList'),
       alertListUrl: str('VENDOR_ALERT_LIST_URL', ''),
     },
     sessionTtlSeconds: num('AUTH_SESSION_TTL_SECONDS', 8 * 24 * 60 * 60),

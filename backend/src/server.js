@@ -15,6 +15,7 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerNotificationRoutes } from './routes/notifications.js';
 import { registerDirectoryRoutes } from './routes/directory.js';
 import { registerVendorDeviceRoutes } from './routes/vendor-devices.js';
+import { registerVendorInformationRoutes } from './routes/vendor-information.js';
 import { registerDeviceDataRoutes } from './routes/device-data.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
@@ -33,6 +34,7 @@ registerHealthRoutes(router);
 registerNotificationRoutes(router);
 registerDirectoryRoutes(router);
 registerVendorDeviceRoutes(router);
+registerVendorInformationRoutes(router);
 registerDeviceDataRoutes(router);
 registerAnalyticsRoutes(router);
 

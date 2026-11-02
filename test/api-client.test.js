@@ -53,6 +53,21 @@ test('classic API bootstrap exposes authenticated analytics requests without ES 
   assert.equal(calls[0].url, '/api/v1/graphs?period=monthly&year=2026&month=10');
   assert.equal(calls[0].options.credentials, 'include');
   assert.equal(typeof client.getEnvironmentTemperature, 'function');
+  assert.equal(typeof client.getVendorTemplates, 'function');
+  assert.equal(typeof client.getVendorDailyStats, 'function');
+});
+
+test('vendor template and daily stats clients use backend proxy routes', async () => {
+  const { client, calls } = loadClient(async () => ({
+    ok: true,
+    json: async () => ({ ok: true, data: { records: [] } }),
+  }));
+
+  await client.getVendorTemplates({ pageNum: 1, pageSize: 20 });
+  await client.getVendorDailyStats({ deviceId: '52', pageNum: 1, pageSize: 20 });
+
+  assert.equal(calls[0].url, '/api/v1/vendor-templates?pageNum=1&pageSize=20');
+  assert.equal(calls[1].url, '/api/v1/vendor-daily-stats?deviceId=52&pageNum=1&pageSize=20');
 });
 
 test('classic API bootstrap sends CSRF and surfaces backend error codes', async () => {

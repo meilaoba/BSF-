@@ -342,6 +342,8 @@ export function applyDataScope(req, session) {
     || path === '/api/v1/auth/refresh'
     || path === '/api/v1/vendor-devices'
     || path === '/api/v1/vendor-devices/history'
+    || path === '/api/v1/vendor-templates'
+    || path === '/api/v1/vendor-daily-stats'
     || path === '/api/v1/graphs'
     || path === '/api/v1/graphs/food-waste'
     || path === '/api/v1/reports') {
