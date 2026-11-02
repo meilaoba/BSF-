@@ -250,6 +250,10 @@ function normalizeSnapshotRow(row, formula = {}) {
     dailyInputT: finiteNumber(row.dailyInputT ?? row.daily_input_t),
     monthlyInputT: finiteNumber(row.monthlyInputT ?? row.monthly_input_t),
     yearlyInputT: finiteNumber(row.yearlyInputT ?? row.yearly_input_t),
+    wasteKg: finiteNumber(row.wasteKg),
+    energyKwh: finiteNumber(row.energyKwh),
+    runTimeHours: finiteNumber(row.runTimeHours),
+    dailyAggregate: row.dailyAggregate === true,
     siteFormula: row.ghgFormula ?? row.siteFormula ?? null,
     siteRegion: row.clientRegion ?? row.siteRegion ?? row.region ?? null,
   };
@@ -318,11 +322,17 @@ export function aggregateTelemetrySnapshots(rows, {
       maxDailyInputT: null,
       hasStandby: false,
       isOperatingDay: false,
+      directWasteKg: null,
+      energyKwh: null,
+      dailyAggregate: false,
       siteFormula: null,
       siteRegion: null,
     };
     day.last = row;
     day.maxDailyInputT = maxKnown(day.maxDailyInputT, row.dailyInputT);
+    day.directWasteKg = maxKnown(day.directWasteKg, row.wasteKg);
+    if (row.energyKwh !== null) day.energyKwh = row.energyKwh;
+    day.dailyAggregate = day.dailyAggregate || row.dailyAggregate;
     day.hasStandby = day.hasStandby || row.operatingStatusCode === 1;
     day.isOperatingDay = day.isOperatingDay || row.operatingStatusCode === 1 || row.operatingStatusCode === 2;
     day.siteFormula = mergeFormulaConfig(day.siteFormula || {}, row.siteFormula);
@@ -375,11 +385,13 @@ export function aggregateTelemetrySnapshots(rows, {
 
   for (const day of deviceDays.values()) {
     if (day.dateKey > currentDateKey) continue;
-    const wasteKg = tonsToKg(day.maxDailyInputT);
+    const wasteKg = day.directWasteKg !== null ? day.directWasteKg : tonsToKg(day.maxDailyInputT);
     if (wasteKg === null) continue;
     const dayFormula = mergeFormulaConfig(formula, day.siteFormula);
     const dayRegion = day.siteRegion || region;
-    const energyKwh = day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0;
+    const energyKwh = day.energyKwh !== null
+      ? day.energyKwh
+      : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0);
     const ghgKg = ghgReducedKg(wasteKg, energyKwh, dayRegion, 1, dayFormula);
     if (ghgKg === null) continue;
     dailyResults.set(`${day.deviceId}|${day.dateKey}`, {
@@ -389,6 +401,7 @@ export function aggregateTelemetrySnapshots(rows, {
       wasteKg,
       energyKwh,
       ghgKg,
+      dailyAggregate: day.dailyAggregate,
     });
   }
 
@@ -400,6 +413,9 @@ export function aggregateTelemetrySnapshots(rows, {
       const separator = key.lastIndexOf('|');
       const bucket = key.slice(0, separator);
       const deviceId = key.slice(separator + 1);
+      const aggregateKey = `${deviceId}|${hongKongDateKey(row.capturedAt)}`;
+      const daily = dailyResults.get(aggregateKey);
+      if (daily?.dailyAggregate) continue;
       const list = hourlyInputs.get(deviceId) || [];
       list.push({ bucket, row });
       hourlyInputs.set(deviceId, list);
@@ -421,6 +437,10 @@ export function aggregateTelemetrySnapshots(rows, {
         previous = current;
       }
     }
+    for (const day of dailyResults.values()) {
+      if (!day.dailyAggregate) continue;
+      addToMap(foodByBucket, `${day.dateKey} 12`, day.wasteKg);
+    }
   } else {
     for (const day of dailyResults.values()) {
       const bucket = groupBy === 'month' ? day.monthKey : day.dateKey;
@@ -431,9 +451,12 @@ export function aggregateTelemetrySnapshots(rows, {
   }
 
   for (const day of deviceDays.values()) {
-    if (!day.isOperatingDay || groupBy !== 'hour') continue;
+    if (groupBy !== 'hour') continue;
     const dayFormula = mergeFormulaConfig(formula, day.siteFormula);
-    const energy = formulaNumber(dayFormula, 'dailyElectricityKwh');
+    const energy = day.energyKwh !== null
+      ? day.energyKwh
+      : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0);
+    if (energy === 0) continue;
     const bucket = bucketKeyForDate(day.last.capturedAt, 'hour');
     if (bucket <= currentBucket) addToMap(energyByBucket, bucket, energy);
   }

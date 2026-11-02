@@ -9,11 +9,15 @@ import {
 import {
   loadVendorTelemetrySamples,
   loadVendorTelemetrySummaries,
+  loadVendorDeviceReportSettings,
   resolveReportRegion,
   resolveVendorDeviceIds,
   vendorAccountIdForSession,
 } from '../services/vendor-analytics.js';
 import { getEnvironmentTemperature } from '../services/environment-temperature.js';
+import { getVendorAccessToken } from '../middleware/session.js';
+import { listAllVendorDevices } from '../providers/vendor-devices.js';
+import { loadVendorDailyStatSnapshots } from '../services/vendor-daily-stats-analytics.js';
 
 const PERIODS = new Set(['daily', 'monthly', 'yearly']);
 const GROUPS = new Set(['hour', 'day', 'month']);
@@ -130,6 +134,42 @@ async function analyticsContext(req, url) {
   };
 }
 
+async function loadAnalyticsRows(req, context, range) {
+  const sampleRows = await loadVendorTelemetrySummaries({
+    vendorAccountId: context.vendorAccountId,
+    includeAllAccounts: context.includeAllAccounts,
+    deviceIds: context.deviceIds,
+    start: range.start,
+    end: range.end,
+    groupBy: 'day',
+  });
+
+  try {
+    const token = await getVendorAccessToken(req.auth);
+    const vendorDevices = await listAllVendorDevices({ token, pageNum: 1, pageSize: 100 });
+    const allowedIds = Array.isArray(context.deviceIds)
+      ? new Set(context.deviceIds.map(String))
+      : null;
+    const devices = vendorDevices.records.filter((device) => (
+      !allowedIds || allowedIds.has(String(device.id))
+    ));
+    const settingsByDevice = await loadVendorDeviceReportSettings({
+      deviceIds: context.deviceIds,
+    });
+    const dailyRows = await loadVendorDailyStatSnapshots({
+      token,
+      devices,
+      start: range.start,
+      end: range.end,
+      settingsByDevice,
+    });
+    return [...dailyRows, ...sampleRows];
+  } catch (error) {
+    console.warn('[analytics] vendor daily stats unavailable:', error.code || error.message);
+    return sampleRows;
+  }
+}
+
 function forbiddenAccount() {
   return new AppError('VENDOR_ACCOUNT_SCOPE_REQUIRED', 'The signed-in account has no vendor telemetry scope', {
     status: 403,
@@ -244,14 +284,7 @@ export function registerAnalyticsRoutes(router) {
     if (!GROUPS.has(groupBy)) throw new ValidationError('`groupBy` must be hour, day, or month');
     const sourceGroupBy = groupBy === 'hour' ? 'hour' : 'day';
 
-    const rows = await loadVendorTelemetrySummaries({
-      vendorAccountId: context.vendorAccountId,
-      includeAllAccounts: context.includeAllAccounts,
-      deviceIds: context.deviceIds,
-      start: range.start,
-      end: range.end,
-      groupBy: sourceGroupBy,
-    });
+    const rows = await loadAnalyticsRows(req, context, range);
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(rows, {
       groupBy,
@@ -284,14 +317,7 @@ export function registerAnalyticsRoutes(router) {
     const range = dateRangeForRequest(url, period, new Date());
     const groupBy = defaultGroupBy(period);
     const sourceGroupBy = groupBy === 'hour' ? 'hour' : 'day';
-    const rows = await loadVendorTelemetrySummaries({
-      vendorAccountId: context.vendorAccountId,
-      includeAllAccounts: context.includeAllAccounts,
-      deviceIds: context.deviceIds,
-      start: range.start,
-      end: range.end,
-      groupBy: sourceGroupBy,
-    });
+    const rows = await loadAnalyticsRows(req, context, range);
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(rows, {
       groupBy,
@@ -315,14 +341,7 @@ export function registerAnalyticsRoutes(router) {
     const range = dateRangeForRequest(url, period, new Date());
     const groupBy = period === 'yearly' ? 'month' : 'day';
     const sourceGroupBy = 'day';
-    const rows = await loadVendorTelemetrySummaries({
-      vendorAccountId: context.vendorAccountId,
-      includeAllAccounts: context.includeAllAccounts,
-      deviceIds: context.deviceIds,
-      start: range.start,
-      end: range.end,
-      groupBy: sourceGroupBy,
-    });
+    const rows = await loadAnalyticsRows(req, context, range);
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(rows, {
       groupBy,

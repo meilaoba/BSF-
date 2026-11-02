@@ -153,6 +153,8 @@ export const config = {
       refreshTokenTtlDays: num('VENDOR_REFRESH_TOKEN_TTL_DAYS', 8),
       refreshUrl: str('VENDOR_REFRESH_URL', 'https://iot.creekscomposter.com:8888/user/refresh'),
       dailyStatsUrl: str('VENDOR_DAILY_STATS_URL', 'https://iot.creekscomposter.com:8888/historyData/deviceList'),
+      kitchenWasteToKgFactor: num('VENDOR_KITCHEN_WASTE_TO_KG_FACTOR', 1),
+      powerConsumeToKwhFactor: num('VENDOR_POWER_CONSUME_TO_KWH_FACTOR', 1),
       alertListUrl: str('VENDOR_ALERT_LIST_URL', ''),
     },
     sessionTtlSeconds: num('AUTH_SESSION_TTL_SECONDS', 8 * 24 * 60 * 60),

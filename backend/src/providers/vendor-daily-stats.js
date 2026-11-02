@@ -118,3 +118,30 @@ export async function fetchVendorDailyStats({
   });
   return normalizeDailyStatsResponse(response.body);
 }
+
+export async function fetchAllVendorDailyStats({
+  token,
+  deviceName,
+  startTime = '',
+  endTime = '',
+  pageSize = 100,
+  maxPages = 20,
+} = {}) {
+  const records = [];
+  let pageNum = 1;
+  let totalPages = 1;
+  do {
+    const result = await fetchVendorDailyStats({
+      token,
+      deviceName,
+      startTime,
+      endTime,
+      pageNum,
+      pageSize,
+    });
+    records.push(...result.records);
+    totalPages = result.pagination.totalPages;
+    pageNum += 1;
+  } while (pageNum <= totalPages && pageNum <= maxPages);
+  return records;
+}

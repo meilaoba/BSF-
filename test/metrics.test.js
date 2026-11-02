@@ -236,6 +236,32 @@ test('applies per-site monthly mileage and signed operating-day electricity', ()
       + (2 * 1.5 + 1.5 * 0.37 - hsitpTransport));
 });
 
+test('daily aggregate rows use vendor waste and measured power instead of estimates', () => {
+  const result = aggregateTelemetrySnapshots([
+    {
+      capturedAt: '2026-10-16T12:00:00+08:00',
+      deviceId: 'cic',
+      wasteKg: 5,
+      energyKwh: 1.5,
+      runTimeHours: 1,
+      operatingStatusCode: 2,
+      dailyAggregate: true,
+      clientRegion: 'non-hk',
+      ghgFormula: { monthlyDistanceKm: 140, dailyElectricityKwh: 1.5 }
+    }
+  ], {
+    groupBy: 'day',
+    start: '2026-10-16',
+    end: '2026-10-16',
+    summaryMode: 'daily',
+    now: new Date('2026-10-17T00:00:00.000Z')
+  });
+  const transport = ((140 * 12) / 365 / 100) * 8.3 * 2.32;
+  assert.equal(result.summary.wasteKg, 5);
+  assert.equal(result.summary.energyKwh, 1.5);
+  close(result.summary.ghgKg, 5 * 1.5 - 1.5 * 0.37 - transport);
+});
+
 test('converts cumulative daily input into hourly increments without duplicating a day', () => {
   const result = aggregateTelemetrySnapshots([
     { capturedAt: '2026-10-01T02:10:00.000Z', deviceId: 'device-a', dailyInputT: 0.010, operatingStatusCode: 1 },

@@ -33,6 +33,8 @@ test('confirmed formula and polling defaults remain configurable', () => {
   assert.equal(config.formula.fuelConsumptionLPer100Km, 8.3);
   assert.equal(config.formula.fuelEmissionFactorKgPerL, 2.32);
   assert.equal(config.formula.dailyElectricityKwh, 1.5);
+  assert.equal(config.auth.vendor.kitchenWasteToKgFactor, 1);
+  assert.equal(config.auth.vendor.powerConsumeToKwhFactor, 1);
   assert.equal(config.formula.fertilizerRatio, 0.12);
   assert.equal(config.formula.humidityScale, 100);
   assert.equal(config.auth.vendor.realtimeEnabled, true);
@@ -160,6 +162,7 @@ test('site carbon formula migration seeds CIC and HSITP defaults', () => {
   assert.match(sql, /metadata->'ghgFormula'/);
   assert.match(service, /m\.metadata->'ghgFormula'/);
   assert.match(service, /c\.metadata->'ghgFormula'/);
+  assert.match(service, /loadVendorDeviceReportSettings/);
 });
 
 test('environment temperature migration stores HKO samples and daily values', () => {

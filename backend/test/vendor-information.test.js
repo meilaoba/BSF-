@@ -77,7 +77,10 @@ process.env.VENDOR_TEMPLATE_LIST_URL = `http://127.0.0.1:${port}/emTemplate/list
 process.env.VENDOR_DAILY_STATS_URL = `http://127.0.0.1:${port}/historyData/deviceList`;
 
 const { fetchVendorTemplates } = await import('../src/providers/vendor-templates.js');
-const { fetchVendorDailyStats } = await import('../src/providers/vendor-daily-stats.js');
+const {
+  fetchAllVendorDailyStats,
+  fetchVendorDailyStats,
+} = await import('../src/providers/vendor-daily-stats.js');
 
 test.after(() => new Promise((resolve) => vendor.close(resolve)));
 
@@ -121,4 +124,14 @@ test('daily stats map all device-day reporting fields without changing units', a
     bindingTime: 1789386531140,
   });
   assert.equal(result.pagination.totalPages, 1);
+});
+
+test('daily stats helper follows all pagination pages', async () => {
+  const records = await fetchAllVendorDailyStats({
+    token: 'access-token',
+    deviceName: 'CR-30S_QX2026124',
+    pageSize: 100,
+  });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].statDate, '2026-10-16');
 });

@@ -270,6 +270,34 @@ export async function resolveVendorDeviceIds({ clientId, machineId } = {}) {
   return rows.map((row) => row.vendor_device_id);
 }
 
+export async function loadVendorDeviceReportSettings({ deviceIds = null } = {}) {
+  if (Array.isArray(deviceIds) && !deviceIds.length) return new Map();
+  const params = [];
+  let deviceClause = '';
+  if (Array.isArray(deviceIds)) {
+    params.push(deviceIds.map(String));
+    deviceClause = 'AND m.vendor_device_id = ANY($1::text[])';
+  }
+  const { rows } = await query(
+    `SELECT m.vendor_device_id,
+            c.region AS client_region,
+            c.metadata->'ghgFormula' AS client_formula,
+            m.metadata->'ghgFormula' AS machine_formula
+       FROM machines m
+       LEFT JOIN clients c ON c.id = m.client_id
+      WHERE m.vendor_device_id IS NOT NULL
+        ${deviceClause}`,
+    params
+  );
+  return new Map(rows.map((row) => [String(row.vendor_device_id), {
+    clientRegion: row.client_region,
+    ghgFormula: {
+      ...(row.client_formula || {}),
+      ...(row.machine_formula || {}),
+    },
+  }]));
+}
+
 export async function loadVendorTelemetrySummaries({
   vendorAccountId,
   includeAllAccounts = false,
