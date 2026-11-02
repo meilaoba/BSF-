@@ -299,7 +299,6 @@ export function aggregateTelemetrySnapshots(rows, {
   const deviceDays = new Map();
   const deviceMonths = new Map();
   const deviceYears = new Map();
-  const readingsByBucketDevice = new Map();
   let minTemp = null;
   let maxTemp = null;
   let tempSum = 0;
@@ -356,7 +355,6 @@ export function aggregateTelemetrySnapshots(rows, {
     deviceYears.set(`${row.deviceId}|${yearKey}`, year);
 
     const bucket = bucketKeyForDate(row.capturedAt, groupBy);
-    readingsByBucketDevice.set(`${bucket}|${row.deviceId}`, row);
 
     if (row.cabinTempC !== null) {
       tempSum += row.cabinTempC;
@@ -410,14 +408,16 @@ export function aggregateTelemetrySnapshots(rows, {
   if (groupBy === 'hour') {
     // dailyInput is a cumulative day-to-date value. Convert consecutive hourly
     // snapshots into increments so an hour is not charged the whole day again.
+    const hourlySamples = new Map();
+    for (const row of data) {
+      if (row.dailyAggregate) continue;
+      const bucket = bucketKeyForDate(row.capturedAt, 'hour');
+      hourlySamples.set(`${row.deviceId}|${bucket}`, { bucket, deviceId: row.deviceId, row });
+    }
     const hourlyInputs = new Map();
-    for (const [key, row] of readingsByBucketDevice) {
-      const separator = key.lastIndexOf('|');
-      const bucket = key.slice(0, separator);
-      const deviceId = key.slice(separator + 1);
-      const aggregateKey = `${deviceId}|${hongKongDateKey(row.capturedAt)}`;
-      const daily = dailyResults.get(aggregateKey);
-      if (daily?.dailyAggregate) continue;
+    const daysWithInputSamples = new Set();
+    for (const { bucket, deviceId, row } of hourlySamples.values()) {
+      if (row.dailyInputT !== null) daysWithInputSamples.add(`${deviceId}|${hongKongDateKey(row.capturedAt)}`);
       const list = hourlyInputs.get(deviceId) || [];
       list.push({ bucket, row });
       hourlyInputs.set(deviceId, list);
@@ -442,7 +442,11 @@ export function aggregateTelemetrySnapshots(rows, {
     for (const day of dailyResults.values()) {
       if (!day.dailyAggregate) continue;
       const bucket = `${day.dateKey} 12:00`;
-      addToMap(foodByBucket, bucket, day.wasteKg);
+      const dayKey = `${day.deviceId}|${day.dateKey}`;
+      // Sample-derived hourly input is the "food waste in" series; the daily
+      // report's kitchenWaste is the processed weight and only fills in when
+      // no input samples were collected for that device-day.
+      if (!daysWithInputSamples.has(dayKey)) addToMap(foodByBucket, bucket, day.wasteKg);
       addToMap(ghgByBucket, bucket, day.ghgKg);
     }
   } else {
@@ -462,7 +466,7 @@ export function aggregateTelemetrySnapshots(rows, {
       : (day.energyKwh !== null
         ? day.energyKwh
         : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0));
-    if (energy === 0) continue;
+    if (energy === 0 && !day.dailyAggregate) continue;
     const bucket = day.dailyAggregate
       ? `${day.dateKey} 12:00`
       : bucketKeyForDate(day.last.capturedAt, 'hour');

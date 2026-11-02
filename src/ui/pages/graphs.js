@@ -266,9 +266,22 @@ function graphXAxisLabel(value){
   return text;
 }
 
-function graphXAxisIndices(length, maxLabels){
+function graphXAxisIndices(rows, maxLabels){
+  const length = rows.length;
   if(!length) return [];
   if(length <= maxLabels) return Array.from({ length:length }, function(_, index){ return index; });
+  const hourly = rows.every(function(row){
+    return /(?:^|\s)\d{2}:00$/.test(graphRowLabel(row, 0));
+  });
+  if(hourly){
+    for(let step = 1; step < length; step += 1){
+      if(Math.ceil(length / step) <= maxLabels){
+        const indices = [];
+        for(let index = 0; index < length; index += step) indices.push(index);
+        return indices;
+      }
+    }
+  }
   const indices = [];
   for(let index = 0; index < maxLabels; index += 1){
     indices.push(Math.round(index * (length - 1) / (maxLabels - 1)));
@@ -361,7 +374,7 @@ function buildLineChartSvg(rows, valueKey, color){
   const singlePointLabel = singlePoint
     ? '<text data-single-value="true" x="' + singlePoint.x.toFixed(1) + '" y="' + (singlePoint.y > top + 18 ? singlePoint.y - 10 : singlePoint.y + 18).toFixed(1) + '" text-anchor="middle" fill="' + color + '" font-size="11" font-weight="600">' + graphEscape(singlePoint.value.toFixed(1)) + '</text>'
     : '';
-  const xAxisIndices = new Set(graphXAxisIndices(data.length, 7));
+  const xAxisIndices = new Set(graphXAxisIndices(data, 7));
   const labels = data.map(function(row, index){
     if(!xAxisIndices.has(index)) return '';
     const x = left + step * index;

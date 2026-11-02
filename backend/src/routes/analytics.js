@@ -134,14 +134,14 @@ async function analyticsContext(req, url) {
   };
 }
 
-async function loadAnalyticsRows(req, context, range) {
+async function loadAnalyticsRows(req, context, range, sampleGroupBy = 'day') {
   const sampleRows = await loadVendorTelemetrySummaries({
     vendorAccountId: context.vendorAccountId,
     includeAllAccounts: context.includeAllAccounts,
     deviceIds: context.deviceIds,
     start: range.start,
     end: range.end,
-    groupBy: 'day',
+    groupBy: sampleGroupBy,
   });
 
   try {
@@ -297,7 +297,7 @@ export function registerAnalyticsRoutes(router) {
     if (!GROUPS.has(groupBy)) throw new ValidationError('`groupBy` must be hour, day, or month');
     const sourceGroupBy = groupBy === 'hour' ? 'hour' : 'day';
 
-    const analytics = await loadAnalyticsRows(req, context, range);
+    const analytics = await loadAnalyticsRows(req, context, range, sourceGroupBy);
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(analytics.rows, {
       groupBy,
@@ -331,7 +331,7 @@ export function registerAnalyticsRoutes(router) {
     const range = dateRangeForRequest(url, period, new Date());
     const groupBy = defaultGroupBy(period);
     const sourceGroupBy = groupBy === 'hour' ? 'hour' : 'day';
-    const analytics = await loadAnalyticsRows(req, context, range);
+    const analytics = await loadAnalyticsRows(req, context, range, sourceGroupBy);
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(analytics.rows, {
       groupBy,
@@ -362,7 +362,7 @@ export function registerAnalyticsRoutes(router) {
     const range = dateRangeForRequest(url, period, new Date());
     const groupBy = period === 'yearly' ? 'month' : 'day';
     const sourceGroupBy = 'day';
-    const analytics = await loadAnalyticsRows(req, context, range);
+    const analytics = await loadAnalyticsRows(req, context, range, sourceGroupBy);
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(analytics.rows, {
       groupBy,

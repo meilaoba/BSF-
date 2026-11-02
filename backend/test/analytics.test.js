@@ -226,6 +226,14 @@ test('raw sample route is scheduled-worker data and caps pages at 30', () => {
   assert.match(source, /source: 'worker'/);
 });
 
+test('daily graphs request hourly telemetry summaries instead of one row per day', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const source = fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8');
+  assert.match(source, /const sourceGroupBy = groupBy === 'hour' \? 'hour' : 'day';/);
+  assert.match(source, /groupBy: sampleGroupBy/);
+  assert.match(source, /loadAnalyticsRows\(req, context, range, sourceGroupBy\)/);
+});
+
 test('raw sample range preserves times and uses an exclusive end boundary', () => {
   const range = rawSampleRange(new URL(
     'http://localhost/api/v1/raw-data-samples?start=2026-10-28T00:00&end=2026-10-29T00:00'

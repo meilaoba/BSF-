@@ -312,6 +312,7 @@ test('daily aggregate zero is plotted once at noon without copying GHG forward',
 
   assert.equal(result.items[12].date, '2026-10-31 12:00');
   assert.equal(result.items[12].value, 0);
+  assert.equal(result.energyItems[12].value, 0);
   assert.equal(result.summary.pointCount, 1);
   assert.equal(result.ghgItems[12].value, result.summary.ghgKg);
   assert.deepEqual(
@@ -319,6 +320,50 @@ test('daily aggregate zero is plotted once at noon without copying GHG forward',
       .map((item, index) => item.value === null ? null : index)
       .filter((index) => index !== null),
     [12],
+  );
+});
+
+test('hourly telemetry summaries keep hourly temperature points in the daily view', () => {
+  const result = aggregateTelemetrySnapshots([
+    { capturedAt: '2026-11-01T09:00:00+08:00', deviceId: '52', cabinTempC: 28, operatingStatusCode: 2, dailyInputT: 0.01 },
+    { capturedAt: '2026-11-01T10:00:00+08:00', deviceId: '52', cabinTempC: 29, operatingStatusCode: 2, dailyInputT: 0.02 },
+    { capturedAt: '2026-11-01T12:00:00+08:00', deviceId: '52', wasteKg: 0, energyKwh: 1.5, dailyAggregate: true, clientRegion: 'non-hk' },
+  ], {
+    groupBy: 'hour',
+    start: '2026-11-01',
+    end: '2026-11-01',
+    summaryMode: 'daily',
+    now: new Date('2026-11-02T04:00:00.000Z'),
+  });
+
+  assert.deepEqual(
+    result.tempItems
+      .filter((item) => item.value !== null)
+      .map((item) => [item.date, item.value]),
+    [['2026-11-01 09:00', 28], ['2026-11-01 10:00', 29]],
+  );
+  assert.equal(result.energyItems[12].value, 1.5);
+});
+
+test('daily view shows sampled input hours when vendor kitchen waste is zero', () => {
+  const result = aggregateTelemetrySnapshots([
+    { capturedAt: '2026-11-01T08:00:00+08:00', deviceId: '52', dailyInputT: 0.004, operatingStatusCode: 2 },
+    { capturedAt: '2026-11-01T09:00:00+08:00', deviceId: '52', dailyInputT: 0.006, operatingStatusCode: 2 },
+    { capturedAt: '2026-11-01T12:00:00+08:00', deviceId: '52', dailyInputT: 0.010, operatingStatusCode: 2 },
+    { capturedAt: '2026-11-01T12:00:00+08:00', deviceId: '52', wasteKg: 0, energyKwh: 1.5, dailyAggregate: true, clientRegion: 'non-hk' },
+  ], {
+    groupBy: 'hour',
+    start: '2026-11-01',
+    end: '2026-11-01',
+    summaryMode: 'daily',
+    now: new Date('2026-11-02T04:00:00.000Z'),
+  });
+
+  assert.deepEqual(
+    result.items
+      .filter((item) => item.value !== null)
+      .map((item) => [item.date.slice(11), item.value]),
+    [['08:00', 4], ['09:00', 2], ['12:00', 4]],
   );
 });
 

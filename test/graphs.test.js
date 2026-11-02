@@ -183,7 +183,7 @@ test('graph status exposes sampled telemetry fallback', () => {
   assert.match(markup, /Vendor daily stats unavailable; showing sampled telemetry instead\./);
 });
 
-test('daily x-axis uses short labels and avoids the forced overlapping final tick', () => {
+test('daily x-axis labels evenly spaced whole hours', () => {
   sandbox.rows = Array.from({ length:24 }, function(_, hour){
     return {
       label:'2026-10-28 ' + String(hour).padStart(2, '0') + ':00',
@@ -193,8 +193,7 @@ test('daily x-axis uses short labels and avoids the forced overlapping final tic
   const svg = vm.runInContext("buildLineChartSvg(rows, 'value', '#3b82f6')", sandbox);
   const labels = Array.from(svg.matchAll(/data-x-axis-label="true"[^>]*>([^<]+)</g), (match) => match[1]);
   assert.ok(labels.length <= 7);
-  assert.ok(labels.includes('23:00'));
-  assert.ok(labels.every((label) => /^\d{2}:\d{2}$/.test(label)));
+  assert.deepEqual(labels, ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00']);
 });
 
 test('graph page uses the server analytics result rather than browser history fallback', () => {
