@@ -290,12 +290,24 @@ test('raw sample route is scheduled-worker data and caps pages at 30', () => {
   assert.match(source, /source: 'worker'/);
 });
 
-test('daily graphs request hourly telemetry summaries instead of one row per day', () => {
+test('graphs read telemetry while reports read vendor daily stats without telemetry fallback', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const source = fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8');
   assert.match(source, /const sourceGroupBy = groupBy === 'hour' \? 'hour' : 'day';/);
   assert.match(source, /groupBy: sampleGroupBy/);
-  assert.match(source, /loadAnalyticsRows\(req, context, range, sourceGroupBy\)/);
+  assert.match(source, /loadGraphAnalytics\(context, range, sourceGroupBy\)/);
+  assert.match(source, /loadReportAnalytics\(req, context, range\)/);
+  assert.match(source, /rows: dailyResult\.snapshots/);
+  const reportLoader = source.slice(
+    source.indexOf('async function loadReportAnalytics'),
+    source.indexOf('function forbiddenAccount')
+  );
+  assert.doesNotMatch(reportLoader, /loadVendorTelemetrySummaries/);
+  const graphLoader = source.slice(
+    source.indexOf('async function loadGraphAnalytics'),
+    source.indexOf('async function loadReportAnalytics')
+  );
+  assert.doesNotMatch(graphLoader, /loadVendorDailyStatSnapshots/);
 });
 
 test('graph and report responses allow only short private browser caching', () => {

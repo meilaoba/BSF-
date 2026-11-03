@@ -138,8 +138,8 @@ async function analyticsContext(req, url) {
   };
 }
 
-async function loadAnalyticsRows(req, context, range, sampleGroupBy = 'day') {
-  const sampleRows = await loadVendorTelemetrySummaries({
+async function loadGraphAnalytics(context, range, sampleGroupBy = 'day') {
+  const rows = await loadVendorTelemetrySummaries({
     vendorAccountId: context.vendorAccountId,
     includeAllAccounts: context.includeAllAccounts,
     deviceIds: context.deviceIds,
@@ -148,43 +148,42 @@ async function loadAnalyticsRows(req, context, range, sampleGroupBy = 'day') {
     groupBy: sampleGroupBy,
   });
 
-  try {
-    const token = await getVendorAccessToken(req.auth);
-    const vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
-    const allowedIds = Array.isArray(context.deviceIds)
-      ? new Set(context.deviceIds.map(String))
-      : null;
-    const devices = vendorDevices.records.filter((device) => (
-      !allowedIds || allowedIds.has(String(device.id))
-    ));
-    const settingsByDevice = await loadVendorDeviceReportSettings({
-      deviceIds: context.deviceIds,
-    });
-    const dailyResult = await loadVendorDailyStatSnapshots({
-      token,
-      devices,
-      start: range.start,
-      end: range.end,
-      settingsByDevice,
-    });
-    const dailyStatsStatus = dailyResult.unavailableDeviceCount > 0
-      ? (dailyResult.snapshots.length ? 'partial' : 'fallback')
-      : 'vendor';
-    return {
-      rows: [...dailyResult.snapshots, ...sampleRows],
-      dataSources: {
-        dailyStats: { status: dailyStatsStatus },
-      },
-    };
-  } catch (error) {
-    console.warn('[analytics] vendor daily stats unavailable:', error.code || error.message);
-    return {
-      rows: sampleRows,
-      dataSources: {
-        dailyStats: { status: 'fallback' },
-      },
-    };
-  }
+  return {
+    rows,
+    dataSources: {
+      telemetry: { status: 'samples' },
+    },
+  };
+}
+
+async function loadReportAnalytics(req, context, range) {
+  const token = await getVendorAccessToken(req.auth);
+  const vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
+  const allowedIds = Array.isArray(context.deviceIds)
+    ? new Set(context.deviceIds.map(String))
+    : null;
+  const devices = vendorDevices.records.filter((device) => (
+    !allowedIds || allowedIds.has(String(device.id))
+  ));
+  const settingsByDevice = await loadVendorDeviceReportSettings({
+    deviceIds: context.deviceIds,
+  });
+  const dailyResult = await loadVendorDailyStatSnapshots({
+    token,
+    devices,
+    start: range.start,
+    end: range.end,
+    settingsByDevice,
+  });
+  const status = dailyResult.unavailableDeviceCount > 0
+    ? (dailyResult.snapshots.length ? 'partial' : 'unavailable')
+    : (dailyResult.snapshots.length ? 'vendor' : 'empty');
+  return {
+    rows: dailyResult.snapshots,
+    dataSources: {
+      dailyStats: { status },
+    },
+  };
 }
 
 function forbiddenAccount() {
@@ -301,7 +300,7 @@ export function registerAnalyticsRoutes(router) {
     if (!GROUPS.has(groupBy)) throw new ValidationError('`groupBy` must be hour, day, or month');
     const sourceGroupBy = groupBy === 'hour' ? 'hour' : 'day';
 
-    const analytics = await loadAnalyticsRows(req, context, range, sourceGroupBy);
+    const analytics = await loadGraphAnalytics(context, range, sourceGroupBy);
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(analytics.rows, {
       groupBy,
@@ -335,7 +334,7 @@ export function registerAnalyticsRoutes(router) {
     const range = dateRangeForRequest(url, period, new Date());
     const groupBy = defaultGroupBy(period);
     const sourceGroupBy = groupBy === 'hour' ? 'hour' : 'day';
-    const analytics = await loadAnalyticsRows(req, context, range, sourceGroupBy);
+    const analytics = await loadGraphAnalytics(context, range, sourceGroupBy);
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(analytics.rows, {
       groupBy,
@@ -366,7 +365,7 @@ export function registerAnalyticsRoutes(router) {
     const range = dateRangeForRequest(url, period, new Date());
     const groupBy = period === 'yearly' ? 'month' : 'day';
     const sourceGroupBy = 'day';
-    const analytics = await loadAnalyticsRows(req, context, range, sourceGroupBy);
+    const analytics = await loadReportAnalytics(req, context, range);
     const region = await resolveReportRegion({ clientId: context.clientId });
     const result = aggregateTelemetrySnapshots(analytics.rows, {
       groupBy,

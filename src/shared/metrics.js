@@ -373,19 +373,20 @@ export function aggregateTelemetrySnapshots(rows, {
   const energyByBucket = new Map();
   const ghgByBucket = new Map();
   const dailyResults = new Map();
+  const hourlyWasteByDeviceBucket = new Map();
 
   for (const day of deviceDays.values()) {
     if (day.dateKey > currentDateKey) continue;
+    day.formula = mergeFormulaConfig(formula, day.siteFormula);
+    day.region = day.siteRegion || region;
     const wasteKg = day.directWasteKg !== null ? day.directWasteKg : tonsToKg(day.maxDailyInputT);
     if (wasteKg === null) continue;
-    const dayFormula = mergeFormulaConfig(formula, day.siteFormula);
-    const dayRegion = day.siteRegion || region;
     const energyKwh = day.dailyAggregate
       ? (day.energyKwh ?? 0)
       : (day.energyKwh !== null
         ? day.energyKwh
-        : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0));
-    const ghgKg = ghgReducedKg(wasteKg, energyKwh, dayRegion, 1, dayFormula);
+        : (day.isOperatingDay ? formulaNumber(day.formula, 'dailyElectricityKwh') : 0));
+    const ghgKg = ghgReducedKg(wasteKg, energyKwh, day.region, 1, day.formula);
     dailyResults.set(`${day.deviceId}|${day.dateKey}`, {
       deviceId: day.deviceId,
       dateKey: day.dateKey,
@@ -394,6 +395,8 @@ export function aggregateTelemetrySnapshots(rows, {
       energyKwh,
       ghgKg,
       dailyAggregate: day.dailyAggregate,
+      formula: day.formula,
+      region: day.region,
     });
   }
 
@@ -411,7 +414,7 @@ export function aggregateTelemetrySnapshots(rows, {
     for (const { bucket, deviceId, row } of hourlySamples.values()) {
       if (row.dailyInputT !== null) daysWithInputSamples.add(`${deviceId}|${hongKongDateKey(row.capturedAt)}`);
       const list = hourlyInputs.get(deviceId) || [];
-      list.push({ bucket, row });
+      list.push({ bucket, deviceId, row });
       hourlyInputs.set(deviceId, list);
     }
     for (const list of hourlyInputs.values()) {
@@ -428,6 +431,7 @@ export function aggregateTelemetrySnapshots(rows, {
         if (current === null) continue;
         const increment = current >= previous ? current - previous : current;
         addToMap(foodByBucket, item.bucket, increment);
+        addToMap(hourlyWasteByDeviceBucket, `${item.deviceId}|${item.bucket}`, increment);
         previous = current;
       }
     }
@@ -450,51 +454,45 @@ export function aggregateTelemetrySnapshots(rows, {
     }
   }
 
+  const hourlyEnergyByDeviceBucket = new Map();
   for (const day of deviceDays.values()) {
     if (groupBy !== 'hour') continue;
-    const dayFormula = mergeFormulaConfig(formula, day.siteFormula);
     const energy = day.dailyAggregate
       ? (day.energyKwh ?? 0)
       : (day.energyKwh !== null
         ? day.energyKwh
-        : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0));
+        : (day.isOperatingDay ? formulaNumber(day.formula, 'dailyElectricityKwh') : 0));
     if (energy === 0 && !day.dailyAggregate) continue;
     const bucket = day.dailyAggregate
       ? `${day.dateKey} 12:00`
       : bucketKeyForDate(day.last.capturedAt, 'hour');
-    if (bucket <= currentBucket) addToMap(energyByBucket, bucket, energy);
+    if (bucket <= currentBucket) {
+      addToMap(energyByBucket, bucket, energy);
+      addToMap(hourlyEnergyByDeviceBucket, `${day.deviceId}|${bucket}`, energy);
+    }
   }
 
   const hasDailyAggregates = Array.from(dailyResults.values())
     .some((day) => day.dailyAggregate);
   if (groupBy === 'hour' && !hasDailyAggregates) {
-    const keysByDay = new Map();
-    for (const key of keys) {
-      const day = key.slice(0, 10);
-      const dayKeys = keysByDay.get(day) || [];
-      dayKeys.push(key);
-      keysByDay.set(day, dayKeys);
-    }
-    for (const dayKeys of keysByDay.values()) {
+    for (const day of dailyResults.values()) {
+      const dayKeys = keys.filter((key) => key.slice(0, 10) === day.dateKey);
+      if (!dayKeys.length) continue;
       let cumulativeWaste = 0;
       let cumulativeEnergy = 0;
       for (const key of dayKeys) {
         if (key > currentBucket) continue;
-        const waste = foodByBucket.get(key);
-        const energy = energyByBucket.get(key);
+        const deviceBucket = `${day.deviceId}|${key}`;
+        const waste = hourlyWasteByDeviceBucket.get(deviceBucket);
+        const energy = hourlyEnergyByDeviceBucket.get(deviceBucket);
         if (waste !== undefined) {
           cumulativeWaste += waste;
         }
         if (energy !== undefined) cumulativeEnergy += energy;
         if (waste !== undefined || energy !== undefined) {
-          const transport = transportCarbonKg(null, 1, formula);
-          if (transport === null) continue;
-          ghgByBucket.set(
-            key,
-            cumulativeWaste * formulaNumber(formula, 'wasteReductionFactor')
-              - cumulativeEnergy * regionalEnergyFactor(region, formula)
-              - transport,
-          );
+          const ghgKg = ghgReducedKg(cumulativeWaste, cumulativeEnergy, day.region, 1, day.formula);
+          if (ghgKg === null) continue;
+          addToMap(ghgByBucket, key, ghgKg);
         }
       }
     }

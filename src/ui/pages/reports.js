@@ -76,6 +76,20 @@ function reportMetricModel(){
   };
 }
 
+function reportVendorDataStatus(){
+  const hasApiData = reportApiData && reportApiKey === reportRequestKey();
+  if(!hasApiData) return null;
+  const source = reportApiData.dataSources && reportApiData.dataSources.dailyStats;
+  const status = source && source.status;
+  const pointCount = Number(reportApiData.summary && reportApiData.summary.pointCount) || 0;
+  if(status === 'partial'){
+    return { text:'Some vendor daily reports are unavailable for the selected period.', color:'#f59e0b' };
+  }
+  if(status === 'unavailable') return { text:'Vendor daily reports are unavailable.', color:'#ef4444' };
+  if(status === 'empty' || pointCount === 0) return { text:'No vendor daily report for the selected period.', color:'#94a3b8' };
+  return null;
+}
+
 function reportMetricDisplay(value, unit){
   return value === null || value === undefined ? '—' : Number(value).toFixed(1);
 }
@@ -320,6 +334,10 @@ function renderReports(container, options){
   const fertilizerValue = reportMetricDisplay(metrics.fertilizerKg);
   const avgTemp = reportMetricDisplay(metrics.avgTempC);
   const avgHumidity = reportMetricDisplay(metrics.avgHumidityPct);
+  const vendorDataStatus = reportVendorDataStatus();
+  const vendorDataStatusMarkup = vendorDataStatus
+    ? '<p id="report-data-status" role="status" style="margin:-16px 0 24px;text-align:center;color:' + vendorDataStatus.color + ';font-size:13px;">' + bsfEscapeHtml(vendorDataStatus.text) + '</p>'
+    : '';
   const energyCard = reportShowsEnergy() ? card('Energy Consumed', energyValue, 'kWh', '#ef4444') : '';
   const alertSummaryMarkup = isClientScopedRole() ? '' : `
     <div style="margin-bottom:24px;">
@@ -348,6 +366,7 @@ function renderReports(container, options){
         <h1 style="font-size:24px;font-weight:700;color:#f8fafc;margin:0;">${title}</h1>
         <p style="color:#94a3b8;margin:8px 0 0;font-size:14px;">${reportPeriod} · ${reportClient} · ${reportDevice}</p>
       </div>
+      ${vendorDataStatusMarkup}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px;">
         ${card('Waste Collected', wasteValue, 'kg', '#3b82f6')}
         ${card('GHG Reduced', ghgValue, 'kg CO₂e', '#10b981')}

@@ -426,6 +426,50 @@ test('daily view shows sampled input hours when vendor kitchen waste is zero', (
   );
 });
 
+test('hourly telemetry uses each device site formula without a vendor daily aggregate', () => {
+  const result = aggregateTelemetrySnapshots([
+    {
+      capturedAt: '2026-11-01T09:00:00+08:00',
+      deviceId: 'cic',
+      dailyInputT: 0.002,
+      operatingStatusCode: 2,
+      clientRegion: 'non-hk',
+      ghgFormula: { monthlyDistanceKm: 140 },
+    },
+    {
+      capturedAt: '2026-11-01T10:00:00+08:00',
+      deviceId: 'cic',
+      dailyInputT: 0.004,
+      operatingStatusCode: 2,
+      clientRegion: 'non-hk',
+      ghgFormula: { monthlyDistanceKm: 140 },
+    },
+    {
+      capturedAt: '2026-11-01T10:00:00+08:00',
+      deviceId: 'hsitp',
+      dailyInputT: 0.003,
+      operatingStatusCode: 2,
+      clientRegion: 'hk',
+      ghgFormula: { monthlyDistanceKm: 24, solar: true },
+    },
+  ], {
+    groupBy: 'hour',
+    start: '2026-11-01',
+    end: '2026-11-01',
+    region: 'non-hk',
+    summaryMode: 'daily',
+    now: new Date('2026-11-02T04:00:00.000Z'),
+  });
+
+  const cicTransport = ((140 * 12) / 365 / 100) * 8.3 * 2.32;
+  const hsitpTransport = ((24 * 12) / 365 / 100) * 8.3 * 2.32;
+  close(result.ghgItems[9].value, 2 * 1.5 - cicTransport);
+  close(result.ghgItems[10].value,
+    (4 * 1.5 - 1.5 * 0.37 - cicTransport)
+      + (3 * 1.5 + 1.5 * 0.71 - hsitpTransport));
+  assert.equal(result.ghgItems.filter((item) => item.value !== null).length, 2);
+});
+
 test('converts cumulative daily input into hourly increments without duplicating a day', () => {
   const result = aggregateTelemetrySnapshots([
     { capturedAt: '2026-10-01T02:10:00.000Z', deviceId: 'device-a', dailyInputT: 0.010, operatingStatusCode: 1 },

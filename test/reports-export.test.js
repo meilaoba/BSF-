@@ -91,6 +91,28 @@ test('missing report days stay missing while a real zero remains exportable', ()
   ]);
 });
 
+test('reports show missing or partial vendor daily data without telemetry estimates', () => {
+  vm.runInContext(`
+    reportFilters = { client:'Client A', device:'', period:'monthly', month:10, year:2026 };
+    reportApiData = {
+      summary:{ pointCount:0, wasteKg:null, ghgKg:null, energyKwh:null },
+      items:[],
+      dataSources:{ dailyStats:{ status:'empty' } }
+    };
+    reportApiKey = reportRequestKey();
+  `, sandbox);
+  assert.equal(
+    vm.runInContext('reportVendorDataStatus().text', sandbox),
+    'No vendor daily report for the selected period.'
+  );
+
+  vm.runInContext("reportApiData.dataSources.dailyStats.status = 'partial';", sandbox);
+  assert.equal(
+    vm.runInContext('reportVendorDataStatus().text', sandbox),
+    'Some vendor daily reports are unavailable for the selected period.'
+  );
+});
+
 test('client-scoped reports hide the energy metric while master admin keeps it', () => {
   assert.equal(vm.runInContext('reportShowsEnergy()', sandbox), true);
   sandbox.clientScoped = true;

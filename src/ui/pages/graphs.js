@@ -217,20 +217,10 @@ function graphStatusMarkup(){
   let text = '';
   let color = '#64748b';
   const hasCurrentGraphData = graphApiData && graphApiKey === graphRequestKey();
-  const dailyStatsStatus = hasCurrentGraphData
-    && graphApiData.dataSources
-    && graphApiData.dataSources.dailyStats
-    && graphApiData.dataSources.dailyStats.status;
   if(graphApiLoading){
     text = 'Loading chart data...';
   } else if(graphApiError){
     text = graphApiError;
-    color = '#f59e0b';
-  } else if(dailyStatsStatus === 'fallback'){
-    text = 'Vendor daily stats unavailable; showing sampled telemetry instead.';
-    color = '#f59e0b';
-  } else if(dailyStatsStatus === 'partial'){
-    text = 'Some vendor daily stats are unavailable; sampled telemetry is shown where needed.';
     color = '#f59e0b';
   } else if(hasCurrentGraphData){
     const count = Number(graphApiData.summary && graphApiData.summary.pointCount) || 0;

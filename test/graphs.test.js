@@ -177,10 +177,11 @@ test('line chart labels a single daily value instead of drawing a fake line', ()
   assert.match(svg, /data-single-value="true"[^>]*>0\.0<\/text>/);
 });
 
-test('graph status exposes sampled telemetry fallback', () => {
-  vm.runInContext("graphApiLoading=false;graphApiError='';graphApiKey=graphRequestKey();graphApiData={summary:{pointCount:1},dataSources:{dailyStats:{status:'fallback'}}};", sandbox);
+test('graph status does not expose vendor daily fallback messaging', () => {
+  vm.runInContext("graphApiLoading=false;graphApiError='';graphApiKey=graphRequestKey();graphApiData={summary:{pointCount:1},dataSources:{telemetry:{status:'samples'}}};", sandbox);
   const markup = vm.runInContext('graphStatusMarkup()', sandbox);
-  assert.match(markup, /Vendor daily stats unavailable; showing sampled telemetry instead\./);
+  assert.match(markup, /1 data point loaded/);
+  assert.doesNotMatch(markup, /vendor daily stats/i);
 });
 
 test('daily x-axis labels evenly spaced whole hours', () => {
