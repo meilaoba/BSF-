@@ -16,6 +16,7 @@ const {
   rawSampleRange,
 } = await import('../src/routes/analytics.js');
 const {
+  listVendorDevicesWithCollectorRefresh,
   mergeLatestVendorTelemetry,
   scopedDeviceForRole,
   mergeVendorDeviceSyncTimes,
@@ -237,6 +238,41 @@ test('vendor device responses expose the local mirror sync time', () => {
   assert.equal(merged[0].lastSyncedAt, '2026-11-03T04:09:00.415Z');
   assert.equal(merged[1].lastSyncedAt, undefined);
   assert.equal(devices[0].lastSyncedAt, undefined);
+});
+
+test('manual vendor sync refreshes an expired collector token once and retries', async () => {
+  const calls = [];
+  let refreshCalls = 0;
+  const result = await listVendorDevicesWithCollectorRefresh({
+    collector: {
+      accessToken: 'expired-token',
+      refreshToken: 'refresh-token',
+    },
+    pageNum: 2,
+    pageSize: 50,
+    listDevices: async ({ token, pageNum, pageSize }) => {
+      calls.push({ token, pageNum, pageSize });
+      if (token === 'expired-token') {
+        const error = new Error('expired');
+        error.code = 'VENDOR_SESSION_EXPIRED';
+        throw error;
+      }
+      return { records: [{ id: '52' }], pagination: { current: pageNum } };
+    },
+    refreshCollector: async (collector, currentToken) => {
+      refreshCalls += 1;
+      assert.equal(collector.refreshToken, 'refresh-token');
+      assert.equal(currentToken, 'expired-token');
+      return 'fresh-token';
+    },
+  });
+
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(calls, [
+    { token: 'expired-token', pageNum: 2, pageSize: 50 },
+    { token: 'fresh-token', pageNum: 2, pageSize: 50 },
+  ]);
+  assert.equal(result.records[0].id, '52');
 });
 
 test('raw sample route is scheduled-worker data and caps pages at 30', () => {

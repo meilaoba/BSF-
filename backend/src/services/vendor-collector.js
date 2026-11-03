@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { query } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import { decryptSecret, encryptSecret } from '../lib/crypto.js';
 import { listAllVendorDevices } from '../providers/vendor-devices.js';
 import { fetchVendorRealtimeDevices, mergeRealtimeDevices } from '../providers/vendor-realtime.js';
@@ -68,31 +68,36 @@ export async function loadCollectorCredentials({ vendorUserId = null } = {}) {
   };
 }
 
-async function refreshCollectorAccount(account, currentAccessToken) {
-  const refreshToken = decryptSecret(account.vendor_refresh_token_enc, config.auth.tokenEncryptionKey);
+export async function refreshCollectorCredentials(account, currentAccessToken) {
+  const userId = account.userId || account.user_id;
+  if (!userId) throw new Error('VENDOR_ACCOUNT_ID_MISSING');
+  const refreshToken = account.refreshToken
+    || decryptSecret(account.vendor_refresh_token_enc, config.auth.tokenEncryptionKey);
   const refreshed = await refreshVendorToken(currentAccessToken, refreshToken);
   const accessTokenEnc = encryptSecret(refreshed.token, config.auth.tokenEncryptionKey);
   const refreshTokenEnc = encryptSecret(refreshed.refreshToken, config.auth.tokenEncryptionKey);
-  await query(
-    `INSERT INTO vendor_collector_credentials
-       (user_id, vendor_access_token_enc, vendor_refresh_token_enc, updated_at)
-     VALUES ($1,$2,$3,now())
-     ON CONFLICT (user_id) DO UPDATE SET
-       vendor_access_token_enc = EXCLUDED.vendor_access_token_enc,
-       vendor_refresh_token_enc = EXCLUDED.vendor_refresh_token_enc,
-       updated_at = now()`,
-    [account.user_id, accessTokenEnc, refreshTokenEnc]
-  );
-  await query(
-    `UPDATE auth_sessions
-        SET vendor_access_token_enc = $2,
-            vendor_refresh_token_enc = $3
-      WHERE user_id = $1
-        AND revoked_at IS NULL
-        AND expires_at > now()`,
-    [account.user_id, accessTokenEnc, refreshTokenEnc]
-  );
-  console.info('[telemetry-worker] vendor token refreshed');
+  await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO vendor_collector_credentials
+         (user_id, vendor_access_token_enc, vendor_refresh_token_enc, updated_at)
+       VALUES ($1,$2,$3,now())
+       ON CONFLICT (user_id) DO UPDATE SET
+         vendor_access_token_enc = EXCLUDED.vendor_access_token_enc,
+         vendor_refresh_token_enc = EXCLUDED.vendor_refresh_token_enc,
+         updated_at = now()`,
+      [userId, accessTokenEnc, refreshTokenEnc]
+    );
+    await client.query(
+      `UPDATE auth_sessions
+          SET vendor_access_token_enc = $2,
+              vendor_refresh_token_enc = $3
+        WHERE user_id = $1
+          AND revoked_at IS NULL
+          AND expires_at > now()`,
+      [userId, accessTokenEnc, refreshTokenEnc]
+    );
+  });
+  console.info('[vendor] collector token refreshed');
   return refreshed.token;
 }
 async function sampleExists({ vendorAccountId, capturedAt }) {
@@ -130,7 +135,7 @@ async function collectAccount(account, now) {
     result = await listAllVendorDevices({ token, pageNum: 1, pageSize: 100 });
   } catch (error) {
     if (error?.code !== 'VENDOR_SESSION_EXPIRED') throw error;
-    token = await refreshCollectorAccount(account, token);
+    token = await refreshCollectorCredentials(account, token);
     result = await listAllVendorDevices({ token, pageNum: 1, pageSize: 100 });
   }
   let devices = result.records;

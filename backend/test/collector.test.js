@@ -47,7 +47,9 @@ test('collector refreshes an expired vendor token and updates encrypted credenti
   assert.match(source, /vendor_refresh_token_enc/);
   assert.match(source, /ON CONFLICT \(user_id\) DO UPDATE/);
   assert.match(source, /listAllVendorDevices\(\{ token, pageNum: 1, pageSize: 100 \}\)/);
-  assert.match(route, /loadCollectorCredentials/);
+  assert.match(source, /export async function refreshCollectorCredentials/);
+  assert.match(route, /listVendorDevicesWithCollectorRefresh/);
+  assert.match(route, /refreshCollector = refreshCollectorCredentials/);
 });
 
 test('collector persists deviceOnline status with each telemetry sample', () => {

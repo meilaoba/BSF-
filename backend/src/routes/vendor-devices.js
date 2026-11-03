@@ -15,7 +15,10 @@ import {
   loadLatestVendorTelemetrySnapshots,
   vendorAccountIdForSession,
 } from '../services/vendor-analytics.js';
-import { loadCollectorCredentials } from '../services/vendor-collector.js';
+import {
+  loadCollectorCredentials,
+  refreshCollectorCredentials,
+} from '../services/vendor-collector.js';
 
 export function mergeLatestVendorTelemetry(devices, latestByDevice) {
   return devices.map((device) => {
@@ -37,6 +40,22 @@ export function mergeVendorDeviceSyncTimes(devices, syncTimes) {
     const lastSyncedAt = syncTimes.get(String(device.id));
     return lastSyncedAt ? { ...device, lastSyncedAt } : device;
   });
+}
+
+export async function listVendorDevicesWithCollectorRefresh({
+  collector,
+  pageNum,
+  pageSize,
+  listDevices = listVendorDevices,
+  refreshCollector = refreshCollectorCredentials,
+} = {}) {
+  try {
+    return await listDevices({ token: collector.accessToken, pageNum, pageSize });
+  } catch (error) {
+    if (error?.code !== 'VENDOR_SESSION_EXPIRED' || !collector?.refreshToken) throw error;
+    const token = await refreshCollector(collector, collector.accessToken);
+    return listDevices({ token, pageNum, pageSize });
+  }
 }
 
 export function scopedDeviceForRole(device, role) {
@@ -171,15 +190,19 @@ export function registerVendorDeviceRoutes(router) {
     const pageNum = optionalInt(body.pageNum, 'pageNum', { min: 1, max: 10000 }) ?? 1;
     const pageSize = optionalInt(body.pageSize, 'pageSize', { min: 1, max: 100 }) ?? 100;
 
-    const token = req.auth
-      ? await getVendorAccessToken(req.auth)
-      : (await loadCollectorCredentials())?.accessToken;
-    if (!token) {
+    const collector = req.auth ? null : await loadCollectorCredentials();
+    if (!req.auth && !collector?.accessToken) {
       throw new AppError('VENDOR_SESSION_EXPIRED', 'No collector credential is available for synchronization', {
         status: 401,
       });
     }
-    const result = await listVendorDevices({ token, pageNum, pageSize });
+    const result = collector
+      ? await listVendorDevicesWithCollectorRefresh({ collector, pageNum, pageSize })
+      : await listVendorDevices({
+        token: await getVendorAccessToken(req.auth),
+        pageNum,
+        pageSize,
+      });
     const devices = await upsertVendorDevices(result.records);
     sendOk(res, { synced: devices.length, devices }, result.pagination);
   });
