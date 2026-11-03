@@ -78,9 +78,9 @@ function machineMetricCached(device){
 function machineMetricsMarkup(device){
   const metrics = machineMetricCached(device) || {};
   return [
-    machineMetricCard('Accumulated GHG Reduced', machineMetricValue(metrics.ghgKg), 'kg CO₂e', '#10b981', 'machine-metric-ghg'),
-    machineMetricCard('Accumulated Waste', machineMetricValue(metrics.wasteKg), 'kg', '#3b82f6', 'machine-metric-waste'),
-    machineMetricCard('Est. Fertilizer', machineMetricValue(metrics.fertilizerKg), 'kg', '#f59e0b', 'machine-metric-fertilizer'),
+    machineMetricCard('This Month GHG Reduced', machineMetricValue(metrics.ghgKg), 'kg CO₂e', '#10b981', 'machine-metric-ghg'),
+    machineMetricCard('This Month Waste', machineMetricValue(metrics.wasteKg), 'kg', '#3b82f6', 'machine-metric-waste'),
+    machineMetricCard('Est. Fertilizer This Month', machineMetricValue(metrics.fertilizerKg), 'kg', '#f59e0b', 'machine-metric-fertilizer'),
     machineMetricCard('Daily Waste', machineMetricValue(metrics.dailyWasteKg), 'kg', '#8b5cf6', 'machine-metric-daily-waste'),
     ...(isClientScopedRole() ? [] : [machineMetricCard('Daily Energy', machineMetricValue(metrics.dailyEnergyKwh), 'kWh', '#ef4444', 'machine-metric-daily-energy')]),
     machineMetricCard('Avg Env Temp', machineMetricValue(metrics.environmentTempC), '°C', '#22c55e', 'machine-metric-env-temp'),

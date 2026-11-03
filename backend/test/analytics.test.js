@@ -18,6 +18,7 @@ const {
 const {
   mergeLatestVendorTelemetry,
   scopedDeviceForRole,
+  mergeVendorDeviceSyncTimes,
 } = await import('../src/routes/vendor-devices.js');
 const { publicUser } = await import('../src/middleware/session.js');
 const { vendorAccountIdForSession } = await import('../src/services/vendor-analytics.js');
@@ -28,10 +29,6 @@ test('confirmed formula and polling defaults remain configurable', () => {
   assert.equal(config.formula.wasteReductionFactor, 1.5);
   assert.equal(config.formula.energyFactorHkIsland, 0.71);
   assert.equal(config.formula.energyFactorOther, 0.37);
-  assert.equal(config.formula.dailyDistanceKm, null);
-  assert.equal(config.formula.monthlyDistanceKm, null);
-  assert.equal(config.formula.fuelConsumptionLPer100Km, 8.3);
-  assert.equal(config.formula.fuelEmissionFactorKgPerL, 2.32);
   assert.equal(config.formula.dailyElectricityKwh, 1.5);
   assert.equal(config.auth.vendor.kitchenWasteToKgFactor, 1);
   assert.equal(config.auth.vendor.powerConsumeToKwhFactor, 1);
@@ -165,6 +162,17 @@ test('site carbon formula migration seeds CIC and HSITP defaults', () => {
   assert.match(service, /loadVendorDeviceReportSettings/);
 });
 
+test('site carbon formula v2 marks CIC non-solar and HSITP solar', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sql = fs.readFileSync(
+    path.join(root, 'db/migrations/014_site_formula_v2.sql'),
+    'utf8'
+  );
+  assert.match(sql, /"monthlyDistanceKm":140,"solar":false/);
+  assert.match(sql, /"monthlyDistanceKm":24,"solar":true/);
+  assert.match(sql, /COALESCE\(metadata->'ghgFormula', '\{\}'::jsonb\)/);
+});
+
 test('environment temperature migration stores HKO samples and daily values', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const sql = fs.readFileSync(path.join(root, 'db/migrations/010_environment_temperature.sql'), 'utf8');
@@ -214,6 +222,21 @@ test('latest complete saved telemetry fills only fields missing from a partial v
   assert.equal(merged.telemetry.CabinTemp, 39.8);
   assert.equal(merged.input.monthlyInput, 0.099);
   assert.equal(merged.latestTelemetryAt, '2026-10-29T00:00:00.000Z');
+});
+
+test('vendor device responses expose the local mirror sync time', () => {
+  const devices = [
+    { id: '52', deviceName: 'CR-30S_QX2026124' },
+    { id: '53', deviceName: 'Unsynced' },
+  ];
+  const merged = mergeVendorDeviceSyncTimes(
+    devices,
+    new Map([['52', '2026-11-03T04:09:00.415Z']])
+  );
+
+  assert.equal(merged[0].lastSyncedAt, '2026-11-03T04:09:00.415Z');
+  assert.equal(merged[1].lastSyncedAt, undefined);
+  assert.equal(devices[0].lastSyncedAt, undefined);
 });
 
 test('raw sample route is scheduled-worker data and caps pages at 30', () => {

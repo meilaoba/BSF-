@@ -7,7 +7,10 @@ import { requireApiKey } from '../middleware/auth.js';
 import { listAllVendorDevices, listVendorDevices } from '../providers/vendor-devices.js';
 import { fetchVendorRealtimeDevices, mergeRealtimeDevices } from '../providers/vendor-realtime.js';
 import { aggregateHistoryRows, fetchVendorHistory, validateHistoryRange } from '../providers/vendor-history.js';
-import { upsertVendorDevices } from '../services/device-data.js';
+import {
+  loadVendorDeviceSyncTimes,
+  upsertVendorDevices,
+} from '../services/device-data.js';
 import {
   loadLatestVendorTelemetrySnapshots,
   vendorAccountIdForSession,
@@ -26,6 +29,13 @@ export function mergeLatestVendorTelemetry(devices, latestByDevice) {
       recordedAt: device.recordedAt || latest.recordedAt || latest.capturedAt,
       latestTelemetryAt: latest.capturedAt,
     };
+  });
+}
+
+export function mergeVendorDeviceSyncTimes(devices, syncTimes) {
+  return devices.map((device) => {
+    const lastSyncedAt = syncTimes.get(String(device.id));
+    return lastSyncedAt ? { ...device, lastSyncedAt } : device;
   });
 }
 
@@ -135,6 +145,17 @@ export function registerVendorDeviceRoutes(router) {
         devices = mergeLatestVendorTelemetry(devices, latest);
       } catch (error) {
         console.warn('[vendor] latest saved telemetry unavailable:', error.code || 'TELEMETRY_FALLBACK_UNAVAILABLE');
+      }
+    }
+
+    if (devices.length) {
+      try {
+        const syncTimes = await loadVendorDeviceSyncTimes(
+          devices.map((device) => String(device.id))
+        );
+        devices = mergeVendorDeviceSyncTimes(devices, syncTimes);
+      } catch (error) {
+        console.warn('[vendor] local sync time unavailable:', error.code || error.message);
       }
     }
 

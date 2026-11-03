@@ -1,19 +1,18 @@
 export const HONG_KONG_TIME_ZONE = 'Asia/Hong_Kong';
-export const FIXED_DAILY_ADJUSTMENT = (1.93 * 12) / 365;
 export const FERTILIZER_RATIO = 0.12;
 export const ENERGY_PER_OPERATING_DAY_KWH = 1.5;
 export const ENERGY_PER_STANDBY_DAY_KWH = ENERGY_PER_OPERATING_DAY_KWH;
+export const SOLAR_DAILY_ENERGY_KWH = 1.5;
+export const TRANSPORT_MONTHS = 12;
+export const TRANSPORT_DAYS = 365;
+export const FUEL_CONSUMPTION_L_PER_100KM = 8.3;
+export const FUEL_EMISSION_FACTOR_KG_PER_L = 2.32;
 export const DEFAULT_FORMULA_CONFIG = Object.freeze({
   wasteReductionFactor: 1.5,
   energyFactorHkIsland: 0.71,
   energyFactorOther: 0.37,
-  dailyDistanceKm: null,
   monthlyDistanceKm: null,
-  fuelConsumptionLPer100Km: 8.3,
-  fuelEmissionFactorKgPerL: 2.32,
-  transportConstant: 1.93,
-  transportMonths: 12,
-  transportDays: 365,
+  solar: false,
   fertilizerRatio: FERTILIZER_RATIO,
   dailyElectricityKwh: ENERGY_PER_OPERATING_DAY_KWH,
   standbyEnergyKwh: ENERGY_PER_STANDBY_DAY_KWH,
@@ -34,11 +33,9 @@ function formulaNumber(formula, key) {
   return Number.isFinite(value) ? value : DEFAULT_FORMULA_CONFIG[key];
 }
 
-function fixedDailyAdjustment(formula = {}) {
-  const constant = formulaNumber(formula, 'transportConstant');
-  const months = formulaNumber(formula, 'transportMonths');
-  const days = formulaNumber(formula, 'transportDays');
-  return days > 0 ? (constant * months) / days : FIXED_DAILY_ADJUSTMENT;
+function formulaBoolean(formula, key) {
+  const value = formula && formula[key];
+  return value === true || value === 'true' || value === 1 || value === '1';
 }
 
 export function asDate(value) {
@@ -179,13 +176,9 @@ export function energyForStandbyDays(standbyDays, formula = {}) {
 }
 
 export function averageDailyDistanceKm(formula = {}) {
-  const directDistance = finiteNumber(formula.dailyDistanceKm);
-  if (directDistance !== null) return directDistance >= 0 ? directDistance : null;
   const monthlyDistance = finiteNumber(formula.monthlyDistanceKm);
   if (monthlyDistance === null || monthlyDistance < 0) return null;
-  const months = formulaNumber(formula, 'transportMonths');
-  const days = formulaNumber(formula, 'transportDays');
-  return days > 0 ? (monthlyDistance * months) / days : null;
+  return (monthlyDistance * TRANSPORT_MONTHS) / TRANSPORT_DAYS;
 }
 
 export function electricityCarbonKg(energyKwh, region, formula = {}) {
@@ -197,13 +190,10 @@ export function electricityCarbonKg(energyKwh, region, formula = {}) {
 export function transportCarbonKg(dailyDistanceKm, adjustmentDays = 1, formula = {}) {
   const distance = finiteNumber(dailyDistanceKm ?? averageDailyDistanceKm(formula));
   const days = finiteNumber(adjustmentDays);
-  if (days === null || days < 0) return null;
-  // Keep the legacy transport allowance until the customer confirms a distance.
-  if (distance === null) return fixedDailyAdjustment(formula) * days;
-  if (distance < 0) return null;
+  if (distance === null || distance < 0 || days === null || days < 0) return null;
   return (distance / 100)
-    * formulaNumber(formula, 'fuelConsumptionLPer100Km')
-    * formulaNumber(formula, 'fuelEmissionFactorKgPerL')
+    * FUEL_CONSUMPTION_L_PER_100KM
+    * FUEL_EMISSION_FACTOR_KG_PER_L
     * days;
 }
 
@@ -213,7 +203,10 @@ export function mergeFormulaConfig(base = {}, override = {}) {
 }
 
 export function machineCarbonKg(energyKwh, region, adjustmentDays = 1, formula = {}) {
-  const electricity = electricityCarbonKg(energyKwh, region, formula);
+  const electricityEnergyKwh = formulaBoolean(formula, 'solar')
+    ? -SOLAR_DAILY_ENERGY_KWH
+    : energyKwh;
+  const electricity = electricityCarbonKg(electricityEnergyKwh, region, formula);
   const transport = transportCarbonKg(null, adjustmentDays, formula);
   if (electricity === null || transport === null) return null;
   return electricity + transport;
@@ -393,7 +386,6 @@ export function aggregateTelemetrySnapshots(rows, {
         ? day.energyKwh
         : (day.isOperatingDay ? formulaNumber(dayFormula, 'dailyElectricityKwh') : 0));
     const ghgKg = ghgReducedKg(wasteKg, energyKwh, dayRegion, 1, dayFormula);
-    if (ghgKg === null) continue;
     dailyResults.set(`${day.deviceId}|${day.dateKey}`, {
       deviceId: day.deviceId,
       dateKey: day.dateKey,
@@ -495,11 +487,13 @@ export function aggregateTelemetrySnapshots(rows, {
         }
         if (energy !== undefined) cumulativeEnergy += energy;
         if (waste !== undefined || energy !== undefined) {
+          const transport = transportCarbonKg(null, 1, formula);
+          if (transport === null) continue;
           ghgByBucket.set(
             key,
-            cumulativeWaste * 1.5
+            cumulativeWaste * formulaNumber(formula, 'wasteReductionFactor')
               - cumulativeEnergy * regionalEnergyFactor(region, formula)
-              - fixedDailyAdjustment(formula),
+              - transport,
           );
         }
       }
@@ -534,8 +528,11 @@ export function aggregateTelemetrySnapshots(rows, {
     ? dailyValues.reduce((sum, day) => sum + day.energyKwh, 0)
     : null;
   const observedDeviceDays = deviceDays.size;
-  const ghgKg = dailyValues.length
-    ? dailyValues.reduce((sum, day) => sum + day.ghgKg, 0)
+  const ghgValues = dailyValues
+    .map((day) => day.ghgKg)
+    .filter((value) => value !== null);
+  const ghgKg = ghgValues.length
+    ? ghgValues.reduce((sum, value) => sum + value, 0)
     : null;
   const summary = {
     wasteKg,

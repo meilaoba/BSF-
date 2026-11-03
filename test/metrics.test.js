@@ -10,7 +10,6 @@ import {
   electricityCarbonKg,
   energyForStandbyDays,
   fertilizerKg,
-  FIXED_DAILY_ADJUSTMENT,
   ghgReducedKg,
   hongKongDateKey,
   machineCarbonKg,
@@ -18,6 +17,9 @@ import {
   regionalEnergyFactor,
   transportCarbonKg,
 } from '../src/shared/metrics.js';
+
+const CIC_FORMULA = Object.freeze({ monthlyDistanceKm: 140 });
+const CIC_DAILY_TRANSPORT = ((140 * 12) / 365 / 100) * 8.3 * 2.32;
 
 function close(actual, expected, epsilon = 1e-9) {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} != ${expected}`);
@@ -48,19 +50,20 @@ test('applies the confirmed GHG, fertilizer and standby energy formulas', () => 
   assert.equal(energyForStandbyDays(3), 4.5);
   assert.equal(fertilizerKg(125), 15);
   assert.equal(electricityCarbonKg(2, 'non-hk'), 0.74);
-  close(transportCarbonKg(null), FIXED_DAILY_ADJUSTMENT);
-  close(machineCarbonKg(2, 'non-hk'), 0.74 + FIXED_DAILY_ADJUSTMENT);
-  close(ghgReducedKg(10, 2, 'hk', 1), 10 * 1.5 - 2 * 0.71 - FIXED_DAILY_ADJUSTMENT);
-  close(ghgReducedKg(10, 2, 'non-hk', 1), 10 * 1.5 - 2 * 0.37 - FIXED_DAILY_ADJUSTMENT);
+  assert.equal(transportCarbonKg(null), null);
+  close(transportCarbonKg(null, 1, CIC_FORMULA), CIC_DAILY_TRANSPORT);
+  close(machineCarbonKg(2, 'non-hk', 1, CIC_FORMULA), 0.74 + CIC_DAILY_TRANSPORT);
+  close(ghgReducedKg(10, 2, 'hk', 1, CIC_FORMULA), 10 * 1.5 - 2 * 0.71 - CIC_DAILY_TRANSPORT);
+  close(ghgReducedKg(10, 2, 'non-hk', 1, CIC_FORMULA), 10 * 1.5 - 2 * 0.37 - CIC_DAILY_TRANSPORT);
 });
 
-test('transport formula accepts confirmed distance and fuel parameters when configured', () => {
+test('transport formula annualizes the site monthly distance with fixed fuel constants', () => {
   const formula = {
     monthlyDistanceKm: 140,
-    transportMonths: 12,
-    transportDays: 365,
-    fuelConsumptionLPer100Km: 8.3,
-    fuelEmissionFactorKgPerL: 2.32,
+    transportMonths: 1,
+    transportDays: 1,
+    fuelConsumptionLPer100Km: 1,
+    fuelEmissionFactorKgPerL: 1,
   };
   const expectedDistance = (140 * 12) / 365;
   assert.ok(Math.abs(averageDailyDistanceKm(formula) - expectedDistance) <= 1e-9);
@@ -77,9 +80,7 @@ test('formula settings can be overridden without changing code', () => {
     wasteReductionFactor: 2,
     energyFactorHkIsland: 0.5,
     energyFactorOther: 0.25,
-    transportConstant: 2,
-    transportMonths: 10,
-    transportDays: 300,
+    monthlyDistanceKm: 140,
     fertilizerRatio: 0.1,
     standbyEnergyKwh: 2,
     humidityScale: 100,
@@ -90,7 +91,7 @@ test('formula settings can be overridden without changing code', () => {
   assert.equal(fertilizerKg(100, formula), 10);
   close(
     ghgReducedKg(10, 2, 'hk', 1, formula),
-    10 * 2 - 2 * 0.5 - (2 * 10) / 300
+    10 * 2 - 2 * 0.5 - CIC_DAILY_TRANSPORT
   );
   const result = aggregateTelemetrySnapshots([
     {
@@ -109,6 +110,28 @@ test('formula settings can be overridden without changing code', () => {
     formula,
   });
   close(result.summary.avgHumidityPct, 20);
+});
+
+test('missing site mileage keeps raw metrics and leaves GHG unknown', () => {
+  const result = aggregateTelemetrySnapshots([
+    {
+      capturedAt: '2026-10-01T02:00:00.000Z',
+      deviceId: 'unconfigured-site',
+      dailyInputT: 0.01,
+      operatingStatusCode: 1,
+    },
+  ], {
+    groupBy: 'day',
+    start: '2026-10-01',
+    end: '2026-10-01',
+    summaryMode: 'daily',
+    now: new Date('2026-10-02T00:00:00.000Z'),
+  });
+
+  assert.equal(result.summary.wasteKg, 10);
+  assert.equal(result.summary.energyKwh, 1.5);
+  assert.equal(result.summary.ghgKg, null);
+  assert.equal(result.ghgItems[0].value, null);
 });
 
 test('aggregates only real snapshots and emits nulls for missing and future buckets', () => {
@@ -159,6 +182,7 @@ test('aggregates only real snapshots and emits nulls for missing and future buck
     region: 'hk',
     summaryMode: 'monthly',
     now,
+    formula: CIC_FORMULA,
   });
 
   assert.deepEqual(result.items.map((item) => item.value), [20, 30, null]);
@@ -170,8 +194,8 @@ test('aggregates only real snapshots and emits nulls for missing and future buck
   assert.equal(result.summary.fertilizerKg, 6);
   close(
     result.summary.ghgKg,
-    (20 * 1.5 - 1.5 * 0.71 - FIXED_DAILY_ADJUSTMENT)
-      + (30 * 1.5 - 1.5 * 0.71 - FIXED_DAILY_ADJUSTMENT)
+    (20 * 1.5 - 1.5 * 0.71 - CIC_DAILY_TRANSPORT)
+      + (30 * 1.5 - 1.5 * 0.71 - CIC_DAILY_TRANSPORT)
   );
 });
 
@@ -187,21 +211,22 @@ test('monthly and yearly results sum per-device daily values and retain negative
     region:'non-hk',
     summaryMode:'yearly',
     now:new Date('2026-02-15T00:00:00Z'),
+    formula:CIC_FORMULA,
   });
   assert.equal(result.items[0].value, 10);
   assert.equal(result.items[1].value, 20);
   assert.equal(result.summary.wasteKg, 30);
   assert.equal(result.summary.energyKwh, 4.5);
   close(result.summary.fertilizerKg, 3.6);
-  const januaryGhg = -1.5 * 0.37 - FIXED_DAILY_ADJUSTMENT
-    + 10 * 1.5 - 1.5 * 0.37 - FIXED_DAILY_ADJUSTMENT;
-  const februaryGhg = 20 * 1.5 - 1.5 * 0.37 - FIXED_DAILY_ADJUSTMENT;
+  const januaryGhg = -1.5 * 0.37 - CIC_DAILY_TRANSPORT
+    + 10 * 1.5 - 1.5 * 0.37 - CIC_DAILY_TRANSPORT;
+  const februaryGhg = 20 * 1.5 - 1.5 * 0.37 - CIC_DAILY_TRANSPORT;
   close(result.ghgItems[0].value, januaryGhg);
   close(result.ghgItems[1].value, februaryGhg);
   close(result.summary.ghgKg, januaryGhg + februaryGhg);
 });
 
-test('applies per-site monthly mileage and signed operating-day electricity', () => {
+test('applies per-site monthly mileage and the solar electricity branch', () => {
   const result = aggregateTelemetrySnapshots([
     {
       capturedAt: '2026-10-01T02:00:00.000Z',
@@ -209,7 +234,7 @@ test('applies per-site monthly mileage and signed operating-day electricity', ()
       dailyInputT: 0.002,
       operatingStatusCode: 2,
       clientRegion: 'non-hk',
-      ghgFormula: { monthlyDistanceKm: 140, dailyElectricityKwh: 1.5 }
+      ghgFormula: CIC_FORMULA
     },
     {
       capturedAt: '2026-10-01T02:00:00.000Z',
@@ -217,7 +242,7 @@ test('applies per-site monthly mileage and signed operating-day electricity', ()
       dailyInputT: 0.002,
       operatingStatusCode: 2,
       clientRegion: 'non-hk',
-      ghgFormula: { monthlyDistanceKm: 24, dailyElectricityKwh: -1.5 }
+      ghgFormula: { monthlyDistanceKm: 24, solar: true }
     }
   ], {
     groupBy: 'day',
@@ -230,10 +255,44 @@ test('applies per-site monthly mileage and signed operating-day electricity', ()
   const cicTransport = ((140 * 12) / 365 / 100) * 8.3 * 2.32;
   const hsitpTransport = ((24 * 12) / 365 / 100) * 8.3 * 2.32;
   close(result.summary.wasteKg, 4);
-  close(result.summary.energyKwh, 0);
+  close(result.summary.energyKwh, 3);
   close(result.summary.ghgKg,
     (2 * 1.5 - 1.5 * 0.37 - cicTransport)
       + (2 * 1.5 + 1.5 * 0.37 - hsitpTransport));
+});
+
+test('CIC standby days use the 140 km site transport deduction', () => {
+  const result = aggregateTelemetrySnapshots([
+    {
+      capturedAt: '2026-10-28T12:00:00+08:00',
+      deviceId: 'cic',
+      dailyInputT: 0,
+      operatingStatusCode: 1,
+      clientRegion: 'non-hk',
+      ghgFormula: CIC_FORMULA,
+    },
+    {
+      capturedAt: '2026-10-29T12:00:00+08:00',
+      deviceId: 'cic',
+      dailyInputT: 0,
+      operatingStatusCode: 1,
+      clientRegion: 'non-hk',
+      ghgFormula: CIC_FORMULA,
+    },
+  ], {
+    groupBy: 'day',
+    start: '2026-10-28',
+    end: '2026-10-29',
+    summaryMode: 'daily',
+    now: new Date('2026-10-30T00:00:00.000Z'),
+  });
+
+  const expectedDaily = -(1.5 * 0.37 + CIC_DAILY_TRANSPORT);
+  close(expectedDaily, -1.4413035616438358);
+  close(result.ghgItems[0].value, expectedDaily);
+  close(result.ghgItems[1].value, expectedDaily);
+  close(result.summary.ghgKg, expectedDaily * 2);
+  close(result.summary.ghgKg, -2.8826071232876715);
 });
 
 test('daily aggregate rows use vendor waste and measured power instead of estimates', () => {

@@ -353,6 +353,21 @@ export async function upsertVendorDevices(records) {
   });
 }
 
+export async function loadVendorDeviceSyncTimes(deviceIds) {
+  if (!Array.isArray(deviceIds) || !deviceIds.length) return new Map();
+  const ids = Array.from(new Set(deviceIds.map(String)));
+  const { rows } = await query(
+    `SELECT vendor_device_id, last_synced_at
+       FROM vendor_devices
+      WHERE vendor_device_id = ANY($1::text[])`,
+    [ids]
+  );
+  return new Map(rows.map((row) => [
+    String(row.vendor_device_id),
+    row.last_synced_at,
+  ]));
+}
+
 export async function listStoredTelemetry(filters) {
   const params = [];
   const clauses = [];

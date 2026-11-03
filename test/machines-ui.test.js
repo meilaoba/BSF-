@@ -20,9 +20,9 @@ test('machines page keeps metric cards, device status and location preview', () 
 });
 
 test('machines page restores the original eight-metric layout', () => {
-  assert.match(source, /Accumulated GHG Reduced/);
-  assert.match(source, /Accumulated Waste/);
-  assert.match(source, /Est\. Fertilizer/);
+  assert.match(source, /This Month GHG Reduced/);
+  assert.match(source, /This Month Waste/);
+  assert.match(source, /Est\. Fertilizer This Month/);
   assert.match(source, /Daily Waste/);
   assert.match(source, /Daily Energy/);
   assert.match(source, /Avg Env Temp/);

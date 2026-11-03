@@ -16,13 +16,6 @@ function num(name, fallback) {
   return Number.isFinite(v) ? v : fallback;
 }
 
-function optionalNum(name) {
-  const raw = str(name);
-  if (raw === '') return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
-}
-
 function bool(name, fallback = false) {
   const v = str(name).toLowerCase();
   if (v === '') return fallback;
@@ -115,13 +108,6 @@ export const config = {
     wasteReductionFactor: num('FORMULA_WASTE_REDUCTION_FACTOR', 1.5),
     energyFactorHkIsland: num('FORMULA_ENERGY_FACTOR_HK_ISLAND', 0.71),
     energyFactorOther: num('FORMULA_ENERGY_FACTOR_OTHER', 0.37),
-    dailyDistanceKm: optionalNum('FORMULA_DAILY_DISTANCE_KM'),
-    monthlyDistanceKm: optionalNum('FORMULA_MONTHLY_DISTANCE_KM'),
-    fuelConsumptionLPer100Km: num('FORMULA_FUEL_CONSUMPTION_L_PER_100KM', 8.3),
-    fuelEmissionFactorKgPerL: num('FORMULA_FUEL_EMISSION_FACTOR_KG_PER_L', 2.32),
-    transportConstant: num('FORMULA_TRANSPORT_CONSTANT', 1.93),
-    transportMonths: num('FORMULA_TRANSPORT_MONTHS', 12),
-    transportDays: num('FORMULA_TRANSPORT_DAYS', 365),
     fertilizerRatio: num('FORMULA_FERTILIZER_RATIO', 0.12),
     dailyElectricityKwh: num('FORMULA_DAILY_ELECTRICITY_KWH', num('FORMULA_STANDBY_ENERGY_KWH', 1.5)),
     standbyEnergyKwh: num('FORMULA_STANDBY_ENERGY_KWH', 1.5),
