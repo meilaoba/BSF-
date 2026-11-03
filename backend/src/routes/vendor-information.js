@@ -19,7 +19,11 @@ export function registerVendorInformationRoutes(router) {
     const pageSize = optionalInt(url.searchParams.get('pageSize'), 'pageSize', { min: 1, max: 100 }) ?? 20;
     const token = await getVendorAccessToken(req.auth);
     const result = await fetchVendorTemplates({ token, pageNum, pageSize });
-    sendOk(res, { templates: result.records, source: 'vendor-template-list' }, result.pagination);
+    sendOk(res, {
+      templates: result.records,
+      source: 'vendor-template-list',
+      pagination: result.pagination,
+    }, result.pagination);
   });
 
   router.get('/api/v1/vendor-daily-stats', async (req, res) => {

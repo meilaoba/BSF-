@@ -1,3 +1,178 @@
+const API_TEMPLATE_PAGE_SIZE = 10;
+const apiTemplateState = {
+  page: 1,
+  items: [],
+  pagination: {
+    current: 1,
+    size: API_TEMPLATE_PAGE_SIZE,
+    total: 0,
+    pages: 0
+  },
+  loading: false,
+  loaded: false,
+  error: '',
+  requestKey: ''
+};
+
+function apiTemplateDisplayType(value){
+  return ({
+    0: 'Switch',
+    1: 'Fault light',
+    2: 'Value',
+    3: 'Status light'
+  })[Number(value)] || '—';
+}
+
+function apiTemplateChangeText(value){
+  if(Number(value) === 1) return 'Report changes';
+  if(Number(value) === 0) return 'No change report';
+  return '—';
+}
+
+function apiTemplateCustomizeText(values){
+  if(!Array.isArray(values) || !values.length) return '—';
+  return values.map(function(item){
+    const label = item && item.label ? item.label : 'Status';
+    const value = item && item.value !== undefined && item.value !== null ? item.value : '—';
+    const color = item && item.color ? ' [' + item.color + ']' : '';
+    return label + ': ' + value + color;
+  }).join(', ');
+}
+
+function apiTemplatePointRows(template){
+  const points = Array.isArray(template && template.points) ? template.points.slice() : [];
+  points.sort(function(left, right){
+    return (Number(left.sort) || 0) - (Number(right.sort) || 0);
+  });
+  if(!points.length){
+    return '<tr><td colspan="8" style="padding:16px;color:#64748b;">No template points</td></tr>';
+  }
+  return points.map(function(point){
+    return '<tr style="border-top:1px solid #334155;">' +
+      '<td style="padding:10px 12px;color:#f8fafc;font-weight:600;">' + bsfEscapeHtml(point.sensorName || point.keyName || '—') +
+        '<span style="display:block;color:#64748b;font-weight:400;font-size:10px;">Point ID: ' + bsfEscapeHtml(point.id ?? '—') +
+        ' · Icon: ' + bsfEscapeHtml(point.iconId ?? '—') + ' · Template: ' + bsfEscapeHtml(point.templateId ?? '—') + '</span></td>' +
+      '<td style="padding:10px 12px;color:#94a3b8;font-family:monospace;">' + bsfEscapeHtml(point.keyName || '—') + '</td>' +
+      '<td style="padding:10px 12px;color:#94a3b8;">' + bsfEscapeHtml(point.dataType ?? '—') + '</td>' +
+      '<td style="padding:10px 12px;color:#e2e8f0;">' + bsfEscapeHtml(point.unit || '—') + '</td>' +
+      '<td style="padding:10px 12px;color:#94a3b8;">' + bsfEscapeHtml(apiTemplateDisplayType(point.showType)) + '</td>' +
+      '<td style="padding:10px 12px;color:#94a3b8;">' + bsfEscapeHtml(apiTemplateChangeText(point.reportsChanges)) + '</td>' +
+      '<td style="padding:10px 12px;color:#94a3b8;">' + bsfEscapeHtml(point.sort ?? '—') + '</td>' +
+      '<td style="padding:10px 12px;color:#64748b;">' + bsfEscapeHtml(apiTemplateCustomizeText(point.customize)) + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function apiTemplateCardMarkup(template){
+  const name = template && template.templateName || 'Unnamed template';
+  const pointCount = template && Array.isArray(template.points) ? template.points.length : 0;
+  return '<article style="background:#0f172a;border:1px solid #334155;border-radius:10px;overflow:hidden;">' +
+    '<header style="display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 16px;background:#172033;">' +
+      '<div><h4 style="margin:0;color:#f8fafc;font-size:15px;">' + bsfEscapeHtml(name) + '</h4>' +
+      '<p style="margin:4px 0 0;color:#64748b;font-size:11px;">Template ID: ' + bsfEscapeHtml((template && template.id) ?? '—') + '</p></div>' +
+      '<span style="padding:4px 9px;border-radius:12px;background:rgba(59,130,246,.15);color:#60a5fa;font-size:11px;">' + pointCount + ' points</span>' +
+    '</header>' +
+    '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+      '<thead><tr style="color:#94a3b8;text-align:left;background:#111827;">' +
+        '<th style="padding:9px 12px;">Sensor</th><th style="padding:9px 12px;">Key</th><th style="padding:9px 12px;">Data type</th>' +
+        '<th style="padding:9px 12px;">Unit</th><th style="padding:9px 12px;">Display</th><th style="padding:9px 12px;">Reporting</th>' +
+        '<th style="padding:9px 12px;">Sort</th><th style="padding:9px 12px;">Custom states</th>' +
+      '</tr></thead><tbody>' + apiTemplatePointRows(template) + '</tbody>' +
+    '</table></div></article>';
+}
+
+function apiTemplatePaginationMarkup(){
+  const pagination = apiTemplateState.pagination || {};
+  const current = Math.max(1, Number(pagination.current) || apiTemplateState.page);
+  const pages = Math.max(0, Number(pagination.pages) || 0);
+  const total = Math.max(0, Number(pagination.total) || 0);
+  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">' +
+    '<span style="color:#64748b;font-size:12px;">' + total + ' templates · page ' + current + (pages ? ' of ' + pages : '') + '</span>' +
+    '<div style="display:flex;gap:8px;">' +
+      '<button type="button" onclick="setApiTemplatePage(' + (current - 1) + ')" ' + (apiTemplateState.loading || current <= 1 ? 'disabled' : '') + ' style="padding:7px 12px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;">Previous</button>' +
+      '<button type="button" onclick="setApiTemplatePage(' + (current + 1) + ')" ' + (apiTemplateState.loading || !pages || current >= pages ? 'disabled' : '') + ' style="padding:7px 12px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;">Next</button>' +
+    '</div></div>';
+}
+
+function apiTemplateSectionMarkup(){
+  let body = '';
+  if(apiTemplateState.loading){
+    body = '<p style="margin:0;color:#94a3b8;font-size:13px;">Loading vendor templates...</p>';
+  } else if(apiTemplateState.error){
+    body = '<p role="alert" style="margin:0;color:#f59e0b;font-size:13px;">' + bsfEscapeHtml(apiTemplateState.error) + '</p>';
+  } else if(!apiTemplateState.items.length){
+    body = '<p style="margin:0;color:#64748b;font-size:13px;">No vendor templates returned.</p>';
+  } else {
+    body = '<div style="display:flex;flex-direction:column;gap:14px;">' + apiTemplateState.items.map(apiTemplateCardMarkup).join('') + '</div>';
+  }
+  return '<section id="api-template-section" style="margin-top:24px;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">' +
+      '<div><h3 style="margin:0;color:#e2e8f0;font-size:16px;">Vendor Templates</h3><p style="margin:5px 0 0;color:#64748b;font-size:12px;">Template points and display metadata returned by the vendor API</p></div>' +
+      '<button type="button" onclick="refreshApiTemplates()" ' + (apiTemplateState.loading ? 'disabled' : '') + ' style="padding:8px 14px;background:#334155;border:none;border-radius:7px;color:#e2e8f0;font-size:12px;cursor:pointer;">Refresh</button>' +
+    '</div>' + body + '<div style="margin-top:16px;">' + apiTemplatePaginationMarkup() + '</div></section>';
+}
+
+function renderApiTemplateSection(){
+  const section = document.getElementById('api-template-section');
+  if(!section) return;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = apiTemplateSectionMarkup();
+  section.replaceWith(wrapper.firstElementChild);
+}
+
+async function loadApiTemplates(force = false){
+  if(!window.BSF_API || typeof window.BSF_API.getVendorTemplates !== 'function'){
+    apiTemplateState.error = 'Vendor template API is unavailable';
+    renderApiTemplateSection();
+    return;
+  }
+  const key = apiTemplateState.page + '|' + API_TEMPLATE_PAGE_SIZE;
+  if(apiTemplateState.loading && apiTemplateState.requestKey === key) return;
+  if(!force && apiTemplateState.loaded && apiTemplateState.requestKey === key) return;
+  apiTemplateState.loading = true;
+  apiTemplateState.error = '';
+  apiTemplateState.requestKey = key;
+  renderApiTemplateSection();
+  try {
+    const result = await window.BSF_API.getVendorTemplates({
+      pageNum:apiTemplateState.page,
+      pageSize:API_TEMPLATE_PAGE_SIZE
+    });
+    if(apiTemplateState.requestKey !== key) return;
+    apiTemplateState.items = Array.isArray(result && result.templates) ? result.templates : [];
+    apiTemplateState.pagination = result && result.pagination ? result.pagination : {
+      current:apiTemplateState.page,
+      size:API_TEMPLATE_PAGE_SIZE,
+      total:apiTemplateState.items.length,
+      pages:apiTemplateState.items.length === API_TEMPLATE_PAGE_SIZE ? apiTemplateState.page + 1 : apiTemplateState.page
+    };
+    apiTemplateState.loaded = true;
+  } catch(error) {
+    if(apiTemplateState.requestKey !== key) return;
+    apiTemplateState.items = [];
+    apiTemplateState.error = error && error.message ? error.message : 'Vendor templates could not be loaded';
+    apiTemplateState.loaded = false;
+  } finally {
+    if(apiTemplateState.requestKey === key){
+      apiTemplateState.loading = false;
+      renderApiTemplateSection();
+    }
+  }
+}
+
+function setApiTemplatePage(page){
+  const next = Math.max(1, Number(page) || 1);
+  if(next === apiTemplateState.page && apiTemplateState.loaded) return;
+  apiTemplateState.page = next;
+  apiTemplateState.loaded = false;
+  loadApiTemplates(true);
+}
+
+function refreshApiTemplates(){
+  apiTemplateState.loaded = false;
+  loadApiTemplates(true);
+}
+
 function renderApi(container){
   container.innerHTML = `
     <div style="margin-bottom:24px;">
@@ -40,9 +215,11 @@ function renderApi(container){
         </div>
       </div>
     </div>
+    ${apiTemplateSectionMarkup()}
   `;
   populateApiFilters();
   loadApiConnectionStatus();
+  loadApiTemplates();
 }
 
 function setApiStatus(id, online){
