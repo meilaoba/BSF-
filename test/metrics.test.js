@@ -404,6 +404,40 @@ test('hourly telemetry summaries keep hourly temperature points in the daily vie
   assert.equal(result.energyItems[12].value, 1.5);
 });
 
+test('report daily totals keep vendor metrics while telemetry supplies temperature and humidity', () => {
+  const result = aggregateTelemetrySnapshots([
+    {
+      capturedAt: '2026-11-01T12:00:00+08:00',
+      deviceId: '52',
+      wasteKg: 5,
+      energyKwh: 1.5,
+      dailyAggregate: true,
+      clientRegion: 'non-hk',
+      ghgFormula: { monthlyDistanceKm: 140 },
+    },
+    {
+      capturedAt: '2026-11-01T12:00:00+08:00',
+      deviceId: '52',
+      cabinTempC: 29,
+      humidityPct: 0.5,
+    },
+  ], {
+    groupBy: 'day',
+    start: '2026-11-01',
+    end: '2026-11-01',
+    region: 'non-hk',
+    summaryMode: 'monthly',
+    now: new Date('2026-11-02T04:00:00.000Z'),
+    formula: { humidityScale: 100 },
+  });
+
+  assert.equal(result.summary.wasteKg, 5);
+  assert.equal(result.summary.energyKwh, 1.5);
+  assert.equal(result.summary.avgTempC, 29);
+  assert.equal(result.summary.avgHumidityPct, 50);
+  assert.equal(result.summary.ghgKg, 5 * 1.5 - 1.5 * 0.37 - ((140 * 12) / 365 / 100) * 8.3 * 2.32);
+});
+
 test('daily view shows sampled input hours when vendor kitchen waste is zero', () => {
   const result = aggregateTelemetrySnapshots([
     { capturedAt: '2026-11-01T08:00:00+08:00', deviceId: '52', dailyInputT: 0.004, operatingStatusCode: 2 },

@@ -104,10 +104,13 @@ syncing a vendor device never assigns it to a client or machine automatically.
 - `vendor_devices` mirrors fields from `emDevice/queryListData` such as
   `deviceSerialNum`, `deviceName`, `deviceOnline`, coordinates, template and
   owner metadata.
-- `machine_telemetry` stores typed vendor API fields (`CabinTemp`, `HotPlateTemp`,
-  `Humidity`, `RealTimeWeight`, `SingleAddMaterial`, `TotalAddMaterial`,
-  `SingleDischarge`, `TotalDischarge`, `FermentState`, all equipment state
-  codes, etc.) plus the original JSON in `raw_data`.
+- `vendor_device_telemetry` is the canonical telemetry store used by
+  `/device-data`, `/raw-data-samples`, Graphs, Reports and machine latest
+  values. It stores normalized temperature, humidity, weight, operating state,
+  cumulative input/output values and the original vendor payload.
+- `machine_telemetry` remains only for the legacy
+  `/api/v1/device-data/ingest` compatibility path. It is no longer read by the
+  main dashboard or analytics APIs.
 - `alert_events` stores durable alert history and acknowledgement state.
 - `system_settings` stores the singleton GHG formula, weight scaling and reset
   date settings.

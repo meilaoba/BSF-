@@ -206,6 +206,85 @@ export async function loadVendorTelemetrySamples({
   };
 }
 
+export function mapVendorTelemetryHistoryRow(row) {
+  return {
+    id: String(row.id),
+    recorded_at: row.captured_at,
+    received_at: row.created_at,
+    machine_id: row.machine_id,
+    machine_serial: row.machine_serial,
+    vendor_device_id: row.vendor_device_id,
+    device_key: row.vendor_device_id,
+    device_name: row.vendor_device_name,
+    device_state: row.device_online_code,
+    cabin_temp_c: row.cabin_temp_c,
+    humidity_pct: row.humidity_pct,
+    real_time_weight_kg: row.real_time_weight_kg,
+    operating_status_code: row.operating_status_code,
+    daily_input_t: row.daily_input_t,
+    weekly_input_t: row.weekly_input_t,
+    monthly_input_t: row.monthly_input_t,
+    yearly_input_t: row.yearly_input_t,
+    daily_output_t: row.daily_output_t,
+    weekly_output_t: row.weekly_output_t,
+    monthly_output_t: row.monthly_output_t,
+    yearly_output_t: row.yearly_output_t,
+    raw_data: row.telemetry || {},
+    telemetry: row.telemetry || {},
+    input_data: row.input_data || {},
+    output_data: row.output_data || {},
+    source: 'vendor_device_telemetry',
+  };
+}
+
+export async function loadVendorTelemetryHistory({
+  vendorAccountId,
+  includeAllAccounts = false,
+  deviceIds = null,
+  from = null,
+  to = null,
+  limit = 200,
+} = {}) {
+  if (Array.isArray(deviceIds) && !deviceIds.length) return [];
+
+  const params = [];
+  const where = [];
+  if (!includeAllAccounts) {
+    params.push(String(vendorAccountId));
+    where.push(`vt.vendor_account_id = $${params.length}`);
+  }
+  if (Array.isArray(deviceIds)) {
+    params.push(deviceIds);
+    where.push(`vt.vendor_device_id = ANY($${params.length}::text[])`);
+  }
+  if (from) {
+    params.push(from);
+    where.push(`vt.captured_at >= $${params.length}::timestamptz`);
+  }
+  if (to) {
+    params.push(to);
+    where.push(`vt.captured_at <= $${params.length}::timestamptz`);
+  }
+  params.push(Math.max(1, Math.min(Number(limit) || 200, 1000)));
+
+  const { rows } = await query(
+    `SELECT vt.id, vt.vendor_device_id, vt.vendor_device_name, vt.captured_at,
+            vt.created_at, vt.cabin_temp_c, vt.humidity_pct, vt.real_time_weight_kg,
+            vt.operating_status_code, vt.device_online_code,
+            vt.daily_input_t, vt.weekly_input_t, vt.monthly_input_t, vt.yearly_input_t,
+            vt.daily_output_t, vt.weekly_output_t, vt.monthly_output_t, vt.yearly_output_t,
+            vt.telemetry, vt.input_data, vt.output_data,
+            m.id AS machine_id, m.serial AS machine_serial
+       FROM vendor_device_telemetry vt
+       LEFT JOIN machines m ON m.vendor_device_id = vt.vendor_device_id
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY vt.captured_at DESC, vt.vendor_device_id ASC
+      LIMIT $${params.length}`,
+    params
+  );
+  return rows.map(mapVendorTelemetryHistoryRow);
+}
+
 export async function loadLatestVendorTelemetrySnapshots({
   vendorAccountId,
   deviceIds = null,

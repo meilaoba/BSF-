@@ -4,6 +4,7 @@ import { optionalInt, optionalString } from '../lib/validate.js';
 import { config } from '../config.js';
 import {
   aggregateTelemetrySnapshots,
+  hongKongDateKey,
   periodRange,
 } from '../shared/metrics.js';
 import {
@@ -156,6 +157,30 @@ async function loadGraphAnalytics(context, range, sampleGroupBy = 'day') {
   };
 }
 
+export function reportTemperatureHumidityRows(sampleRows, dailySnapshots) {
+  const reportedDeviceDays = new Set(
+    (Array.isArray(dailySnapshots) ? dailySnapshots : []).map(
+      (row) => `${row.deviceId}|${hongKongDateKey(row.capturedAt)}`
+    )
+  );
+  if (!reportedDeviceDays.size) return [];
+  return (Array.isArray(sampleRows) ? sampleRows : [])
+    .filter((row) => {
+      if (!row || !reportedDeviceDays.has(`${row.deviceId}|${hongKongDateKey(row.capturedAt)}`)) {
+        return false;
+      }
+      const hasTemperature = row.cabinTempC !== null && row.cabinTempC !== undefined && row.cabinTempC !== '';
+      const hasHumidity = row.humidityPct !== null && row.humidityPct !== undefined && row.humidityPct !== '';
+      return hasTemperature || hasHumidity;
+    })
+    .map((row) => ({
+      capturedAt: row.capturedAt,
+      deviceId: row.deviceId,
+      cabinTempC: row.cabinTempC,
+      humidityPct: row.humidityPct,
+    }));
+}
+
 async function loadReportAnalytics(req, context, range) {
   const token = await getVendorAccessToken(req.auth);
   const vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
@@ -178,10 +203,22 @@ async function loadReportAnalytics(req, context, range) {
   const status = dailyResult.unavailableDeviceCount > 0
     ? (dailyResult.snapshots.length ? 'partial' : 'unavailable')
     : (dailyResult.snapshots.length ? 'vendor' : 'empty');
+  const environmentRows = dailyResult.snapshots.length
+    ? await loadVendorTelemetrySummaries({
+      vendorAccountId: context.vendorAccountId,
+      includeAllAccounts: context.includeAllAccounts,
+      deviceIds: context.deviceIds,
+      start: range.start,
+      end: range.end,
+      groupBy: 'day',
+    })
+    : [];
+  const supplementalRows = reportTemperatureHumidityRows(environmentRows, dailyResult.snapshots);
   return {
-    rows: dailyResult.snapshots,
+    rows: [...dailyResult.snapshots, ...supplementalRows],
     dataSources: {
       dailyStats: { status },
+      telemetry: { status: supplementalRows.length ? 'temperature-humidity' : 'unavailable' },
     },
   };
 }

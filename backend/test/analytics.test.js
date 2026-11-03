@@ -15,6 +15,7 @@ const {
   analyticsScopeForUser,
   dateRangeForRequest,
   rawSampleRange,
+  reportTemperatureHumidityRows,
 } = await import('../src/routes/analytics.js');
 const {
   listVendorDevicesWithCollectorRefresh,
@@ -23,7 +24,10 @@ const {
   mergeVendorDeviceSyncTimes,
 } = await import('../src/routes/vendor-devices.js');
 const { publicUser } = await import('../src/middleware/session.js');
-const { vendorAccountIdForSession } = await import('../src/services/vendor-analytics.js');
+const {
+  mapVendorTelemetryHistoryRow,
+  vendorAccountIdForSession,
+} = await import('../src/services/vendor-analytics.js');
 
 test.after(async () => closePool());
 
@@ -290,24 +294,95 @@ test('raw sample route is scheduled-worker data and caps pages at 30', () => {
   assert.match(source, /source: 'worker'/);
 });
 
-test('graphs read telemetry while reports read vendor daily stats without telemetry fallback', () => {
+test('device-data reads the canonical vendor telemetry store and keeps legacy ingest isolated', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const route = fs.readFileSync(path.join(root, 'src/routes/device-data.js'), 'utf8');
+  const service = fs.readFileSync(path.join(root, 'src/services/vendor-analytics.js'), 'utf8');
+  assert.match(route, /loadVendorTelemetryHistory/);
+  assert.doesNotMatch(route, /listStoredTelemetry/);
+  assert.match(route, /source: 'legacy-machine-telemetry'/);
+  assert.match(service, /FROM vendor_device_telemetry vt/);
+  assert.match(service, /LEFT JOIN machines m ON m\.vendor_device_id = vt\.vendor_device_id/);
+});
+
+test('canonical telemetry history maps to the existing device-data response contract', () => {
+  const row = mapVendorTelemetryHistoryRow({
+    id: '12',
+    captured_at: '2026-11-03T09:00:00.000Z',
+    created_at: '2026-11-03T09:00:01.000Z',
+    machine_id: 'machine-1',
+    machine_serial: 'SERIAL-1',
+    vendor_device_id: '52',
+    vendor_device_name: 'CR-30S_QX2026124',
+    device_online_code: 2,
+    cabin_temp_c: '28.5',
+    humidity_pct: '0.45',
+    real_time_weight_kg: '12.3',
+    operating_status_code: 2,
+    daily_input_t: '0.004',
+    telemetry: { CabinTemp: 28.5 },
+    input_data: { dailyInput: 0.004 },
+    output_data: {},
+  });
+  assert.equal(row.recorded_at, '2026-11-03T09:00:00.000Z');
+  assert.equal(row.machine_id, 'machine-1');
+  assert.equal(row.device_key, '52');
+  assert.equal(row.device_state, 2);
+  assert.equal(row.cabin_temp_c, '28.5');
+  assert.equal(row.daily_input_t, '0.004');
+  assert.deepEqual(row.telemetry, { CabinTemp: 28.5 });
+  assert.equal(row.source, 'vendor_device_telemetry');
+});
+
+test('graphs read telemetry while reports use daily metrics and only supplemental temperature/humidity', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const source = fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8');
   assert.match(source, /const sourceGroupBy = groupBy === 'hour' \? 'hour' : 'day';/);
   assert.match(source, /groupBy: sampleGroupBy/);
   assert.match(source, /loadGraphAnalytics\(context, range, sourceGroupBy\)/);
   assert.match(source, /loadReportAnalytics\(req, context, range\)/);
-  assert.match(source, /rows: dailyResult\.snapshots/);
+  assert.match(source, /reportTemperatureHumidityRows\(environmentRows, dailyResult\.snapshots\)/);
   const reportLoader = source.slice(
     source.indexOf('async function loadReportAnalytics'),
     source.indexOf('function forbiddenAccount')
   );
-  assert.doesNotMatch(reportLoader, /loadVendorTelemetrySummaries/);
+  assert.match(reportLoader, /groupBy: 'day'/);
+  assert.match(source, /rows: \[\.\.\.dailyResult\.snapshots, \.\.\.supplementalRows\]/);
   const graphLoader = source.slice(
     source.indexOf('async function loadGraphAnalytics'),
     source.indexOf('async function loadReportAnalytics')
   );
   assert.doesNotMatch(graphLoader, /loadVendorDailyStatSnapshots/);
+});
+
+test('report temperature/humidity supplements only reported device days and cannot replace daily metrics', () => {
+  const rows = reportTemperatureHumidityRows([
+    {
+      capturedAt: '2026-11-01T12:00:00+08:00',
+      deviceId: '52',
+      cabinTempC: 28,
+      humidityPct: 41,
+      wasteKg: 99,
+      energyKwh: 99,
+    },
+    {
+      capturedAt: '2026-11-02T12:00:00+08:00',
+      deviceId: '52',
+      cabinTempC: 30,
+      humidityPct: 45,
+      wasteKg: 88,
+      energyKwh: 88,
+    },
+  ], [
+    { capturedAt: '2026-11-01T12:00:00+08:00', deviceId: '52', wasteKg: 5, energyKwh: 1.5 },
+  ]);
+
+  assert.deepEqual(rows, [{
+    capturedAt: '2026-11-01T12:00:00+08:00',
+    deviceId: '52',
+    cabinTempC: 28,
+    humidityPct: 41,
+  }]);
 });
 
 test('graph and report responses allow only short private browser caching', () => {
