@@ -69,17 +69,40 @@ function sendStaticError(res, status, message, method) {
   else res.end(message);
 }
 
-function sendFile(res, filePath, method) {
+function staticCacheControl(publicPath) {
+  if (publicPath === '/index.html') return 'no-store';
+  if (publicPath.startsWith('/src/vendor/')) return 'public, max-age=31536000, immutable';
+  return 'public, no-cache';
+}
+
+function staticEtag(stat) {
+  return `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
+}
+
+function matchesEtag(req, etag) {
+  const header = req.headers['if-none-match'];
+  if (!header) return false;
+  return String(header).split(',').some((value) => value.trim() === etag || value.trim() === '*');
+}
+
+function sendFile(req, res, filePath, publicPath, method) {
   fs.stat(filePath, (error, stat) => {
     if (error || !stat.isFile()) {
       sendStaticError(res, 404, 'Not found', method);
       return;
     }
+    const etag = staticEtag(stat);
     const headers = Object.assign({
       'Content-Type': contentTypes[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
-      'Content-Length': String(stat.size),
-      'Cache-Control': 'no-store'
+      'Cache-Control': staticCacheControl(publicPath),
+      ETag: etag
     }, securityHeaders());
+    if (matchesEtag(req, etag)) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+    headers['Content-Length'] = String(stat.size);
     res.writeHead(200, headers);
     if (method === 'HEAD') {
       res.end();
@@ -159,7 +182,7 @@ const server = http.createServer((req, res) => {
     sendStaticError(res, 404, 'Not found', req.method);
     return;
   }
-  sendFile(res, filePath, req.method);
+  sendFile(req, res, filePath, publicPath, req.method);
 });
 
 server.listen(port, host, () => {

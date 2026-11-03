@@ -124,3 +124,25 @@ test('static server exposes an explicit frontend allowlist only', async () => {
   assert.match(csp, /img-src[^;]*https:\/\/\*\.googleapis\.com/);
   assert.doesNotMatch(csp, /(?:img-src|connect-src)[^;]*\shttps:(?:\s|;)/);
 });
+
+test('static assets use safe differentiated cache policies', async () => {
+  const html = await fetch(`http://127.0.0.1:${frontendPort}/`);
+  assert.equal(html.headers.get('cache-control'), 'no-store');
+
+  const vendor = await fetch(`http://127.0.0.1:${frontendPort}/src/vendor/jspdf.umd.min.js`);
+  assert.equal(vendor.status, 200);
+  assert.equal(vendor.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+
+  const first = await fetch(`http://127.0.0.1:${frontendPort}/src/main.js`);
+  assert.equal(first.status, 200);
+  assert.equal(first.headers.get('cache-control'), 'public, no-cache');
+  const etag = first.headers.get('etag');
+  assert.ok(etag);
+
+  const cached = await fetch(`http://127.0.0.1:${frontendPort}/src/main.js`, {
+    headers: { 'If-None-Match': etag },
+  });
+  assert.equal(cached.status, 304);
+  assert.equal(await cached.text(), '');
+  assert.equal(cached.headers.get('etag'), etag);
+});

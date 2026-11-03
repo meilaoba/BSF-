@@ -422,6 +422,39 @@ function showReportExportToast(message, type){
   if(reportExportToastTimer) clearTimeout(reportExportToastTimer);
   reportExportToastTimer = setTimeout(function(){ toast.style.opacity = '0'; setTimeout(function(){ if(toast) toast.remove(); }, 250); }, 3200);
 }
+
+let reportJsPdfPromise = null;
+
+function loadReportJsPdf(){
+  if(window.jspdf && typeof window.jspdf.jsPDF === 'function'){
+    return Promise.resolve(window.jspdf.jsPDF);
+  }
+  if(reportJsPdfPromise) return reportJsPdfPromise;
+  reportJsPdfPromise = new Promise(function(resolve, reject){
+    const existing = document.querySelector('script[data-bsf-jspdf]');
+    const script = existing || document.createElement('script');
+    script.dataset.bsfJspdf = 'true';
+    script.async = true;
+    script.onload = function(){
+      const JsPDF = window.jspdf && window.jspdf.jsPDF;
+      if(typeof JsPDF === 'function') resolve(JsPDF);
+      else reject(new Error('PDF component did not initialize'));
+    };
+    script.onerror = function(){
+      reject(new Error('PDF component could not be loaded'));
+    };
+    if(!existing){
+      script.src = '/src/vendor/jspdf.umd.min.js';
+      document.head.appendChild(script);
+    }
+  }).catch(function(error){
+    reportJsPdfPromise = null;
+    showReportExportToast(error.message || 'PDF component could not be loaded', 'error');
+    return null;
+  });
+  return reportJsPdfPromise;
+}
+
 function downloadReportFile(filename, mime, content){
   downloadReportBlob(filename, new Blob([content], { type:mime }));
 }
@@ -476,14 +509,14 @@ function exportReportExcel(){
   showReportExportToast('Excel 导出已开始');
 }
 async function exportReportPdf(){
+  showReportExportToast('Loading PDF component...');
+  const JsPDF = await loadReportJsPdf();
   const model = reportExportModel();
   const pdfTitle = model.pdfTitle || model.title;
   const rows = [['Metric','Value','Unit'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO2e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%']];
   const foodRows = [['Period','Value','Unit']].concat(model.foodWaste.map(function(row){
     return [row.label, row.value, 'KG'];
   }));
-  const jsPdfApi = window.jspdf || {};
-  const JsPDF = jsPdfApi.jsPDF;
   if(typeof JsPDF === 'function'){
     const doc = new JsPDF({ orientation:'portrait', unit:'pt', format:'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();

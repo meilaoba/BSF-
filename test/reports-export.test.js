@@ -63,6 +63,13 @@ test('report preview exposes PDF and Excel exports without a CSV button', () => 
   assert.doesNotMatch(source, /onclick="exportReportCsv\(\)"/);
 });
 
+test('PDF library is loaded only when PDF export is requested', () => {
+  const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.doesNotMatch(index, /src="\/src\/vendor\/jspdf\.umd\.min\.js"/);
+  assert.match(source, /function loadReportJsPdf\(\)/);
+  assert.match(source, /const JsPDF = await loadReportJsPdf\(\)/);
+});
+
 test('missing report days stay missing while a real zero remains exportable', () => {
   vm.runInContext(`
     reportFilters = { client:'Client A', device:'', period:'monthly', month:10, year:2026 };
