@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 process.env.DATABASE_URL ||= 'postgresql://test:test@127.0.0.1:5432/test';
 process.env.NODE_ENV = 'development';
+process.env.VENDOR_DAILY_STATS_URL = '';
 
 const { closePool } = await import('../src/db.js');
 const { config } = await import('../src/config.js');
@@ -33,6 +34,10 @@ test('confirmed formula and polling defaults remain configurable', () => {
   assert.equal(config.formula.dailyElectricityKwh, 1.5);
   assert.equal(config.auth.vendor.kitchenWasteToKgFactor, 1);
   assert.equal(config.auth.vendor.powerConsumeToKwhFactor, 1);
+  assert.equal(
+    config.auth.vendor.dailyStatsUrl,
+    'https://iot.creekscomposter.com:8888/historyData/deviceList'
+  );
   assert.equal(config.formula.fertilizerRatio, 0.12);
   assert.equal(config.formula.humidityScale, 100);
   assert.equal(config.auth.vendor.realtimeEnabled, true);
@@ -291,6 +296,14 @@ test('daily graphs request hourly telemetry summaries instead of one row per day
   assert.match(source, /const sourceGroupBy = groupBy === 'hour' \? 'hour' : 'day';/);
   assert.match(source, /groupBy: sampleGroupBy/);
   assert.match(source, /loadAnalyticsRows\(req, context, range, sourceGroupBy\)/);
+});
+
+test('graph and report responses allow only short private browser caching', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const source = fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8');
+  assert.match(source, /private, max-age=60, must-revalidate/);
+  assert.match(source, /Vary: 'Cookie, Origin'/);
+  assert.match(source, /ANALYTICS_CACHE_HEADERS/);
 });
 
 test('raw sample range preserves times and uses an exclusive end boundary', () => {

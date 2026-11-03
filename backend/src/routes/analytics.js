@@ -22,6 +22,10 @@ import { loadVendorDailyStatSnapshots } from '../services/vendor-daily-stats-ana
 const PERIODS = new Set(['daily', 'monthly', 'yearly']);
 const GROUPS = new Set(['hour', 'day', 'month']);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const ANALYTICS_CACHE_HEADERS = Object.freeze({
+  'Cache-Control': 'private, max-age=60, must-revalidate',
+  Vary: 'Cookie, Origin',
+});
 
 function validDateKey(value) {
   if (!DATE_PATTERN.test(String(value || ''))) return false;
@@ -320,7 +324,7 @@ export function registerAnalyticsRoutes(router) {
       summary: result.summary,
       empty: result.summary.pointCount === 0,
       dataSources: analytics.dataSources,
-    });
+    }, undefined, ANALYTICS_CACHE_HEADERS);
   });
 
   router.get('/api/v1/graphs', async (req, res) => {
@@ -349,7 +353,7 @@ export function registerAnalyticsRoutes(router) {
       ...result,
       empty: result.summary.pointCount === 0,
       dataSources: analytics.dataSources,
-    });
+    }, undefined, ANALYTICS_CACHE_HEADERS);
   });
 
   router.get('/api/v1/reports', async (req, res) => {
@@ -386,6 +390,6 @@ export function registerAnalyticsRoutes(router) {
       summary: result.summary,
       empty: result.summary.pointCount === 0,
       dataSources: analytics.dataSources,
-    });
+    }, undefined, ANALYTICS_CACHE_HEADERS);
   });
 }

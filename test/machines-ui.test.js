@@ -42,6 +42,11 @@ test('machines page uses only running, standby and offline device statuses', () 
   assert.doesNotMatch(source, />\s*Online\s*</);
 });
 
+test('machines page labels the Vendor API dash as signal strength', () => {
+  assert.match(source, /Signal:/);
+  assert.match(source, /machineNetworkStatus\(dev\)/);
+});
+
 test('machines metrics use one monthly graph request for daily and monthly cards', () => {
   assert.match(source, /getGraphs\(Object\.assign\(\{ period:'monthly' \}, identity\)\)/);
   assert.doesNotMatch(source, /getGraphs\(Object\.assign\(\{ period:'daily'/);

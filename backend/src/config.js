@@ -9,6 +9,10 @@ function str(name, fallback = '') {
   return v === undefined || v === null ? fallback : String(v).trim();
 }
 
+function strOr(name, fallback = '') {
+  return str(name) || fallback;
+}
+
 function num(name, fallback) {
   const raw = str(name);
   if (raw === '') return fallback;
@@ -138,7 +142,7 @@ export const config = {
       accessTokenTtlDays: num('VENDOR_ACCESS_TOKEN_TTL_DAYS', 7),
       refreshTokenTtlDays: num('VENDOR_REFRESH_TOKEN_TTL_DAYS', 8),
       refreshUrl: str('VENDOR_REFRESH_URL', 'https://iot.creekscomposter.com:8888/user/refresh'),
-      dailyStatsUrl: str('VENDOR_DAILY_STATS_URL', 'https://iot.creekscomposter.com:8888/historyData/deviceList'),
+      dailyStatsUrl: strOr('VENDOR_DAILY_STATS_URL', 'https://iot.creekscomposter.com:8888/historyData/deviceList'),
       kitchenWasteToKgFactor: num('VENDOR_KITCHEN_WASTE_TO_KG_FACTOR', 1),
       powerConsumeToKwhFactor: num('VENDOR_POWER_CONSUME_TO_KWH_FACTOR', 1),
       alertListUrl: str('VENDOR_ALERT_LIST_URL', ''),

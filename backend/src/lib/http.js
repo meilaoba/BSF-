@@ -27,8 +27,8 @@ export function sendJson(res, status, payload, extraHeaders = {}) {
   res.end(body);
 }
 
-export function sendOk(res, data, meta) {
-  sendJson(res, 200, meta ? { ok: true, data, meta } : { ok: true, data });
+export function sendOk(res, data, meta, extraHeaders = {}) {
+  sendJson(res, 200, meta ? { ok: true, data, meta } : { ok: true, data }, extraHeaders);
 }
 
 export function sendError(res, err) {

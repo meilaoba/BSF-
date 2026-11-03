@@ -35,6 +35,12 @@ function machineStatusBadge(device){
   return '<span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:' + color + '26;color:' + color + ';">' + machinePreviewEscape(status.toUpperCase()) + '</span>';
 }
 
+function machineNetworkStatus(device){
+  const signal = device && device.signal;
+  return machinePreviewEscape(device && device.network || 'Vendor API') + ' · Signal: ' +
+    (signal === undefined || signal === null || signal === '' ? '—' : machinePreviewEscape(signal) + '%');
+}
+
 const machineMetricCache = new Map();
 const machineMetricRequests = new Map();
 const MACHINE_METRIC_TTL_MS = 60 * 1000;
@@ -212,7 +218,7 @@ function renderMachines(container){
               </div>
               <div style="text-align:right;">
                 ${machineStatusBadge(dev)}
-                <p style="margin:4px 0 0;font-size:11px;color:#64748b;">${machinePreviewEscape(dev.network)} · ${dev.signal === undefined || dev.signal === null || dev.signal === '' ? '—' : machinePreviewEscape(dev.signal) + '%'}</p>
+                <p style="margin:4px 0 0;font-size:11px;color:#64748b;">${machineNetworkStatus(dev)}</p>
               </div>
             </div>
           `).join('') : '<div style="padding:20px;text-align:center;color:#64748b;font-size:13px;">No devices available</div>'}
