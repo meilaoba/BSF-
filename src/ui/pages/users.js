@@ -5,6 +5,7 @@ function renderUsers(container){
   const safeUsers = users.map(function(user){
     const safe = Object.assign({}, user);
     ['name','email','role','client','machineId','status'].forEach(function(key){ safe[key] = bsfEscapeHtml(user[key]); });
+    safe.userId = String(user.id || '').replace(/[^a-zA-Z0-9-]/g, '');
     return safe;
   });
   container.innerHTML = `
@@ -36,7 +37,7 @@ function renderUsers(container){
               <td style="padding:14px 20px;color:#e2e8f0;">${u.client}</td>
               <td style="padding:14px 20px;color:#94a3b8;">${u.machineName || u.machineId || "—"}</td>
               <td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(16,185,129,0.15);color:#10b981;">${u.status}</span></td>
-              <td style="padding:14px 20px;"><button onclick="openUserModal(${userRecords.findIndex(function(item){ return String(item.id) === String(u.id); })})" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button><button onclick="deleteUserRecord(${userRecords.findIndex(function(item){ return String(item.id) === String(u.id); })})" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;">Delete</button></td>
+              <td style="padding:14px 20px;"><button onclick="openUserModal('${u.userId}')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button><button onclick="deleteUserRecord('${u.userId}')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;">Delete</button></td>
             </tr>
           `).join('')}
         </tbody>
@@ -74,8 +75,15 @@ function syncUserMachineOptions(){
   machineSelect.innerHTML = userMachineOptions(clientSelect.value, machineSelect.value);
 }
 
-function openUserModal(index){
-  const isEdit = typeof index === 'number';
+function openUserModal(userRef){
+  const index = typeof userRef === 'number'
+    ? userRef
+    : userRecords.findIndex(function(user){ return String(user.id) === String(userRef); });
+  const isEdit = index >= 0;
+  if(typeof userRef !== 'number' && !isEdit){
+    alert('User record was not found. Refresh the page and try again.');
+    return;
+  }
   const user = isEdit ? userRecords[index] : {id:'',username:'',name:'',email:'',phone:'',role:'User',roleValue:'user',client:'',clientId:'',machineId:'',status:'Active'};
   let modal = document.getElementById('user-modal');
   if(!modal){ modal = document.createElement('div'); modal.id='user-modal'; document.body.appendChild(modal); }
@@ -134,8 +142,12 @@ async function saveUserModal(){
   closeUserModal(); renderUsers(document.getElementById('page-content'));
 }
 
-async function deleteUserRecord(index){
-  const user=userRecords[index]; if(!user) return;
+async function deleteUserRecord(userRef){
+  const index = typeof userRef === 'number'
+    ? userRef
+    : userRecords.findIndex(function(user){ return String(user.id) === String(userRef); });
+  const user=userRecords[index];
+  if(!user){ alert('User record was not found. Refresh the page and try again.'); return; }
   if(!user.id){ alert('User record is incomplete. Refresh the page and try again.'); return; }
   if(!confirm('Delete user "'+user.name+'"? This cannot be undone.')) return;
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
