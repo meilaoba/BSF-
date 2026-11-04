@@ -142,7 +142,7 @@ export async function loadVendorTelemetrySamples({
     `captured_at >= ($1::timestamp AT TIME ZONE 'Asia/Hong_Kong')`,
     `captured_at < ($2::timestamp AT TIME ZONE 'Asia/Hong_Kong')`,
   ];
-  if (!includeAllAccounts) {
+  if (!includeAllAccounts && !Array.isArray(deviceIds)) {
     params.push(String(vendorAccountId));
     where.push(`vendor_account_id = $${params.length}`);
   }
@@ -249,7 +249,7 @@ export async function loadVendorTelemetryHistory({
 
   const params = [];
   const where = [];
-  if (!includeAllAccounts) {
+  if (!includeAllAccounts && !Array.isArray(deviceIds)) {
     params.push(String(vendorAccountId));
     where.push(`vt.vendor_account_id = $${params.length}`);
   }
@@ -287,25 +287,28 @@ export async function loadVendorTelemetryHistory({
 
 export async function loadLatestVendorTelemetrySnapshots({
   vendorAccountId,
+  includeAllAccounts = false,
   deviceIds = null,
 } = {}) {
-  if (!vendorAccountId) return new Map();
-  const params = [String(vendorAccountId)];
-  let deviceClause = '';
+  if (!vendorAccountId && !includeAllAccounts) return new Map();
+  const params = [];
+  const where = ['(cabin_temp_c IS NOT NULL OR humidity_pct IS NOT NULL OR real_time_weight_kg IS NOT NULL)'];
+  if (!includeAllAccounts && !Array.isArray(deviceIds)) {
+    params.push(String(vendorAccountId));
+    where.push(`vendor_account_id = $${params.length}`);
+  }
   if (Array.isArray(deviceIds)) {
     if (!deviceIds.length) return new Map();
     params.push(deviceIds);
-    deviceClause = ` AND vendor_device_id = ANY($${params.length}::text[])`;
+    where.push(`vendor_device_id = ANY($${params.length}::text[])`);
   }
   const { rows } = await query(
     `SELECT DISTINCT ON (vendor_device_id)
             vendor_device_id, vendor_device_name, captured_at, source_recorded_at,
-            cabin_temp_c, humidity_pct, real_time_weight_kg, operating_status_code,
+            cabin_temp_c, humidity_pct, real_time_weight_kg, operating_status_code, device_online_code,
             telemetry, input_data, output_data
        FROM vendor_device_telemetry
-      WHERE vendor_account_id = $1
-        AND (cabin_temp_c IS NOT NULL OR humidity_pct IS NOT NULL OR real_time_weight_kg IS NOT NULL)
-        ${deviceClause}
+      WHERE ${where.join(' AND ')}
       ORDER BY vendor_device_id ASC, captured_at DESC`,
     params
   );
@@ -322,6 +325,7 @@ export async function loadLatestVendorTelemetrySnapshots({
       humidityPct: row.humidity_pct,
       realTimeWeightKg: row.real_time_weight_kg,
       operatingStatusCode: row.operating_status_code,
+      onlineCode: row.device_online_code,
     },
   }]));
 }
@@ -392,7 +396,7 @@ export async function loadVendorTelemetrySummaries({
   // Parameters 1 and 2 are the Hong Kong date boundaries.
 
 
-  if (!includeAllAccounts) {
+  if (!includeAllAccounts && !Array.isArray(deviceIds)) {
     params.push(vendorAccountId);
     where.push(`t.vendor_account_id = $${params.length}`);
   }

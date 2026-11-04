@@ -36,7 +36,7 @@ function renderUsers(container){
               <td style="padding:14px 20px;color:#e2e8f0;">${u.client}</td>
               <td style="padding:14px 20px;color:#94a3b8;">${u.machineName || u.machineId || "—"}</td>
               <td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(16,185,129,0.15);color:#10b981;">${u.status}</span></td>
-              <td style="padding:14px 20px;"><button onclick="openUserModal(${i})" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button><button onclick="deleteUserRecord(${i})" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;">Delete</button></td>
+              <td style="padding:14px 20px;"><button onclick="openUserModal(${userRecords.findIndex(function(item){ return String(item.id) === String(u.id); })})" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button><button onclick="deleteUserRecord(${userRecords.findIndex(function(item){ return String(item.id) === String(u.id); })})" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;">Delete</button></td>
             </tr>
           `).join('')}
         </tbody>
@@ -136,6 +136,7 @@ async function saveUserModal(){
 
 async function deleteUserRecord(index){
   const user=userRecords[index]; if(!user) return;
+  if(!user.id){ alert('User record is incomplete. Refresh the page and try again.'); return; }
   if(!confirm('Delete user "'+user.name+'"? This cannot be undone.')) return;
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{ await window.BSF_API.deleteUser(user.id); }catch(error){ alert('Delete failed: '+error.message); return; }

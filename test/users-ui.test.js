@@ -64,3 +64,9 @@ test('Add User save submits a vendor user without a frontend exception', async (
     status:'active',
   });
 });
+
+test('filtered client user rows keep their original record ids for edit and delete', () => {
+  assert.match(source, /userRecords\.findIndex\(function\(item\)\{ return String\(item\.id\) === String\(u\.id\); \}\)/);
+  assert.match(source, /if\(!user\.id\)\{ alert\('User record is incomplete\. Refresh the page and try again\.'\); return; \}/);
+  assert.doesNotMatch(source, /onclick="deleteUserRecord\(\$\{i\}\)"/);
+});

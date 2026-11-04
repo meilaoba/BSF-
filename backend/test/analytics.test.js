@@ -111,6 +111,24 @@ test('user scope always uses the single linked machine', () => {
   );
 });
 
+test('linked device scope reads telemetry stored by the collector account', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const service = fs.readFileSync(path.join(root, 'src/services/vendor-analytics.js'), 'utf8');
+  const history = service.slice(
+    service.indexOf('export async function loadVendorTelemetryHistory'),
+    service.indexOf('export async function loadLatestVendorTelemetrySnapshots')
+  );
+  const latest = service.slice(
+    service.indexOf('export async function loadLatestVendorTelemetrySnapshots'),
+    service.indexOf('export async function resolveVendorDeviceIds')
+  );
+  const summaries = service.slice(service.indexOf('export async function loadVendorTelemetrySummaries'));
+  assert.match(history, /!includeAllAccounts && !Array\.isArray\(deviceIds\)/);
+  assert.match(latest, /!includeAllAccounts && !Array\.isArray\(deviceIds\)/);
+  assert.match(summaries, /!includeAllAccounts && !Array\.isArray\(deviceIds\)/);
+  assert.match(latest, /device_online_code/);
+});
+
 test('unknown roles fail closed', () => {
   assert.throws(
     () => analyticsScopeForUser({ role: 'viewer' }, {}),

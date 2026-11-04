@@ -29,6 +29,7 @@ export function mergeLatestVendorTelemetry(devices, latestByDevice) {
       telemetry: { ...(latest.telemetry || {}), ...(device.telemetry || {}) },
       input: { ...(latest.input || {}), ...(device.input || {}) },
       output: { ...(latest.output || {}), ...(device.output || {}) },
+      onlineCode: latest.normalized?.onlineCode ?? device.onlineCode,
       recordedAt: device.recordedAt || latest.recordedAt || latest.capturedAt,
       latestTelemetryAt: latest.capturedAt,
     };
@@ -159,6 +160,7 @@ export function registerVendorDeviceRoutes(router) {
       try {
         const latest = await loadLatestVendorTelemetrySnapshots({
           vendorAccountId,
+          includeAllAccounts: req.auth.user.role === 'master_admin',
           deviceIds: devices.map((device) => String(device.id)),
         });
         devices = mergeLatestVendorTelemetry(devices, latest);
