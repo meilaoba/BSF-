@@ -664,21 +664,33 @@ export function registerDirectoryRoutes(router) {
     const userId = optionalUuid(q(req).get('id'), 'id');
     if (!userId) throw new ValidationError('`id` query parameter is required');
 
-    const before = await query('SELECT id, role, client_id FROM users WHERE id = $1', [userId]);
+    const before = await query(
+      'SELECT id, email, phone, full_name, role, client_id, machine_id, status FROM users WHERE id = $1',
+      [userId]
+    );
     if (!before.rows[0]) throw new NotFoundError('User not found');
     assertClientAdminCanManageUser(req, before.rows[0]);
     const { rows } = await query(
-      `UPDATE users SET status = 'disabled' WHERE id = $1
-       RETURNING id, email, phone, role, status`,
+      `DELETE FROM users WHERE id = $1
+       RETURNING id, email, phone, full_name, role, status`,
       [userId]
     );
     if (!rows[0]) throw new NotFoundError('User not found');
 
     await audit({
-      action: 'user.disable',
+      action: 'user.delete',
       actorType: 'api',
       entityType: 'user',
       entityId: userId,
+      before: {
+        email: before.rows[0].email,
+        phone: before.rows[0].phone,
+        fullName: before.rows[0].full_name,
+        role: before.rows[0].role,
+        clientId: before.rows[0].client_id,
+        machineId: before.rows[0].machine_id,
+        status: before.rows[0].status,
+      },
       ip: clientIp(req),
     });
     sendOk(res, rows[0]);

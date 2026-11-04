@@ -197,6 +197,11 @@ User roles are sent as `master_admin`, `client_admin` or `user`; statuses are
 sent as `active`, `invited` or `disabled`. Client Admins may manage only
 ordinary `user` accounts linked to their own client and machines.
 
+`DELETE /api/v1/users?id=…` permanently deletes the local BSF user record.
+Related sessions, notification preferences and recipients are removed by
+database foreign-key cascades, while audit history remains. The vendor account
+is not deleted by this endpoint.
+
 Creating an ordinary User requires `userName`, `password` and `mobile`. The
 backend encrypts the initial password with the vendor's documented AES-CBC
 contract, calls `VENDOR_USER_ADD_URL`, and stores a pending local User. On the

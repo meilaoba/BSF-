@@ -6,6 +6,11 @@ function renderUsers(container){
     const safe = Object.assign({}, user);
     ['name','email','role','client','machineId','status'].forEach(function(key){ safe[key] = bsfEscapeHtml(user[key]); });
     safe.userId = String(user.id || '').replace(/[^a-zA-Z0-9-]/g, '');
+    safe.statusStyle = user.statusValue === 'disabled'
+      ? 'background:rgba(239,68,68,0.15);color:#ef4444;'
+      : user.statusValue === 'invited'
+        ? 'background:rgba(245,158,11,0.15);color:#f59e0b;'
+        : 'background:rgba(16,185,129,0.15);color:#10b981;';
     return safe;
   });
   container.innerHTML = `
@@ -36,7 +41,7 @@ function renderUsers(container){
               <td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${u.role==='Master Admin'?'rgba(239,68,68,0.15)':u.role==='Client Admin'?'rgba(59,130,246,0.15)':'rgba(16,185,129,0.15)'};color:${u.role==='Master Admin'?'#ef4444':u.role==='Client Admin'?'#3b82f6':'#10b981'};">${u.role}</span></td>
               <td style="padding:14px 20px;color:#e2e8f0;">${u.client}</td>
               <td style="padding:14px 20px;color:#94a3b8;">${u.machineName || u.machineId || "—"}</td>
-              <td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(16,185,129,0.15);color:#10b981;">${u.status}</span></td>
+              <td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;${u.statusStyle}">${u.status}</span></td>
               <td style="padding:14px 20px;"><button onclick="openUserModal('${u.userId}')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button><button onclick="deleteUserRecord('${u.userId}')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;">Delete</button></td>
             </tr>
           `).join('')}
@@ -152,7 +157,7 @@ async function deleteUserRecord(userRef){
   const user=userRecords[index];
   if(!user){ alert('User record was not found. Refresh the page and try again.'); return; }
   if(!user.id){ alert('User record is incomplete. Refresh the page and try again.'); return; }
-  if(!confirm('Delete user "'+user.name+'"? This cannot be undone.')) return;
+  if(!confirm('Permanently delete user "'+user.name+'" from the local database? This cannot be undone. The vendor account is not deleted.')) return;
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{ await window.BSF_API.deleteUser(user.id); }catch(error){ alert('Delete failed: '+error.message); return; }
   }

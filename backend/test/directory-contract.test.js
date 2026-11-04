@@ -55,3 +55,13 @@ test('first vendor login attaches to the pending local user by user name', () =>
   assert.match(auth, /lower\(vendor_username\) = lower\(\$1\)/);
   assert.match(auth, /UPDATE users\s+SET vendor_user_id = \$1/);
 });
+
+test('user deletion permanently removes the local database row', () => {
+  const deleteStart = source.indexOf("router.delete('/api/v1/users'");
+  const deleteEnd = source.indexOf("router.get('/api/v1/notification-recipients'", deleteStart);
+  const block = source.slice(deleteStart, deleteEnd);
+  assert.match(block, /DELETE FROM users WHERE id = \$1/);
+  assert.doesNotMatch(block, /UPDATE users SET status = 'disabled'/);
+  assert.match(block, /action: 'user\.delete'/);
+  assert.match(block, /before: \{/);
+});

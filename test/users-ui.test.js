@@ -72,6 +72,9 @@ test('filtered client user rows keep their original record ids for edit and dele
   assert.match(source, /if\(!user\.id\)\{ alert\('User record is incomplete\. Refresh the page and try again\.'\); return; \}/);
   assert.doesNotMatch(source, /onclick="deleteUserRecord\(\$\{i\}\)"/);
   assert.match(source, /userRecords\.splice\(index, 1\)/);
+  assert.match(source, /Permanently delete user/);
+  assert.match(source, /The vendor account is not deleted/);
+  assert.match(source, /user\.statusValue === 'disabled'/);
 });
 
 test('Add User opens the modal in create mode without a record id', () => {

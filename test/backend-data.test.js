@@ -58,7 +58,7 @@ test('authenticated startup loads real clients and users from the backend', () =
   assert.match(source, /api\.getUsers\(\{ limit:500 \}\)/);
   assert.match(source, /await bsfLoadDirectoryData\(\)/);
   assert.match(source, /window\.BSF_LOAD_DIRECTORY_DATA = bsfLoadDirectoryData/);
-  assert.match(source, /filter\(function\(user\)\{ return user\.statusValue !== 'disabled'; \}\)/);
+  assert.doesNotMatch(source, /filter\(function\(user\)\{ return user\.statusValue !== 'disabled'; \}\)/);
 });
 
 
