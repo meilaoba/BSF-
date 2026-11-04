@@ -35,6 +35,13 @@ test('client admins can manage only ordinary users inside their own client', () 
   assert.match(block, /String\(machine\.rows\[0\]\.client_id \|\| ''\) !== String\(actorClientId\)/);
   assert.match(block, /await addVendorUser\(/);
   assert.match(block, /vendor_username, vendor_type/);
+  assert.match(block, /requireUserRole\(body\.role \?\? 'user'\)/);
+});
+
+test('user role input accepts frontend display labels without weakening the enum', () => {
+  assert.match(source, /function normalizeUserRole\(value\)/);
+  assert.match(source, /role === 'master_admin' \|\| role === 'admin'/);
+  assert.match(source, /return requireEnum\(normalizeUserRole\(value\), 'role'/);
 });
 
 test('first vendor login attaches to the pending local user by user name', () => {

@@ -49,6 +49,18 @@ function clientAdminClientId(req) {
   return clientId;
 }
 
+function normalizeUserRole(value) {
+  const role = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (role === 'master_admin' || role === 'admin') return 'master_admin';
+  if (role === 'client_admin') return 'client_admin';
+  if (role === 'user') return 'user';
+  return role;
+}
+
+function requireUserRole(value) {
+  return requireEnum(normalizeUserRole(value), 'role', ['master_admin', 'client_admin', 'user']);
+}
+
 function assertClientAdminCanManageUser(req, user) {
   const clientId = clientAdminClientId(req);
   if (!clientId) return;
@@ -441,7 +453,7 @@ export function registerDirectoryRoutes(router) {
     const clauses = [];
     const role = optionalString(search.get('role'), 'role', { max: 30 });
     if (role) {
-      params.push(requireEnum(role, 'role', ['master_admin', 'client_admin', 'user']));
+      params.push(requireUserRole(role));
       clauses.push(`u.role = $${params.length}`);
     }
     clauses.push(...scopeFilter(search, 'u', params));
@@ -467,7 +479,7 @@ export function registerDirectoryRoutes(router) {
     requireUserManager(req);
     const body = await readJsonBody(req);
 
-    let role = requireEnum(body.role ?? 'user', 'role', ['master_admin', 'client_admin', 'user']);
+    let role = requireUserRole(body.role ?? 'user');
     let clientId = optionalUuid(body.clientId, 'clientId');
     const machineId = optionalUuid(body.machineId, 'machineId');
     const actorClientId = clientAdminClientId(req);
@@ -578,7 +590,7 @@ export function registerDirectoryRoutes(router) {
     assertClientAdminCanManageUser(req, before.rows[0]);
 
     let role = body.role
-      ? requireEnum(body.role, 'role', ['master_admin', 'client_admin', 'user'])
+      ? requireUserRole(body.role)
       : before.rows[0].role;
     const actorClientId = clientAdminClientId(req);
     if (actorClientId) {
