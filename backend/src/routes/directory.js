@@ -171,7 +171,7 @@ export function registerDirectoryRoutes(router) {
   router.put('/api/v1/clients', async (req, res) => {
     requireApiKey(req);
     const body = await readJsonBody(req);
-    const clientId = optionalUuid(body.id, 'id');
+    const clientId = optionalUuid(body.id ?? q(req).get('id'), 'id');
     const metadata = optionalObject(body.metadata, 'metadata');
     if (!clientId) throw new ValidationError('`id` is required');
 
@@ -324,7 +324,7 @@ export function registerDirectoryRoutes(router) {
   router.put('/api/v1/machines', async (req, res) => {
     requireApiKey(req);
     const body = await readJsonBody(req);
-    const machineId = optionalUuid(body.id, 'id');
+    const machineId = optionalUuid(body.id ?? q(req).get('id'), 'id');
     if (!machineId) throw new ValidationError('`id` is required');
 
     const before = await query('SELECT * FROM machines WHERE id = $1', [machineId]);
@@ -582,7 +582,7 @@ export function registerDirectoryRoutes(router) {
   router.put('/api/v1/users', async (req, res) => {
     requireUserManager(req);
     const body = await readJsonBody(req);
-    const userId = optionalUuid(body.id, 'id');
+    const userId = optionalUuid(body.id ?? q(req).get('id'), 'id');
     if (!userId) throw new ValidationError('`id` is required');
 
     const before = await query('SELECT * FROM users WHERE id = $1', [userId]);

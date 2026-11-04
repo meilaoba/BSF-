@@ -113,6 +113,15 @@ export function clientIp(req) {
   return remoteAddress || 'unknown';
 }
 
+export function normalizeDirectoryDetailRequest(url, method) {
+  if (!['PUT', 'DELETE'].includes(String(method || '').toUpperCase())) return url;
+  const match = String(url.pathname || '').match(/^\/api\/v1\/(clients|machines|users)\/([0-9a-f-]{36})$/i);
+  if (!match) return url;
+  url.pathname = `/api/v1/${match[1]}`;
+  url.searchParams.set('id', match[2]);
+  return url;
+}
+
 export function isHttpsRequest(req) {
   if (req.socket?.encrypted === true) return true;
   if (!config.trustProxy) return false;

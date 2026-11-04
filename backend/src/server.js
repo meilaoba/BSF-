@@ -7,6 +7,7 @@ import {
   applyCors,
   isHttpsRequest,
   isOriginAllowed,
+  normalizeDirectoryDetailRequest,
   sendError,
   sendJson,
 } from './lib/http.js';
@@ -44,6 +45,8 @@ const server = http.createServer(async (req, res) => {
 
   try {
     applyCors(req, res, config.corsAllowedOrigins);
+    normalizeDirectoryDetailRequest(url, req.method);
+    req.url = `${url.pathname}${url.search}`;
 
     if (config.requireHttps && !isHttpsRequest(req)) {
       sendJson(res, 426, {

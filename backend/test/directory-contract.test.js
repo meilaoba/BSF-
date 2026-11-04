@@ -18,6 +18,10 @@ test('client creation SQL and parameter list stay aligned', () => {
   assert.doesNotMatch(createClientBlock, /vendorDeviceId/);
 });
 
+test('directory updates and deletes accept the UUID from body, path rewrite or query', () => {
+  assert.match(source, /optionalUuid\(body\.id \?\? q\(req\)\.get\('id'\), 'id'\)/);
+});
+
 test('client updates can persist site GHG formula overrides', () => {
   assert.match(updateClientBlock, /metadata = COALESCE\(metadata \|\| \$9::jsonb, metadata\)/);
   assert.match(updateClientBlock, /JSON\.stringify\(metadata\)/);
