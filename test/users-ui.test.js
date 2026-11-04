@@ -14,7 +14,6 @@ test('Add User save submits a vendor user without a frontend exception', async (
   const modal = { dataset:{ editIndex:'' }, remove(){ this.removed = true; } };
   const values = {
     'user-username-input':'TT',
-    'user-name-input':'TT',
     'user-email-input':'3310103205@qq.com',
     'user-mobile-input':'1783773595',
     'user-password-input':'password',
@@ -54,7 +53,6 @@ test('Add User save submits a vendor user without a frontend exception', async (
   assert.deepEqual(JSON.parse(JSON.stringify(created)), {
     id:'',
     userName:'TT',
-    fullName:'TT',
     email:'3310103205@qq.com',
     mobile:'1783773595',
     password:'password',
@@ -81,4 +79,11 @@ test('Add User opens the modal in create mode without a record id', () => {
   assert.match(source, /const isAdd = userRef === undefined \|\| userRef === null \|\| userRef === ''/);
   assert.match(source, /const index = isAdd\s*\? -1/);
   assert.match(source, /if\(!isAdd && typeof userRef !== 'number' && !isEdit\)/);
+});
+
+test('User form exposes one name field and uses Username as the display value', () => {
+  assert.doesNotMatch(source, /Full Name/);
+  assert.doesNotMatch(source, /user-name-input/);
+  assert.match(source, />Username<\/th>/);
+  assert.match(source, /userName:userName/);
 });

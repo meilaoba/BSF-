@@ -4,7 +4,7 @@ function renderUsers(container){
   const users = isClientScopedRole() ? userRecords.filter(function(user){ return user.client === currentClient; }) : userRecords;
   const safeUsers = users.map(function(user){
     const safe = Object.assign({}, user);
-    ['name','email','role','client','machineId','status'].forEach(function(key){ safe[key] = bsfEscapeHtml(user[key]); });
+    ['name','username','email','role','client','machineId','status'].forEach(function(key){ safe[key] = bsfEscapeHtml(user[key]); });
     safe.userId = String(user.id || '').replace(/[^a-zA-Z0-9-]/g, '');
     safe.statusStyle = user.statusValue === 'disabled'
       ? 'background:rgba(239,68,68,0.15);color:#ef4444;'
@@ -25,7 +25,7 @@ function renderUsers(container){
     <div style="background:#1e293b;border-radius:12px;border:1px solid #334155;overflow:hidden;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead><tr style="background:#0f172a;border-bottom:1px solid #334155;">
-          <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Name</th>
+          <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Username</th>
           <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Email</th>
           <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Role</th>
           <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Client</th>
@@ -36,7 +36,7 @@ function renderUsers(container){
         <tbody>
           ${safeUsers.map((u,i)=>`
             <tr style="border-bottom:1px solid #334155;background:${i%2===0?'#1e293b':'#1a2332'};">
-              <td style="padding:14px 20px;color:#f8fafc;font-weight:600;">${u.name}</td>
+              <td style="padding:14px 20px;color:#f8fafc;font-weight:600;">${u.username || u.name || '—'}</td>
               <td style="padding:14px 20px;color:#94a3b8;">${u.email}</td>
               <td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${u.role==='Master Admin'?'rgba(239,68,68,0.15)':u.role==='Client Admin'?'rgba(59,130,246,0.15)':'rgba(16,185,129,0.15)'};color:${u.role==='Master Admin'?'#ef4444':u.role==='Client Admin'?'#3b82f6':'#10b981'};">${u.role}</span></td>
               <td style="padding:14px 20px;color:#e2e8f0;">${u.client}</td>
@@ -107,8 +107,6 @@ function openUserModal(userRef){
       '<h3 style="margin:0 0 18px;color:#f8fafc;font-size:18px;">' + (isEdit ? 'Edit User' : 'Add User') + '</h3>' +
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Username</label>' +
       '<input id="user-username-input" value="' + clientEscape(user.username || user.email) + '"' + (isEdit ? ' readonly' : '') + ' style="' + fieldStyle + '" />' +
-      '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Full Name</label>' +
-      '<input id="user-name-input" value="' + clientEscape(user.name) + '" style="' + fieldStyle + '" />' +
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Email</label>' +
       '<input id="user-email-input" type="email" value="' + clientEscape(user.email) + '" style="' + fieldStyle + '" />' +
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Mobile</label>' +
@@ -129,7 +127,6 @@ function closeUserModal(){ const modal=document.getElementById('user-modal'); if
 
 async function saveUserModal(){
   const modal=document.getElementById('user-modal'); if(!modal) return;
-  const name=(document.getElementById('user-name-input')||{}).value ? document.getElementById('user-name-input').value.trim() : '';
   const userName=(document.getElementById('user-username-input')||{}).value ? document.getElementById('user-username-input').value.trim() : '';
   const email=(document.getElementById('user-email-input')||{}).value ? document.getElementById('user-email-input').value.trim() : '';
   const mobile=(document.getElementById('user-mobile-input')||{}).value ? document.getElementById('user-mobile-input').value.trim() : '';
@@ -139,10 +136,10 @@ async function saveUserModal(){
   const machineId=(document.getElementById('user-machine-input')||{}).value || '';
   const editIndex=modal.dataset.editIndex===''?-1:Number(modal.dataset.editIndex);
   const existing=editIndex>=0?userRecords[editIndex]:null;
-  if(!name || !userName){ alert('Username and Full Name are required'); return; }
+  if(!userName){ alert('Username is required'); return; }
   if(!existing && (!mobile || !password)){ alert('Mobile and Initial Password are required for a new user'); return; }
   if(role==='User' && !machineId){ alert('A User must be linked to a machine'); return; }
-  const payload={id:existing?existing.id:'',userName:userName,fullName:name,email:email,mobile:mobile,password:password,role:role,clientId:clientId || null,machineId:machineId || null,status:'active'};
+  const payload={id:existing?existing.id:'',userName:userName,email:email,mobile:mobile,password:password,role:role,clientId:clientId || null,machineId:machineId || null,status:'active'};
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{ if(existing) await window.BSF_API.updateUser(existing.id,payload); else await window.BSF_API.createUser(payload); }catch(error){ alert('Save failed: '+error.message); return; }
   }
@@ -157,7 +154,7 @@ async function deleteUserRecord(userRef){
   const user=userRecords[index];
   if(!user){ alert('User record was not found. Refresh the page and try again.'); return; }
   if(!user.id){ alert('User record is incomplete. Refresh the page and try again.'); return; }
-  if(!confirm('Permanently delete user "'+user.name+'" from the local database? This cannot be undone. The vendor account is not deleted.')) return;
+  if(!confirm('Permanently delete user "'+(user.username || user.name)+'" from the local database? This cannot be undone. The vendor account is not deleted.')) return;
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{ await window.BSF_API.deleteUser(user.id); }catch(error){ alert('Delete failed: '+error.message); return; }
   }
