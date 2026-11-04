@@ -153,6 +153,7 @@ async function deleteUserRecord(userRef){
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{ await window.BSF_API.deleteUser(user.id); }catch(error){ alert('Delete failed: '+error.message); return; }
   }
+  userRecords.splice(index, 1);
   if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
   renderUsers(document.getElementById('page-content'));
 }

@@ -577,7 +577,9 @@ async function bsfLoadDirectoryData(){
   }
   const userResult = results[index];
   if(userResult && userResult.status === 'fulfilled' && typeof userRecords !== 'undefined'){
-    const mapped = bsfList(userResult.value, 'users').map(bsfDirectoryUserRow);
+    const mapped = bsfList(userResult.value, 'users')
+      .map(bsfDirectoryUserRow)
+      .filter(function(user){ return user.statusValue !== 'disabled'; });
     userRecords.splice(0, userRecords.length, ...mapped);
   }
   return true;
