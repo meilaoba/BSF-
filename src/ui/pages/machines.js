@@ -149,7 +149,7 @@ function renderMachines(container){
   const clientScoped = isClientScopedRole();
   const clientDevices = scopedDevices();
   const filteredDevices = machineFilters.device
-    ? clientDevices.filter(dev=>dev.id===machineFilters.device)
+    ? clientDevices.filter(dev=>dev.id===machineFilters.device || dev.backendId===machineFilters.device)
     : clientDevices;
   const statusCounts = filteredDevices.reduce(function(counts, dev){
     counts[machineStatusValue(dev.status)] += 1;
@@ -185,7 +185,7 @@ function renderMachines(container){
         Machine
         <select ${isUserRole()?'disabled':''} onchange="machineFilters.device=this.value;renderMachines(document.getElementById('page-content'));" style="padding:10px 16px;background:${isUserRole()?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${isUserRole()?'#94a3b8':'#e2e8f0'};font-size:14px;min-width:220px;cursor:${isUserRole()?'not-allowed':'pointer'};">
           ${isUserRole() ? '' : '<option value="" ' + (machineFilters.device===''?'selected':'') + '>All Machines</option>'}
-          ${clientDevices.map(dev=>`<option value="${machinePreviewEscape(dev.id)}" ${machineFilters.device===dev.id?'selected':''}>${machinePreviewEscape(dev.id)} - ${machinePreviewEscape(dev.name)}</option>`).join('')}
+          ${clientDevices.map(dev=>{ const value=dev.backendId || dev.id; return `<option value="${machinePreviewEscape(value)}" ${String(machineFilters.device)===String(value)?'selected':''}>${machinePreviewEscape(dev.id)} - ${machinePreviewEscape(dev.name)}</option>`; }).join('')}
         </select>
       </label>
       <div style="display:flex;gap:8px;align-items:center;padding-bottom:11px;">

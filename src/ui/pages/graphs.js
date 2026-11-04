@@ -525,8 +525,10 @@ function renderGraphs(container){
   const clientOptions = clientScoped ? [] : ['<option value="">All Clients</option>'].concat(graphClientOptions().map(function(client){
     return '<option value="' + graphEscape(client) + '"' + (graphFilters.client === client ? ' selected' : '') + '>' + graphEscape(client) + '</option>';
   }));
-  const machineOptions = isUserRole() ? [] : ['<option value="">All Machines</option>'].concat(graphMachineOptions().map(function(device){
-    return '<option value="' + graphEscape(device.id) + '"' + (graphFilters.machine === device.id ? ' selected' : '') + '>' + graphEscape(device.id) + '</option>';
+  const machineDevices = graphMachineOptions();
+  const machineOptions = (isUserRole() ? [] : ['<option value="">All Machines</option>']).concat(machineDevices.map(function(device){
+    const value = device.backendId || device.id;
+    return '<option value="' + graphEscape(value) + '"' + (String(graphFilters.machine) === String(value) ? ' selected' : '') + '>' + graphEscape(device.id) + '</option>';
   }));
 
   const foodWaste = graphSeries('items');

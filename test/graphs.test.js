@@ -204,3 +204,9 @@ test('graph page uses the server analytics result rather than browser history fa
   assert.doesNotMatch(source, /BSF_LOAD_VENDOR_HISTORY/);
   assert.doesNotMatch(source, /rawDataRows/);
 });
+
+test('user graph machine filter keeps the assigned machine visible', () => {
+  assert.match(source, /device\.backendId \|\| device\.id/);
+  assert.match(source, /const machineDevices = graphMachineOptions\(\)/);
+  assert.match(source, /\(isUserRole\(\) \? \[\] : \['<option value="">All Machines<\/option>'\]\)\.concat\(machineDevices\.map/);
+});

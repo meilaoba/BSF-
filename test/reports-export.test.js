@@ -119,3 +119,9 @@ test('client-scoped reports hide the energy metric while master admin keeps it',
   assert.equal(vm.runInContext('reportShowsEnergy()', sandbox), false);
   sandbox.clientScoped = false;
 });
+
+test('report machine option uses the backend id and displays the machine name', () => {
+  assert.match(source, /const value = dev\.backendId \|\| dev\.id/);
+  assert.match(source, /const selectedDevice = scopedDevices\(\)\.find/);
+  assert.match(source, /const reportDevice = selectedDevice \? selectedDevice\.id/);
+});

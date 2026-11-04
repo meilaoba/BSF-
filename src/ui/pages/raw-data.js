@@ -299,7 +299,8 @@ function populateRawDataFilters(clients, clientDevices){
     const userRole = isUserRole();
     const options = userRole ? [] : [{ value:'', label:'All Machines', selected:rawDataFilters.device === '' }];
     clientDevices.forEach(function(dev){
-      options.push({ value:dev.id, label:dev.id, selected:rawDataFilters.device === dev.id });
+      const value = dev.backendId || dev.id;
+      options.push({ value:value, label:dev.id, selected:String(rawDataFilters.device) === String(value) });
     });
     bsfReplaceSelectOptions(deviceSelect, options);
     deviceSelect.disabled = userRole;

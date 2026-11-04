@@ -150,7 +150,8 @@ function reportFilterOptions(){
     return !reportFilters.client || dev.client === reportFilters.client;
   });
   const deviceOptions = (isUserRole() ? '' : '<option value="">All Devices</option>') + availableDevices.map(function(dev){
-    return '<option value="' + bsfEscapeHtml(dev.id) + '"' + (reportFilters.device===dev.id?' selected':'') + '>' + bsfEscapeHtml(dev.id) + '</option>';
+    const value = dev.backendId || dev.id;
+    return '<option value="' + bsfEscapeHtml(value) + '"' + (String(reportFilters.device)===String(value)?' selected':'') + '>' + bsfEscapeHtml(dev.id) + '</option>';
   }).join('');
   return { clientOptions:clientOptions, deviceOptions:deviceOptions };
 }
@@ -323,7 +324,10 @@ function renderReports(container, options){
   const metrics = reportMetricModel();
   const scopedDevice = scopedDevices()[0] || null;
   const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'All Clients');
-  const reportDevice = reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'All Devices');
+  const selectedDevice = scopedDevices().find(function(device){
+    return String(device.backendId || device.id) === String(reportFilters.device);
+  });
+  const reportDevice = selectedDevice ? selectedDevice.id : (reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'All Devices'));
   const reportPeriod = range.start + ' - ' + range.end;
   const reportOptions = reportFilterOptions();
   const title = reportDisplayTitle();

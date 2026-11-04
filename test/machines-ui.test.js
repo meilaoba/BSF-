@@ -52,3 +52,8 @@ test('machines metrics use one monthly graph request for daily and monthly cards
   assert.match(source, /getGraphs\(Object\.assign\(\{ period:'monthly' \}, identity\)\)/);
   assert.doesNotMatch(source, /getGraphs\(Object\.assign\(\{ period:'daily'/);
 });
+
+test('machine filters accept the backend id used by user scope', () => {
+  assert.match(source, /dev\.id===machineFilters\.device \|\| dev\.backendId===machineFilters\.device/);
+  assert.match(source, /const value=dev\.backendId \|\| dev\.id/);
+});

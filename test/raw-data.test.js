@@ -99,3 +99,8 @@ test('raw data uses a 60-day maximum history window', () => {
   assert.match(source, /rawDataAddDays\(rawDataFilters\.end, -59\)/);
   assert.match(source, /rawDataAddDays\(end, -59\)/);
 });
+
+test('raw data machine filter keeps the assigned user machine visible', () => {
+  assert.match(source, /const value = dev\.backendId \|\| dev\.id/);
+  assert.match(source, /selected:String\(rawDataFilters\.device\) === String\(value\)/);
+});
