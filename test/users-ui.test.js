@@ -73,3 +73,9 @@ test('filtered client user rows keep their original record ids for edit and dele
   assert.doesNotMatch(source, /onclick="deleteUserRecord\(\$\{i\}\)"/);
   assert.match(source, /userRecords\.splice\(index, 1\)/);
 });
+
+test('Add User opens the modal in create mode without a record id', () => {
+  assert.match(source, /const isAdd = userRef === undefined \|\| userRef === null \|\| userRef === ''/);
+  assert.match(source, /const index = isAdd\s*\? -1/);
+  assert.match(source, /if\(!isAdd && typeof userRef !== 'number' && !isEdit\)/);
+});

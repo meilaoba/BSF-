@@ -76,11 +76,14 @@ function syncUserMachineOptions(){
 }
 
 function openUserModal(userRef){
-  const index = typeof userRef === 'number'
-    ? userRef
-    : userRecords.findIndex(function(user){ return String(user.id) === String(userRef); });
+  const isAdd = userRef === undefined || userRef === null || userRef === '';
+  const index = isAdd
+    ? -1
+    : (typeof userRef === 'number'
+      ? userRef
+      : userRecords.findIndex(function(user){ return String(user.id) === String(userRef); }));
   const isEdit = index >= 0;
-  if(typeof userRef !== 'number' && !isEdit){
+  if(!isAdd && typeof userRef !== 'number' && !isEdit){
     alert('User record was not found. Refresh the page and try again.');
     return;
   }
