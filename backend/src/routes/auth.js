@@ -121,6 +121,18 @@ async function findExistingUser(vendorUserId) {
   return rows[0] || null;
 }
 
+async function findPendingVendorUser(vendorUserName) {
+  const { rows } = await query(
+    `SELECT * FROM users
+      WHERE vendor_user_id IS NULL
+        AND lower(vendor_username) = lower($1)
+      ORDER BY created_at ASC
+      LIMIT 1`,
+    [vendorUserName]
+  );
+  return rows[0] || null;
+}
+
 async function resolveUniqueContact(kind, value, existingUserId) {
   if (!value) return null;
   const column = kind === 'email' ? 'lower(email)' : 'phone';
@@ -132,7 +144,8 @@ async function resolveUniqueContact(kind, value, existingUserId) {
 }
 
 async function upsertVendorUser(vendorUser) {
-  const existing = await findExistingUser(vendorUser.id);
+  const existing = await findExistingUser(vendorUser.id)
+    || await findPendingVendorUser(vendorUser.userName);
   if (existing?.status === 'disabled') {
     throw new AppError('ACCOUNT_DISABLED', 'This account has been disabled', { status: 403 });
   }
@@ -154,34 +167,41 @@ async function upsertVendorUser(vendorUser) {
     },
   };
 
-  const { rows } = await query(
-    `INSERT INTO users
-       (vendor_user_id, vendor_type, vendor_username, email, phone, full_name, role,
-        status, last_login_at, metadata)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,'active',now(),$8)
-     ON CONFLICT (vendor_user_id) WHERE vendor_user_id IS NOT NULL
-     DO UPDATE SET
-       vendor_type = EXCLUDED.vendor_type,
-       vendor_username = EXCLUDED.vendor_username,
-       email = COALESCE(EXCLUDED.email, users.email),
-       phone = COALESCE(EXCLUDED.phone, users.phone),
-       full_name = EXCLUDED.full_name,
-       role = EXCLUDED.role,
-       status = 'active',
-       last_login_at = now(),
-       metadata = COALESCE(users.metadata, '{}'::jsonb) || EXCLUDED.metadata
-     RETURNING *`,
-    [
-      vendorUser.id,
-      vendorUser.type,
-      vendorUser.userName,
-      email,
-      phone,
-      vendorUser.userName,
-      vendorUser.role,
-      JSON.stringify(vendorMetadata),
-    ]
-  );
+  const params = [
+    vendorUser.id,
+    vendorUser.type,
+    vendorUser.userName,
+    email,
+    phone,
+    vendorUser.userName,
+    vendorUser.role,
+    JSON.stringify(vendorMetadata),
+  ];
+  const { rows } = existing
+    ? await query(
+      `UPDATE users
+          SET vendor_user_id = $1,
+              vendor_type = $2,
+              vendor_username = $3,
+              email = COALESCE($4, email),
+              phone = COALESCE($5, phone),
+              full_name = COALESCE($6, full_name),
+              role = $7,
+              status = 'active',
+              last_login_at = now(),
+              metadata = COALESCE(metadata, '{}'::jsonb) || $8::jsonb
+        WHERE id = $9
+        RETURNING *`,
+      [...params, existing.id]
+    )
+    : await query(
+      `INSERT INTO users
+         (vendor_user_id, vendor_type, vendor_username, email, phone, full_name, role,
+          status, last_login_at, metadata)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'active',now(),$8)
+       RETURNING *`,
+      params
+    );
   return rows[0];
 }
 

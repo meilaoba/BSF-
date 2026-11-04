@@ -111,6 +111,67 @@ function bsfOperatingStateFromCode(value){
   return null;
 }
 
+function bsfAccountStatusLabel(value){
+  const status = String(value || '').trim().toLowerCase();
+  if(status === 'active') return 'Active';
+  if(status === 'inactive') return 'Inactive';
+  if(status === 'maintenance') return 'Maintenance';
+  if(status === 'retired') return 'Retired';
+  return 'Unassigned';
+}
+
+function bsfDirectoryRoleValue(value){
+  const role = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if(role === 'master_admin' || role === 'admin') return 'master_admin';
+  if(role === 'client_admin') return 'client_admin';
+  return 'user';
+}
+
+function bsfDirectoryRoleLabel(value){
+  const role = bsfDirectoryRoleValue(value);
+  if(role === 'master_admin') return 'Master Admin';
+  if(role === 'client_admin') return 'Client Admin';
+  return 'User';
+}
+
+function bsfDirectoryStatusLabel(value){
+  const status = String(value || '').trim().toLowerCase();
+  if(status === 'invited') return 'Invited';
+  if(status === 'disabled' || status === 'inactive') return 'Disabled';
+  if(status === 'archived') return 'Archived';
+  return 'Active';
+}
+
+function bsfDirectoryClientRow(row){
+  return {
+    id:bsfField(row, ['id']) || '',
+    name:bsfField(row, ['name']) || '',
+    region:bsfField(row, ['region']) || '',
+    status:bsfDirectoryStatusLabel(bsfField(row, ['status'])),
+    statusValue:bsfField(row, ['status']) || 'active',
+    machineIds:[]
+  };
+}
+
+function bsfDirectoryUserRow(row){
+  const email = bsfField(row, ['email']) || '';
+  return {
+    id:bsfField(row, ['id']) || '',
+    name:bsfField(row, ['full_name', 'fullName', 'email', 'phone']) || '',
+    username:bsfField(row, ['vendor_username', 'username']) || email,
+    email:email,
+    phone:bsfField(row, ['phone']) || '',
+    role:bsfDirectoryRoleLabel(bsfField(row, ['role'])),
+    roleValue:bsfDirectoryRoleValue(bsfField(row, ['role'])),
+    client:bsfField(row, ['client_name', 'client']) || '',
+    clientId:bsfField(row, ['client_id', 'clientId']) || '',
+    machineId:bsfField(row, ['machine_id', 'machineId']) || '',
+    machineName:bsfField(row, ['machine_serial', 'machine_name']) || '',
+    status:bsfDirectoryStatusLabel(bsfField(row, ['status'])),
+    statusValue:bsfField(row, ['status']) || 'active'
+  };
+}
+
 function bsfTelemetryKilograms(data, rawNames, kgNames){
   const kgValue = bsfField(data, kgNames);
   if(kgValue !== undefined && kgValue !== null && kgValue !== '') return bsfNumber(kgValue);
@@ -219,6 +280,7 @@ function bsfDeviceFromMachine(machine, vendor, stored){
     signal:reading.signalPct,
     vendorDeviceType:bsfField(vendor, ['deviceType']) ?? '',
     vendorTemplateName:bsfField(vendor, ['templateName']) || '',
+    accountStatus:bsfAccountStatusLabel(bsfField(machine, ['status'])),
     vendorAddressCode:bsfField(vendor, ['addressCode']) || '',
     vendorOwnerName:bsfField(bsfField(vendor, ['owner']) || {}, ['userName']) || '',
     vendorPower:bsfNumber(bsfField(vendor, ['power'])),
@@ -277,6 +339,7 @@ function bsfDeviceFromVendor(vendor){
     signal:reading.signalPct,
     vendorDeviceType:bsfField(vendor, ['deviceType']) ?? '',
     vendorTemplateName:bsfField(vendor, ['templateName']) || '',
+    accountStatus:'Unassigned',
     vendorAddressCode:bsfField(vendor, ['addressCode']) || '',
     vendorOwnerName:bsfField(bsfField(vendor, ['owner']) || {}, ['userName']) || '',
     vendorPower:bsfNumber(bsfField(vendor, ['power'])),
@@ -488,6 +551,36 @@ async function bsfFetchSnapshot(limit){
     results[1].status === 'fulfilled' ? bsfList(results[1].value, 'devices') : [],
     results[2].status === 'fulfilled' ? bsfList(results[2].value, 'records') : []
   );
+}
+
+async function bsfLoadDirectoryData(){
+  const api = await bsfWaitForBackendApi();
+  if(!api) throw new Error('Backend API is unavailable');
+  const role = typeof currentRole === 'undefined' ? 'user' : currentRole;
+  const requests = [];
+  if(role === 'admin') requests.push(api.getClients({ limit:500, status:'active' }));
+  if(role === 'admin' || role === 'client-admin') requests.push(api.getUsers({ limit:500 }));
+  if(!requests.length) return false;
+  const results = await Promise.allSettled(requests);
+  let index = 0;
+  if(role === 'admin' && results[index]){
+    const result = results[index++];
+    if(result.status === 'fulfilled' && typeof clientRecords !== 'undefined'){
+      const mapped = bsfList(result.value, 'clients').map(bsfDirectoryClientRow);
+      mapped.forEach(function(client){
+        client.machineIds = devices
+          .filter(function(device){ return String(device.clientId || '') === String(client.id); })
+          .map(function(device){ return device.id; });
+      });
+      clientRecords.splice(0, clientRecords.length, ...mapped);
+    }
+  }
+  const userResult = results[index];
+  if(userResult && userResult.status === 'fulfilled' && typeof userRecords !== 'undefined'){
+    const mapped = bsfList(userResult.value, 'users').map(bsfDirectoryUserRow);
+    userRecords.splice(0, userRecords.length, ...mapped);
+  }
+  return true;
 }
 
 function bsfAlertsFromDevices(deviceList){
@@ -813,6 +906,9 @@ async function bsfLoadBackendData(limit){
   if(historyChanged && typeof currentPage !== 'undefined' && currentPage === 'raw-data' &&
     typeof rawDataPage !== 'undefined') rawDataPage = 1;
   devices.splice(0, devices.length, ...snapshot.devices);
+  await bsfLoadDirectoryData().catch(function(error){
+    console.warn('[BSF] directory data load failed:', error.message);
+  });
   rawDataRows.splice(0, rawDataRows.length, ...mergedRows);
   window.BSF_GRAPH_HISTORY_ROWS = mergedRows.slice();
   alerts.splice(0, alerts.length, ...bsfAlertsFromDevices(snapshot.devices));
@@ -828,6 +924,7 @@ window.BSF_LOAD_BACKEND_DATA = async function(limit){
     return false;
   }
 };
+window.BSF_LOAD_DIRECTORY_DATA = bsfLoadDirectoryData;
 
 window.BSF_LOAD_BACKEND_LATEST = async function(limit){
   try {
@@ -847,5 +944,9 @@ window.BSF_BACKEND_DATA = {
   rawSampleRow:bsfRawSampleRow,
   mergeRows:bsfMergeRows,
   appendRows:bsfAppendHistoryRows,
-  rowValueFingerprint:bsfRowValueFingerprint
+  rowValueFingerprint:bsfRowValueFingerprint,
+  directoryClientRow:bsfDirectoryClientRow,
+  directoryUserRow:bsfDirectoryUserRow,
+  directoryRoleValue:bsfDirectoryRoleValue,
+  directoryRoleLabel:bsfDirectoryRoleLabel
 };

@@ -133,6 +133,36 @@
   function put(path, data){ return request(path, { method:'PUT', data:data }); }
   function del(path, data){ return request(path, { method:'DELETE', data:data }); }
   function idPath(base, id, suffix){ return base + '/' + encodeURIComponent(id) + (suffix || ''); }
+  function remove(path, params){ return request(path, { method:'DELETE', params:params }); }
+  function directoryRole(value){
+    const role = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    if(role === 'master_admin' || role === 'admin') return 'master_admin';
+    if(role === 'client_admin') return 'client_admin';
+    return 'user';
+  }
+  function directoryStatus(value){
+    const status = String(value || '').trim().toLowerCase();
+    if(status === 'active' || status === 'invited' || status === 'disabled') return status;
+    if(status === 'inactive' || status === 'archived') return status;
+    return 'active';
+  }
+  function userPayload(data){
+    const value = data || {};
+    return {
+      ...(value.id ? { id:value.id } : {}),
+      fullName:value.fullName ?? value.name,
+      ...(value.userName ? { userName:value.userName } : {}),
+      email:value.email,
+      phone:value.phone ?? value.mobile,
+      mobile:value.mobile ?? value.phone,
+      ...(value.password ? { password:value.password } : {}),
+      role:directoryRole(value.role),
+      clientId:value.clientId || null,
+      machineId:value.machineId,
+      status:directoryStatus(value.status),
+      ...(value.metadata ? { metadata:value.metadata } : {})
+    };
+  }
 
   window.BSF_API = {
     request:request,
@@ -145,15 +175,15 @@
     changePassword:function(data){ return post('/auth/change-password', data); },
     getClients:function(params){ return get('/clients', params); },
     createClient:function(data){ return post('/clients', data); },
-    updateClient:function(id, data){ return put(idPath('/clients', id), data); },
-    deleteClient:function(id){ return del(idPath('/clients', id)); },
+    updateClient:function(id, data){ return put('/clients', Object.assign({}, data, { id:id })); },
+    deleteClient:function(id){ return remove('/clients', { id:id }); },
     getMachines:function(params){ return get('/machines', params); },
     getVendorDevices:function(params){ return get('/vendor-devices', params); },
     getVendorHistory:function(params){ return get('/vendor-devices/history', params); },
     getMachineMetrics:function(id, params){ return get(idPath('/machines', id, '/metrics'), params); },
-    updateMachine:function(id, data){ return put(idPath('/machines', id), data); },
-    deactivateMachine:function(id){ return post(idPath('/machines', id, '/deactivate'), {}); },
-    reactivateMachine:function(id){ return post(idPath('/machines', id, '/reactivate'), {}); },
+    updateMachine:function(id, data){ return put('/machines', Object.assign({}, data, { id:id })); },
+    deactivateMachine:function(id){ return put('/machines', { id:id, status:'inactive' }); },
+    reactivateMachine:function(id){ return put('/machines', { id:id, status:'active' }); },
     restartMachine:function(id){ return post(idPath('/devices', id, '/restart'), {}); },
     getLocations:function(params){ return get('/locations', params); },
     getGraphs:function(params){ return get('/graphs', params); },
@@ -173,9 +203,9 @@
     sendAlertNotification:function(data){ return post('/notifications/alert', data); },
     sendWhatsAppNotification:function(data){ return post('/notifications/whatsapp', data); },
     getUsers:function(params){ return get('/users', params); },
-    createUser:function(data){ return post('/users', data); },
-    updateUser:function(id, data){ return put(idPath('/users', id), data); },
-    deleteUser:function(id){ return del(idPath('/users', id)); },
+    createUser:function(data){ return post('/users', userPayload(data)); },
+    updateUser:function(id, data){ return put('/users', userPayload(Object.assign({}, data, { id:id }))); },
+    deleteUser:function(id){ return remove('/users', { id:id }); },
     getRoles:function(params){ return get('/roles', params); },
     createRole:function(data){ return post('/roles', data); },
     updateRole:function(id, data){ return put(idPath('/roles', id), data); },

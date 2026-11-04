@@ -115,3 +115,48 @@ test('vendor session expiry refreshes once and retries the original request', as
   assert.equal(requestCalls[1].options.headers['X-CSRF-Token'], 'csrf-token');
   assert.match(requestCalls[2].url, /\/environment-temperature\?date=2026-10-30$/);
 });
+
+test('directory writes use the backend collection routes and canonical user fields', async () => {
+  const { client, calls } = loadClient(async () => ({
+    ok: true,
+    json: async () => ({ ok: true, data: {} }),
+  }), 'bsf_csrf=csrf-token');
+
+  await client.updateClient('client-1', { name: 'Client A' });
+  await client.deleteClient('client-1');
+  await client.updateMachine('machine-1', { clientId: 'client-1' });
+  await client.createUser({
+    userName: 'ress',
+    name: 'User A',
+    email: 'user@example.com',
+    mobile: '1111111',
+    password: 'initial-password',
+    role: 'User',
+    clientId: 'client-1',
+    machineId: 'machine-1',
+    status: 'Active',
+  });
+  await client.deleteUser('user-1');
+
+  assert.equal(calls[0].url, '/api/v1/clients');
+  assert.equal(calls[0].options.method, 'PUT');
+  assert.deepEqual(JSON.parse(calls[0].options.body), { name: 'Client A', id: 'client-1' });
+  assert.equal(calls[1].url, '/api/v1/clients?id=client-1');
+  assert.equal(calls[1].options.method, 'DELETE');
+  assert.equal(calls[2].url, '/api/v1/machines');
+  assert.deepEqual(JSON.parse(calls[2].options.body), { clientId: 'client-1', id: 'machine-1' });
+  assert.equal(calls[3].url, '/api/v1/users');
+  assert.deepEqual(JSON.parse(calls[3].options.body), {
+    userName: 'ress',
+    fullName: 'User A',
+    email: 'user@example.com',
+    phone: '1111111',
+    mobile: '1111111',
+    password: 'initial-password',
+    role: 'user',
+    clientId: 'client-1',
+    machineId: 'machine-1',
+    status: 'active',
+  });
+  assert.equal(calls[4].url, '/api/v1/users?id=user-1');
+});

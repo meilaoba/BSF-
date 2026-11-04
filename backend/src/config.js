@@ -129,6 +129,7 @@ export const config = {
     required: bool('AUTH_REQUIRED', productionMode),
     vendor: {
       loginUrl: str('VENDOR_LOGIN_URL', 'https://iot.creekscomposter.com:8888/user/login'),
+      userAddUrl: str('VENDOR_USER_ADD_URL', 'https://iot.creekscomposter.com:8888/user/add'),
       deviceListUrl: str('VENDOR_DEVICE_LIST_URL', 'https://iot.creekscomposter.com:8888/emDevice/queryListData'),
       templateListUrl: str('VENDOR_TEMPLATE_LIST_URL', 'https://iot.creekscomposter.com:8888/emTemplate/list'),
       realtimeEnabled: bool('VENDOR_REALTIME_ENABLED', true),

@@ -20,6 +20,9 @@ import {
   requireString,
 } from '../lib/validate.js';
 import { requireApiKey } from '../middleware/auth.js';
+import { getVendorAccessToken } from '../middleware/session.js';
+import { addVendorUser } from '../providers/vendor-user.js';
+import { loadCollectorCredentials } from '../services/vendor-collector.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -31,6 +34,33 @@ function lastPathSegment(req, prefix) {
   const path = new URL(req.url, 'http://localhost').pathname.replace(/\/+$/, '');
   const rest = path.slice(prefix.length);
   return rest.split('/').filter(Boolean)[0] ?? null;
+}
+
+function requireUserManager(req) {
+  const role = req.auth?.user?.role;
+  if (role === 'master_admin' || role === 'client_admin') return;
+  requireApiKey(req);
+}
+
+function clientAdminClientId(req) {
+  if (req.auth?.user?.role !== 'client_admin') return null;
+  const clientId = req.auth.user.clientId;
+  if (!clientId) throw new ForbiddenError('Account is not linked to a client');
+  return clientId;
+}
+
+function assertClientAdminCanManageUser(req, user) {
+  const clientId = clientAdminClientId(req);
+  if (!clientId) return;
+  if (user.role !== 'user' || String(user.client_id || '') !== String(clientId)) {
+    throw new ForbiddenError();
+  }
+}
+
+async function vendorTokenForUserCreation(req) {
+  if (req.auth) return getVendorAccessToken(req.auth);
+  const collector = await loadCollectorCredentials();
+  return collector?.accessToken || null;
 }
 
 /**
@@ -419,7 +449,7 @@ export function registerDirectoryRoutes(router) {
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
     const { rows } = await query(
-      `SELECT u.id, u.email, u.phone, u.full_name, u.role, u.status,
+      `SELECT u.id, u.vendor_username, u.vendor_type, u.email, u.phone, u.full_name, u.role, u.status,
               u.client_id, u.machine_id, u.last_login_at, u.created_at, u.updated_at,
               c.name AS client_name, m.serial AS machine_serial, m.name AS machine_name
          FROM users u
@@ -434,12 +464,18 @@ export function registerDirectoryRoutes(router) {
   });
 
   router.post('/api/v1/users', async (req, res) => {
-    requireApiKey(req);
+    requireUserManager(req);
     const body = await readJsonBody(req);
 
-    const role = requireEnum(body.role ?? 'user', 'role', ['master_admin', 'client_admin', 'user']);
+    let role = requireEnum(body.role ?? 'user', 'role', ['master_admin', 'client_admin', 'user']);
     let clientId = optionalUuid(body.clientId, 'clientId');
     const machineId = optionalUuid(body.machineId, 'machineId');
+    const actorClientId = clientAdminClientId(req);
+    if (actorClientId) {
+      if (role !== 'user') throw new ForbiddenError();
+      if (clientId && String(clientId) !== String(actorClientId)) throw new ForbiddenError();
+      clientId = actorClientId;
+    }
 
     // A `user` is bound to exactly one machine and inherits that machine's client.
     if (role === 'user' && !machineId) {
@@ -448,27 +484,74 @@ export function registerDirectoryRoutes(router) {
     if (machineId) {
       const machine = await query('SELECT id, client_id FROM machines WHERE id = $1', [machineId]);
       if (!machine.rows[0]) throw new NotFoundError('Linked machine not found');
+      if (actorClientId && String(machine.rows[0].client_id || '') !== String(actorClientId)) {
+        throw new ForbiddenError();
+      }
       if (role === 'user') clientId = machine.rows[0].client_id;
     }
 
     const email = optionalEmail(body.email, 'email');
-    const phone = optionalPhone(body.phone, 'phone');
+    const userName = optionalString(body.userName, 'userName', { max: 200 });
+    const initialPassword = typeof body.password === 'string' ? body.password : null;
+    const mobile = optionalPhone(body.mobile ?? body.phone, 'mobile');
+    const createVendorAccount = Boolean(initialPassword);
+    if (createVendorAccount) {
+      if (role !== 'user') throw new ValidationError('Vendor registration is only available for User accounts');
+      if (!userName || !initialPassword || !mobile) {
+        throw new ValidationError('`userName`, `password` and `mobile` are required to create a vendor user');
+      }
+      const duplicate = await query(
+        `SELECT id FROM users
+          WHERE phone = $1
+             OR (vendor_user_id IS NULL AND lower(vendor_username) = lower($2))
+             OR ($3::text IS NOT NULL AND lower(email) = lower($3))
+          LIMIT 1`,
+        [mobile, userName, email]
+      );
+      if (duplicate.rows[0]) {
+        throw new ValidationError('A local user with this mobile number or vendor username already exists');
+      }
+    }
+    const phone = mobile || optionalPhone(body.phone, 'phone');
     if (!email && !phone) {
       throw new ValidationError('Supply at least an `email` or a `phone` number.');
     }
 
+    if (createVendorAccount) {
+      const token = await vendorTokenForUserCreation(req);
+      if (!token) {
+        throw new AppError('VENDOR_SESSION_EXPIRED', 'No vendor credential is available for user creation', {
+          status: 401,
+        });
+      }
+      await addVendorUser({
+        token,
+        userName,
+        password: initialPassword,
+        mobile,
+        userIcon: body.userIcon || '',
+        status: 1,
+      });
+    }
+
     const { rows } = await query(
-      `INSERT INTO users (email, phone, full_name, role, client_id, machine_id, status, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7,'invited'), $8)
-       RETURNING id, email, phone, full_name, role, status, client_id, machine_id, created_at`,
+      `INSERT INTO users
+         (vendor_username, vendor_type, email, phone, full_name, role, client_id, machine_id, status, metadata)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9,'invited'), $10)
+       RETURNING id, vendor_username, email, phone, full_name, role, status,
+                 client_id, machine_id, created_at`,
       [
+        userName,
+        createVendorAccount ? 3 : null,
         email,
         phone,
-        optionalDisplayText(body.fullName, 'fullName', { max: 200 }),
+        optionalDisplayText(body.fullName, 'fullName', { max: 200 }) || userName,
         role,
         clientId,
         machineId,
-        body.status ? requireEnum(body.status, 'status', ['active', 'invited', 'disabled']) : null,
+        createVendorAccount
+          ? 'active'
+          : (body.status ? requireEnum(body.status, 'status', ['active', 'invited', 'disabled']) : null),
         JSON.stringify(body.metadata ?? {}),
       ]
     );
@@ -478,24 +561,30 @@ export function registerDirectoryRoutes(router) {
       actorType: 'api',
       entityType: 'user',
       entityId: rows[0].id,
-      after: { role, email, machineId },
+      after: { role, email, phone, userName, machineId, vendorAccountCreated: createVendorAccount },
       ip: clientIp(req),
     });
     sendJson(res, 201, { ok: true, data: rows[0] });
   });
 
   router.put('/api/v1/users', async (req, res) => {
-    requireApiKey(req);
+    requireUserManager(req);
     const body = await readJsonBody(req);
     const userId = optionalUuid(body.id, 'id');
     if (!userId) throw new ValidationError('`id` is required');
 
     const before = await query('SELECT * FROM users WHERE id = $1', [userId]);
     if (!before.rows[0]) throw new NotFoundError('User not found');
+    assertClientAdminCanManageUser(req, before.rows[0]);
 
-    const role = body.role
+    let role = body.role
       ? requireEnum(body.role, 'role', ['master_admin', 'client_admin', 'user'])
       : before.rows[0].role;
+    const actorClientId = clientAdminClientId(req);
+    if (actorClientId) {
+      if (body.role && role !== 'user') throw new ForbiddenError();
+      role = 'user';
+    }
 
     let machineId = body.machineId === undefined
       ? before.rows[0].machine_id
@@ -504,11 +593,20 @@ export function registerDirectoryRoutes(router) {
     let clientId = body.clientId === undefined
       ? before.rows[0].client_id
       : optionalUuid(body.clientId, 'clientId');
+    if (actorClientId) {
+      if (body.clientId !== undefined && String(clientId || '') !== String(actorClientId)) {
+        throw new ForbiddenError();
+      }
+      clientId = actorClientId;
+    }
 
     if (role === 'user') {
       if (!machineId) throw new ValidationError('A `user` account must stay linked to a machine.');
       const machine = await query('SELECT client_id FROM machines WHERE id = $1', [machineId]);
       if (!machine.rows[0]) throw new NotFoundError('Linked machine not found');
+      if (actorClientId && String(machine.rows[0].client_id || '') !== String(actorClientId)) {
+        throw new ForbiddenError();
+      }
       clientId = machine.rows[0].client_id;
     } else {
       machineId = null;
@@ -524,7 +622,7 @@ export function registerDirectoryRoutes(router) {
               machine_id = $7,
               status = COALESCE($8, status)
         WHERE id = $1
-        RETURNING id, email, phone, full_name, role, status, client_id, machine_id, updated_at`,
+          RETURNING id, vendor_username, email, phone, full_name, role, status, client_id, machine_id, updated_at`,
       [
         userId,
         optionalEmail(body.email, 'email'),
@@ -550,10 +648,13 @@ export function registerDirectoryRoutes(router) {
   });
 
   router.delete('/api/v1/users', async (req, res) => {
-    requireApiKey(req);
+    requireUserManager(req);
     const userId = optionalUuid(q(req).get('id'), 'id');
     if (!userId) throw new ValidationError('`id` query parameter is required');
 
+    const before = await query('SELECT id, role, client_id FROM users WHERE id = $1', [userId]);
+    if (!before.rows[0]) throw new NotFoundError('User not found');
+    assertClientAdminCanManageUser(req, before.rows[0]);
     const { rows } = await query(
       `UPDATE users SET status = 'disabled' WHERE id = $1
        RETURNING id, email, phone, role, status`,

@@ -182,6 +182,27 @@ The API accepts `clientId` / `machineId` filters for Master Admin views. For
 Client Admin and User sessions, the backend overwrites those values from the
 authenticated principal; browser-supplied scope is never trusted.
 
+### Directory API contract
+
+Clients, Machines and Users use the same collection-style contract:
+
+```text
+GET    /api/v1/clients|machines|users
+POST   /api/v1/clients|machines|users
+PUT    /api/v1/clients|machines|users       id in JSON body
+DELETE /api/v1/clients|machines|users?id=…
+```
+
+User roles are sent as `master_admin`, `client_admin` or `user`; statuses are
+sent as `active`, `invited` or `disabled`. Client Admins may manage only
+ordinary `user` accounts linked to their own client and machines.
+
+Creating an ordinary User requires `userName`, `password` and `mobile`. The
+backend encrypts the initial password with the vendor's documented AES-CBC
+contract, calls `VENDOR_USER_ADD_URL`, and stores a pending local User. On the
+first vendor login, the returned `vendor_user_id` is attached by matching the
+vendor username instead of creating a duplicate User.
+
 ## Alert rule
 
 `POST /api/v1/alerts/temperature` with `{ machineSerial, temperatureC }`:

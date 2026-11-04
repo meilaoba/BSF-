@@ -10,6 +10,56 @@ const source = fs.readFileSync(path.join(root, 'src/ui/backend-data.js'), 'utf8'
 const sandbox = { window: {}, console };
 vm.runInNewContext(source, sandbox, { filename: 'backend-data.js' });
 const buildSnapshot = sandbox.window.BSF_BACKEND_DATA.buildSnapshot;
+const directoryClientRow = sandbox.window.BSF_BACKEND_DATA.directoryClientRow;
+const directoryUserRow = sandbox.window.BSF_BACKEND_DATA.directoryUserRow;
+
+test('normalizes directory rows into stable frontend fields', () => {
+  assert.deepEqual(JSON.parse(JSON.stringify(directoryClientRow({
+    id: 'client-1',
+    name: 'CIC Zero Carbon Park',
+    status: 'active',
+  }))), {
+    id: 'client-1',
+    name: 'CIC Zero Carbon Park',
+    region: '',
+    status: 'Active',
+    statusValue: 'active',
+    machineIds: [],
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(directoryUserRow({
+    id: 'user-1',
+    full_name: 'User A',
+    vendor_username: 'vendor-a',
+    email: 'user@example.com',
+    role: 'client_admin',
+    status: 'invited',
+    client_id: 'client-1',
+    machine_id: null,
+    client_name: 'CIC Zero Carbon Park',
+  }))), {
+    id: 'user-1',
+    name: 'User A',
+    username: 'vendor-a',
+    email: 'user@example.com',
+    phone: '',
+    role: 'Client Admin',
+    roleValue: 'client_admin',
+    client: 'CIC Zero Carbon Park',
+    clientId: 'client-1',
+    machineId: '',
+    machineName: '',
+    status: 'Invited',
+    statusValue: 'invited',
+  });
+});
+
+test('authenticated startup loads real clients and users from the backend', () => {
+  assert.match(source, /api\.getClients\(\{ limit:500, status:'active' \}\)/);
+  assert.match(source, /api\.getUsers\(\{ limit:500 \}\)/);
+  assert.match(source, /await bsfLoadDirectoryData\(\)/);
+  assert.match(source, /window\.BSF_LOAD_DIRECTORY_DATA = bsfLoadDirectoryData/);
+});
+
 
 test('maps vendor API values onto an explicitly linked machine without auto-assignment', () => {
   const snapshot = buildSnapshot(
