@@ -121,11 +121,11 @@ async function saveUserModal(){
   const role=(document.getElementById('user-role-input')||{}).value || 'User';
   const clientId=(document.getElementById('user-client-input')||{}).value || '';
   const machineId=(document.getElementById('user-machine-input')||{}).value || '';
+  const editIndex=modal.dataset.editIndex===''?-1:Number(modal.dataset.editIndex);
+  const existing=editIndex>=0?userRecords[editIndex]:null;
   if(!name || !userName){ alert('Username and Full Name are required'); return; }
   if(!existing && (!mobile || !password)){ alert('Mobile and Initial Password are required for a new user'); return; }
   if(role==='User' && !machineId){ alert('A User must be linked to a machine'); return; }
-  const editIndex=modal.dataset.editIndex===''?-1:Number(modal.dataset.editIndex);
-  const existing=editIndex>=0?userRecords[editIndex]:null;
   const payload={id:existing?existing.id:'',userName:userName,fullName:name,email:email,mobile:mobile,password:password,role:role,clientId:clientId || null,machineId:machineId || null,status:'active'};
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{ if(existing) await window.BSF_API.updateUser(existing.id,payload); else await window.BSF_API.createUser(payload); }catch(error){ alert('Save failed: '+error.message); return; }
