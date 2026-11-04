@@ -373,6 +373,19 @@ test('graphs read telemetry while reports use daily metrics and only supplementa
   assert.doesNotMatch(graphLoader, /loadVendorDailyStatSnapshots/);
 });
 
+test('reports use the server collector credential so tenant roles share vendor daily data', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const source = fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8');
+  const reportLoader = source.slice(
+    source.indexOf('async function loadReportAnalytics'),
+    source.indexOf('function forbiddenAccount')
+  );
+  assert.match(reportLoader, /loadCollectorCredentials\(\)/);
+  assert.match(reportLoader, /collector\?\.accessToken \|\| await getVendorAccessToken/);
+  assert.match(reportLoader, /refreshCollectorCredentials\(collector, token\)/);
+  assert.match(reportLoader, /reportCredential: \{ status: collector \? 'collector' : 'session' \}/);
+});
+
 test('report temperature/humidity supplements only reported device days and cannot replace daily metrics', () => {
   const rows = reportTemperatureHumidityRows([
     {

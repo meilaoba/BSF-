@@ -19,6 +19,10 @@ import { getEnvironmentTemperature } from '../services/environment-temperature.j
 import { getVendorAccessToken } from '../middleware/session.js';
 import { listAllVendorDevicesCached } from '../providers/vendor-devices.js';
 import { loadVendorDailyStatSnapshots } from '../services/vendor-daily-stats-analytics.js';
+import {
+  loadCollectorCredentials,
+  refreshCollectorCredentials,
+} from '../services/vendor-collector.js';
 
 const PERIODS = new Set(['daily', 'monthly', 'yearly']);
 const GROUPS = new Set(['hour', 'day', 'month']);
@@ -182,8 +186,16 @@ export function reportTemperatureHumidityRows(sampleRows, dailySnapshots) {
 }
 
 async function loadReportAnalytics(req, context, range) {
-  const token = await getVendorAccessToken(req.auth);
-  const vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
+  const collector = await loadCollectorCredentials();
+  let token = collector?.accessToken || await getVendorAccessToken(req.auth);
+  let vendorDevices;
+  try {
+    vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
+  } catch (error) {
+    if (error?.code !== 'VENDOR_SESSION_EXPIRED' || !collector?.refreshToken) throw error;
+    token = await refreshCollectorCredentials(collector, token);
+    vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
+  }
   const allowedIds = Array.isArray(context.deviceIds)
     ? new Set(context.deviceIds.map(String))
     : null;
@@ -219,6 +231,7 @@ async function loadReportAnalytics(req, context, range) {
     dataSources: {
       dailyStats: { status },
       telemetry: { status: supplementalRows.length ? 'temperature-humidity' : 'unavailable' },
+      reportCredential: { status: collector ? 'collector' : 'session' },
     },
   };
 }
