@@ -131,6 +131,45 @@ export function matchVendorDeviceId(records, selector) {
   return record ? String(record.id) : null;
 }
 
+async function resolveClientAdminDeviceScope(req, vendorAccountId, { clientRef, machineId }) {
+  let clientId = null;
+  if (clientRef) {
+    const ownedClient = await query(
+      `SELECT id
+         FROM clients
+        WHERE vendor_account_id = $1
+          AND (id::text = $2 OR lower(name) = lower($2))
+        LIMIT 1`,
+      [vendorAccountId, clientRef]
+    );
+    if (!ownedClient.rows[0]) throw forbiddenAccount();
+    clientId = ownedClient.rows[0].id;
+  }
+
+  if (clientId) {
+    return {
+      clientId,
+      deviceIds: await resolveVendorDeviceIds({ clientId, machineId, vendorAccountId }),
+    };
+  }
+
+  const localDeviceIds = await resolveVendorDeviceIds({ machineId, vendorAccountId });
+  if (machineId && Array.isArray(localDeviceIds) && localDeviceIds.length) {
+    return { clientId: null, deviceIds: localDeviceIds };
+  }
+
+  const token = await getVendorAccessToken(req.auth);
+  const pool = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
+  if (machineId) {
+    const matched = matchVendorDeviceId(pool.records, machineId);
+    return { clientId: null, deviceIds: matched ? [matched] : [] };
+  }
+  return {
+    clientId: null,
+    deviceIds: pool.records.map((device) => String(device.id)),
+  };
+}
+
 async function analyticsContext(req, url) {
   if (!req.auth) throw new AppError('UNAUTHORIZED', 'Authentication required', { status: 401 });
   const vendorAccountId = vendorAccountIdForSession(req.auth);
@@ -140,40 +179,17 @@ async function analyticsContext(req, url) {
   const requestedMachine = optionalString(url.searchParams.get('machineId') ?? url.searchParams.get('machine'), 'machineId', { max: 160 });
   const scope = analyticsScopeForUser(req.auth.user, { clientId: requestedClient, machineId: requestedMachine });
   const role = scope.role;
-  if (role === 'client_admin') {
-    scope.vendorAccountId = vendorAccountId;
-    if (scope.clientId) {
-      const ownedClient = await query(
-        `SELECT id
-           FROM clients
-          WHERE vendor_account_id = $1
-            AND (id::text = $2 OR lower(name) = lower($2))
-          LIMIT 1`,
-        [vendorAccountId, scope.clientId]
-      );
-      if (!ownedClient.rows[0]) throw forbiddenAccount();
-      scope.clientId = ownedClient.rows[0].id;
-    }
-  }
-  const effectiveClient = scope.clientId;
-  const effectiveMachine = scope.machineId;
+  if (role === 'client_admin') scope.vendorAccountId = vendorAccountId;
 
   const lookup = analyticsDeviceLookup(scope);
   let deviceIds = lookup ? await resolveVendorDeviceIds(lookup) : null;
-  if (role === 'client_admin' && !scope.clientId) {
-    if (lookup?.machineId && Array.isArray(deviceIds) && deviceIds.length) {
-      // A locally registered machine may arrive as its local UUID.
-    } else {
-      const token = await getVendorAccessToken(req.auth);
-      const pool = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
-      if (scope.machineId) {
-        const matched = matchVendorDeviceId(pool.records, scope.machineId);
-        if (!matched) throw forbiddenAccount();
-        deviceIds = [matched];
-      } else {
-        deviceIds = pool.records.map((device) => String(device.id));
-      }
-    }
+  if (role === 'client_admin') {
+    const resolved = await resolveClientAdminDeviceScope(req, vendorAccountId, {
+      clientRef: scope.clientId,
+      machineId: scope.machineId,
+    });
+    scope.clientId = resolved.clientId;
+    deviceIds = resolved.deviceIds;
   } else if (role === 'master_admin' && scope.machineId && Array.isArray(deviceIds) && !deviceIds.length) {
     const token = await getVendorAccessToken(req.auth);
     const pool = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
@@ -186,8 +202,8 @@ async function analyticsContext(req, url) {
     vendorAccountId,
     includeAllAccounts: role === 'master_admin',
     deviceIds,
-    clientId: effectiveClient,
-    machineId: effectiveMachine,
+    clientId: scope.clientId,
+    machineId: scope.machineId,
   };
 }
 
@@ -365,20 +381,8 @@ export function registerAnalyticsRoutes(router) {
     } else if (role === 'client_admin') {
       const machineId = optionalString(url.searchParams.get('machineId'), 'machineId', { max: 160 });
       const clientRef = optionalString(url.searchParams.get('clientId'), 'clientId', { max: 160 });
-      let clientId = null;
-      if (clientRef) {
-        const ownedClient = await query(
-          `SELECT id
-             FROM clients
-            WHERE vendor_account_id = $1
-              AND (id::text = $2 OR lower(name) = lower($2))
-            LIMIT 1`,
-          [vendorAccountId, clientRef]
-        );
-        if (!ownedClient.rows[0]) throw forbiddenAccount();
-        clientId = ownedClient.rows[0].id;
-      }
-      deviceIds = await resolveVendorDeviceIds({ clientId, machineId, vendorAccountId });
+      const resolved = await resolveClientAdminDeviceScope(req, vendorAccountId, { clientRef, machineId });
+      deviceIds = resolved.deviceIds;
     } else if (role === 'user') {
       if (!req.auth.user.machineId) throw forbiddenAccount();
       deviceIds = await resolveVendorDeviceIds({

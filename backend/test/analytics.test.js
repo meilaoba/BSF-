@@ -98,7 +98,7 @@ test('vendor device selectors accept vendor IDs and serial numbers', () => {
   assert.equal(matchVendorDeviceId(records, 'missing'), null);
   assert.match(
     fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8'),
-    /role === 'client_admin' && !scope\.clientId[\s\S]+listAllVendorDevicesCached/
+    /async function resolveClientAdminDeviceScope[\s\S]+listAllVendorDevicesCached/
   );
 });
 
@@ -324,7 +324,7 @@ test('raw sample route is scheduled-worker data and caps pages at 30', () => {
   const service = fs.readFileSync(path.join(root, 'src/services/vendor-analytics.js'), 'utf8');
   assert.match(service, /sample_source = 'worker'/);
   assert.match(source, /pageSize[^\n]+max: 30/);
-  assert.match(source, /deviceIds = await resolveVendorDeviceIds\(\{ clientId, machineId, vendorAccountId \}\)/);
+  assert.match(source, /const resolved = await resolveClientAdminDeviceScope\(req, vendorAccountId, \{ clientRef, machineId \}\)/);
   assert.match(source, /source: 'worker'/);
 });
 

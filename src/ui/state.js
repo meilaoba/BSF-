@@ -67,6 +67,10 @@ function isUserRole(){
   return currentRole === 'user';
 }
 
+function isMasterAdminRole(){
+  return currentRole === 'admin';
+}
+
 function resolveClientForCurrentUser(){
   const profile = window.BSF_USER_PROFILE || window.BSF_CURRENT_USER || {};
   if(profile.client) return profile.client;

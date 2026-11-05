@@ -207,7 +207,7 @@ async function exportRawDataCsv(){
       return;
     }
   }
-  const compact = isClientScopedRole();
+  const compact = !isMasterAdminRole();
   const head = compact
     ? ['Recorded At','Device','State','Weight(kg)','Temp(°C)','Hum(%)']
     : ['Recorded At','Device','State','Operating','Ferment','Run Time(min)','Weight(kg)','Total Add(kg)','Single Add(kg)','Total Discharge(kg)','Single Discharge(kg)','Discharge','Feed','Shredder','Mixing Motor','Fan','Zipper','Temp(°C)','Hot Plate Temp(°C)','Hum(%)','Energy(kWh)','Solar Power(kW)','CO2(ppm)','NO2(ppm)','H2S(ppm)','Signal'];
@@ -351,7 +351,7 @@ function renderRawData(container){
     ${rawDataHistoryStatusMarkup()}
     <div style="background:#1e293b;border-radius:12px;border:1px solid #334155;overflow:hidden;">
       <div style="overflow-x:auto;">
-        ${isClientScopedRole() ? rawDataCompactTableMarkup(displayRows) : rawDataFullTableMarkup(displayRows)}
+        ${isMasterAdminRole() ? rawDataFullTableMarkup(displayRows) : rawDataCompactTableMarkup(displayRows)}
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid #334155;">
         <span style="font-size:12px;color:#64748b;">${rowSummary}</span>

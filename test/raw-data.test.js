@@ -19,6 +19,7 @@ const sandbox = {
   },
   isClientScopedRole() { return true; },
   isUserRole() { return false; },
+  isMasterAdminRole() { return false; },
   scopedDevices() { return []; },
   scopedClientNames() { return []; },
   clientScopeBadge() { return ''; },
@@ -54,6 +55,7 @@ test('client and user raw tables render six columns instead of CSS-hiding extra 
   assert.match(html, />Hum\(%\)</);
   assert.doesNotMatch(html, />Operating</);
   assert.doesNotMatch(source, /nth-child/);
+  assert.match(source, /isMasterAdminRole\(\) \? rawDataFullTableMarkup/);
 });
 
 test('master admin keeps the full raw table', () => {
