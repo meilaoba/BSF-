@@ -122,6 +122,15 @@ export function analyticsScopeForUser(user, requested = {}) {
   };
 }
 
+export function matchVendorDeviceId(records, selector) {
+  const value = String(selector || '');
+  if (!value) return null;
+  const record = (Array.isArray(records) ? records : []).find((device) => (
+    String(device.id) === value || String(device.serialNumber || '') === value
+  ));
+  return record ? String(record.id) : null;
+}
+
 async function analyticsContext(req, url) {
   if (!req.auth) throw new AppError('UNAUTHORIZED', 'Authentication required', { status: 401 });
   const vendorAccountId = vendorAccountIdForSession(req.auth);
@@ -150,9 +159,27 @@ async function analyticsContext(req, url) {
   const effectiveMachine = scope.machineId;
 
   const lookup = analyticsDeviceLookup(scope);
-  const deviceIds = lookup
-    ? await resolveVendorDeviceIds(lookup)
-    : null;
+  let deviceIds = lookup ? await resolveVendorDeviceIds(lookup) : null;
+  if (role === 'client_admin' && !scope.clientId) {
+    if (lookup?.machineId && Array.isArray(deviceIds) && deviceIds.length) {
+      // A locally registered machine may arrive as its local UUID.
+    } else {
+      const token = await getVendorAccessToken(req.auth);
+      const pool = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
+      if (scope.machineId) {
+        const matched = matchVendorDeviceId(pool.records, scope.machineId);
+        if (!matched) throw forbiddenAccount();
+        deviceIds = [matched];
+      } else {
+        deviceIds = pool.records.map((device) => String(device.id));
+      }
+    }
+  } else if (role === 'master_admin' && scope.machineId && Array.isArray(deviceIds) && !deviceIds.length) {
+    const token = await getVendorAccessToken(req.auth);
+    const pool = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
+    const matched = matchVendorDeviceId(pool.records, scope.machineId);
+    deviceIds = matched ? [matched] : [];
+  }
 
   return {
     role,

@@ -14,6 +14,7 @@ const {
   analyticsDeviceLookup,
   analyticsScopeForUser,
   dateRangeForRequest,
+  matchVendorDeviceId,
   rawSampleRange,
   reportTemperatureHumidityRows,
 } = await import('../src/routes/analytics.js');
@@ -83,6 +84,21 @@ test('client admin can select among vendor-owned clients without a fixed client 
   assert.deepEqual(
     analyticsScopeForUser({ role: 'client_admin', vendorUserId: '51' }, {}),
     { role: 'client_admin', clientId: null, machineId: null }
+  );
+});
+
+test('vendor device selectors accept vendor IDs and serial numbers', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const records = [
+    { id: '501', serialNumber: '365701012631B883' },
+    { id: '502', serialNumber: '365701012631B884' },
+  ];
+  assert.equal(matchVendorDeviceId(records, '501'), '501');
+  assert.equal(matchVendorDeviceId(records, '365701012631B883'), '501');
+  assert.equal(matchVendorDeviceId(records, 'missing'), null);
+  assert.match(
+    fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8'),
+    /role === 'client_admin' && !scope\.clientId[\s\S]+listAllVendorDevicesCached/
   );
 });
 
