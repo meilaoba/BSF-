@@ -108,6 +108,18 @@ test('client admins may manage their own multi-client directory', () => {
   assert.doesNotThrow(() => authorizeApiPath({}, '/api/v1/clients/client-id', session));
 });
 
+test('only master admins may change device GHG settings', () => {
+  assert.throws(
+    () => authorizeApiPath({}, '/api/v1/settings/ghg', {
+      user:{ role:'client_admin', vendorUserId:'51' },
+    }),
+    (err) => err.code === 'FORBIDDEN'
+  );
+  assert.doesNotThrow(() => authorizeApiPath({}, '/api/v1/settings/ghg', {
+    user:{ role:'master_admin' },
+  }));
+});
+
 test('client IP ignores spoofed forwarding headers unless the proxy is trusted', () => {
   const original = config.trustProxy;
   const req = {

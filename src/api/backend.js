@@ -60,6 +60,7 @@ export function createBackendApi(options = {}) {
 
     getSystemSettings(params) { return http.get('/settings', params); },
     saveSystemSettings(data) { return http.put('/settings', data); },
+    saveGhgConfiguration(data) { return http.put('/settings/ghg', data); },
     getLogs(params) { return http.get('/logs', params); },
     getDataSources(params) { return http.get('/data-sources', params); },
     getAccount() { return http.get('/account'); },

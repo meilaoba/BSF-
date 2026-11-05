@@ -213,6 +213,7 @@
     deleteRole:function(id){ return del(idPath('/roles', id)); },
     getSystemSettings:function(params){ return get('/settings', params); },
     saveSystemSettings:function(data){ return put('/settings', data); },
+    saveGhgConfiguration:function(data){ return put('/settings/ghg', data); },
     getLogs:function(params){ return get('/logs', params); },
     getDataSources:function(params){ return get('/data-sources', params); },
     getAccount:function(){ return get('/account'); },

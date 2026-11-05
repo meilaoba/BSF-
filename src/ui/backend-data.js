@@ -258,6 +258,8 @@ function bsfDeviceFromMachine(machine, vendor, stored){
   const vendorTelemetry = bsfField(vendor, ['telemetry', 'data']) || {};
   const rawTelemetry = bsfTelemetryObject(vendorTelemetry);
   const liveTelemetry = Object.keys(rawTelemetry).length ? rawTelemetry : bsfTelemetryObject(stored || {});
+  const machineMetadata = bsfField(machine, ['metadata']) || {};
+  const ghgFormula = bsfField(machineMetadata, ['ghgFormula']) || {};
   const reading = bsfHasTelemetry(bsfReadTelemetry(vendorTelemetry))
     ? bsfReadTelemetry(vendorTelemetry)
     : bsfReadTelemetry(stored || {});
@@ -272,6 +274,8 @@ function bsfDeviceFromMachine(machine, vendor, stored){
     client:bsfField(machine, ['client_name']) || 'Unassigned',
     clientId:bsfField(machine, ['client_id']) || '',
     location:bsfField(machine, ['location']) || bsfField(vendor, ['addressCode']) || 'Unassigned',
+    region:bsfField(machine, ['region']) || '',
+    ghgFormula:ghgFormula,
     lat:bsfNumber(bsfField(machine, ['latitude'])) ?? bsfNumber(bsfField(vendor, ['latitude'])),
     lng:bsfNumber(bsfField(machine, ['longitude'])) ?? bsfNumber(bsfField(vendor, ['longitude'])),
     status:bsfResolveStatus(machine, vendor, reading, stored),
@@ -331,6 +335,8 @@ function bsfDeviceFromVendor(vendor){
     client:'Unassigned',
     clientId:'',
     location:bsfField(vendor, ['addressCode']) || 'Unassigned',
+    region:'',
+    ghgFormula:{},
     lat:bsfNumber(bsfField(vendor, ['latitude'])),
     lng:bsfNumber(bsfField(vendor, ['longitude'])),
     status:bsfResolveStatus(null, vendor, reading, null),

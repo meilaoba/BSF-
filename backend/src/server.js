@@ -20,6 +20,7 @@ import { registerVendorInformationRoutes } from './routes/vendor-information.js'
 import { registerDeviceDataRoutes } from './routes/device-data.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
+import { registerSettingsRoutes } from './routes/settings.js';
 import { hasValidApiKey } from './middleware/auth.js';
 import {
   applyDataScope,
@@ -38,6 +39,7 @@ registerVendorDeviceRoutes(router);
 registerVendorInformationRoutes(router);
 registerDeviceDataRoutes(router);
 registerAnalyticsRoutes(router);
+registerSettingsRoutes(router);
 
 const server = http.createServer(async (req, res) => {
   const started = Date.now();

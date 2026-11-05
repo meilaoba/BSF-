@@ -367,7 +367,7 @@ export async function loadVendorDeviceReportSettings({ deviceIds = null } = {}) 
   }
   const { rows } = await query(
     `SELECT m.vendor_device_id,
-            c.region AS client_region,
+            COALESCE(m.region, c.region) AS client_region,
             c.metadata->'ghgFormula' AS client_formula,
             m.metadata->'ghgFormula' AS machine_formula
        FROM machines m
@@ -425,7 +425,7 @@ export async function loadVendorTelemetrySummaries({
        bool_or(t.operating_status_code = 2) AS had_running,
        avg(t.cabin_temp_c) AS cabin_temp_c,
        avg(t.humidity_pct) AS humidity_pct,
-       c.region AS site_region,
+       COALESCE(m.region, c.region) AS site_region,
        c.metadata->'ghgFormula' AS client_formula,
        m.metadata->'ghgFormula' AS machine_formula,
        count(*)::bigint AS sample_count
@@ -433,7 +433,7 @@ export async function loadVendorTelemetrySummaries({
      LEFT JOIN machines m ON m.vendor_device_id = t.vendor_device_id
      LEFT JOIN clients c ON c.id = m.client_id
      WHERE ${where.join(' AND ')}
-     GROUP BY bucket_key, t.vendor_device_id, c.region,
+     GROUP BY bucket_key, t.vendor_device_id, COALESCE(m.region, c.region),
               m.metadata->'ghgFormula', c.metadata->'ghgFormula'
      ORDER BY bucket_key ASC, t.vendor_device_id ASC`,
     params

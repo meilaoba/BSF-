@@ -138,6 +138,13 @@ test('directory writes use the backend collection routes and canonical user fiel
     status: 'Active',
   });
   await client.deleteUser('user-1');
+  await client.saveGhgConfiguration({
+    machineId:'machine-1',
+    vendorDeviceId:'vendor-51',
+    region:'hk',
+    solar:false,
+    monthlyDistanceKm:140,
+  });
 
   assert.equal(calls[0].url, '/api/v1/clients');
   assert.equal(calls[0].options.method, 'PUT');
@@ -165,4 +172,12 @@ test('directory writes use the backend collection routes and canonical user fiel
     status: 'active',
   });
   assert.equal(calls[5].url, '/api/v1/users?id=user-1');
+  assert.equal(calls[6].url, '/api/v1/settings/ghg');
+  assert.deepEqual(JSON.parse(calls[6].options.body), {
+    machineId:'machine-1',
+    vendorDeviceId:'vendor-51',
+    region:'hk',
+    solar:false,
+    monthlyDistanceKm:140,
+  });
 });

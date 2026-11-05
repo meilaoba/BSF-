@@ -320,6 +320,11 @@ export function authorizeApiPath(req, pathname, session) {
     return;
   }
 
+  if (isPathOrChild('/api/v1/settings')) {
+    if (role !== 'master_admin') throw new ForbiddenError();
+    return;
+  }
+
   // These endpoints have no client/machine scope in the existing schema yet,
   // so fail closed rather than exposing global notification data to tenants.
   if (isPathOrChild('/api/v1/alert-thresholds')

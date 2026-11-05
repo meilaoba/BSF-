@@ -91,6 +91,7 @@ session; tenant roles are scoped by the backend.
 | GET/POST/PUT/DELETE | `/api/v1/machines` | machine records + client linkage |
 | GET/POST/PUT/DELETE | `/api/v1/users` | Master Admin / Client Admin |
 | PUT | `/api/v1/vendor-devices/assignment` | assign an owned vendor device to a Client |
+| PUT | `/api/v1/settings/ghg` | Master Admin device-level GHG configuration |
 | GET/POST/DELETE | `/api/v1/notification-recipients` | who receives alerts |
 | GET/PUT | `/api/v1/notification-preferences` | per-scope channel preferences |
 | GET/PUT | `/api/v1/alert-thresholds` | per-machine temperature limits |
