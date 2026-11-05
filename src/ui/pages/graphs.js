@@ -494,23 +494,6 @@ function graphSetEndDate(value){
   renderGraphs(document.getElementById('page-content'));
 }
 
-function applyGraphFilters(){
-  if(graphFilters.start && graphFilters.end && graphFilters.start > graphFilters.end){
-    graphFilterMessage = 'Start date cannot be later than end date.';
-    renderGraphs(document.getElementById('page-content'));
-    return;
-  }
-  if(graphPeriods.foodWaste === 'daily' && graphFilters.start !== graphFilters.end){
-    graphFilterMessage = 'Daily view requires the same start and end date.';
-    renderGraphs(document.getElementById('page-content'));
-    return;
-  }
-  graphFilterMessage = '';
-  graphApiData = null;
-  graphApiKey = '';
-  renderGraphs(document.getElementById('page-content'));
-}
-
 function retryGraphData(){
   graphApiData = null;
   graphApiKey = '';
@@ -522,11 +505,11 @@ function retryGraphData(){
 function renderGraphs(container){
   ensureGraphDateFilters();
   const clientScoped = isClientScopedRole();
-  const clientOptions = clientScoped ? [] : ['<option value="">All Clients</option>'].concat(graphClientOptions().map(function(client){
+  const clientOptions = clientScoped ? [] : ['<option value="">Select Customer</option>'].concat(graphClientOptions().map(function(client){
     return '<option value="' + graphEscape(client) + '"' + (graphFilters.client === client ? ' selected' : '') + '>' + graphEscape(client) + '</option>';
   }));
   const machineDevices = graphMachineOptions();
-  const machineOptions = (isUserRole() ? [] : ['<option value="">All Machines</option>']).concat(machineDevices.map(function(device){
+  const machineOptions = (isUserRole() ? [] : ['<option value="">Select machine</option>']).concat(machineDevices.map(function(device){
     const value = device.backendId || device.id;
     return '<option value="' + graphEscape(value) + '"' + (String(graphFilters.machine) === String(value) ? ' selected' : '') + '>' + graphEscape(device.id) + '</option>';
   }));
@@ -548,7 +531,6 @@ function renderGraphs(container){
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Start Date<input id="graph-start-date" type="date" value="${graphEscape(graphFilters.start)}" max="${graphEscape(graphFilters.end)}" onchange="graphSetStartDate(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" /></label>
       <span style="color:#64748b;display:flex;align-items:center;padding-bottom:11px;">to</span>
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">End Date<input id="graph-end-date" type="date" value="${graphEscape(graphFilters.end)}" min="${graphEscape(graphFilters.start)}" onchange="graphSetEndDate(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" /></label>
-      <button onclick="applyGraphFilters()" style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Apply</button>
     </div>
     <p id="graph-date-validation" role="alert" style="min-height:18px;margin:0 0 12px;color:${graphFilterMessage ? '#f59e0b' : 'transparent'};font-size:12px;">${graphEscape(graphFilterMessage || '.')}</p>
     ${graphStatusMarkup().replace('</p>', retry + '</p>')}

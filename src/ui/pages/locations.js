@@ -230,7 +230,7 @@ function renderLocations(container){
   const filteredDevices = filterLocationDevices(locationDevices, locationFilters);
   const clientFilterMarkup = clientScoped
     ? clientScopeBadge()
-    : '<select id="location-client-filter" onchange="setLocationFilter(\'client\',this.value)" style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option value=""' + (locationFilters.client ? '' : ' selected') + '>All Clients</option>' + clientNames.map(function(client){
+    : '<select id="location-client-filter" onchange="setLocationFilter(\'client\',this.value)" style="padding:10px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option value=""' + (locationFilters.client ? '' : ' selected') + '>Select Customer</option>' + clientNames.map(function(client){
         return '<option value="' + bsfEscapeHtml(client) + '"' + (locationFilters.client === client ? ' selected' : '') + '>' + bsfEscapeHtml(client) + '</option>';
       }).join('') + '</select>';
   const statusOptions = ['', 'running', 'standby', 'offline'].map(function(value){

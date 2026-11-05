@@ -73,6 +73,7 @@ process.env.VENDOR_DEVICE_LIST_URL = `http://127.0.0.1:${port}/emDevice/queryLis
 const {
   listAllVendorDevicesCached,
   listVendorDevices,
+  normalizeDeviceListResponse,
 } = await import('../src/providers/vendor-devices.js');
 
 test.after(() => new Promise((resolve) => vendor.close(resolve)));
@@ -127,6 +128,34 @@ test('invalid pagination fails before calling the vendor', async () => {
     (err) => err.code === 'VALIDATION_ERROR' && err.status === 422
   );
   assert.equal(lastRequest, previous);
+});
+
+test('a 50S vendor device response retains deviceName for daily statistics', () => {
+  const result = normalizeDeviceListResponse({
+    code: 200,
+    data: {
+      current: 1,
+      total: 2,
+      pages: 1,
+      pageSize: 10,
+      records: [
+        {
+          id: 50,
+          deviceName: 'CR-50S_QX2026059',
+          deviceSerialNum: '365701012616B60D',
+        },
+        {
+          id: 51,
+          deviceSerialNum: '365701012616B60E',
+        },
+      ],
+    },
+  });
+
+  assert.equal(result.records[0].id, '50');
+  assert.equal(result.records[0].deviceName, 'CR-50S_QX2026059');
+  assert.equal(result.records[0].serialNumber, '365701012616B60D');
+  assert.equal(result.records[1].deviceName, null);
 });
 
 test('cached all-device lookup reuses the vendor response for five minutes', async () => {

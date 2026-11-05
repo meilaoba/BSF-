@@ -14,7 +14,7 @@ function renderAlerts(container){
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">${isUserRole() ? 'Machine' : 'Machine Filter'}
         <select id="alert-machine-filter" onchange="alertFilters.machine=this.value;renderAlerts(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"></select>
       </label>
-      ${currentRole === 'admin' ? '<button onclick="openThresholdModal()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Edit the threshold of each machine</button>' : ''}<button ${alertFilters.machine ? '' : 'disabled title="Select a machine first"'} onclick="restartSelectedMachine()" style="padding:10px 20px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:${alertFilters.machine ? 'pointer' : 'not-allowed'};opacity:${alertFilters.machine ? '1' : '.55'};">Restart Machine</button>
+      ${currentRole === 'admin' ? '<button onclick="openThresholdModal()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Edit the threshold of each machine</button>' : ''}<button ${alertFilters.machine ? '' : 'disabled title="Select machine first"'} onclick="restartSelectedMachine()" style="padding:10px 20px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:${alertFilters.machine ? 'pointer' : 'not-allowed'};opacity:${alertFilters.machine ? '1' : '.55'};">Restart Machine</button>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 20px;background:#1e293b;border:1px solid #334155;border-left:3px solid #ef4444;border-radius:12px;margin-bottom:20px;flex-wrap:wrap;">
       <div><div style="font-size:14px;font-weight:600;color:#f8fafc;">Sample Alert Preview</div><div style="margin-top:5px;font-size:12px;color:#94a3b8;">Temperature High · Device exceeds 58 °C · Email / WhatsApp</div></div>
@@ -97,7 +97,7 @@ function populateAlertFilters(){
   const clients = scopedClientNames();
   if(clientSelect){
     const scoped = isClientScopedRole();
-    const options = scoped ? [] : [{ value:'', label:'All Clients', selected:alertFilters.client === '' }];
+    const options = scoped ? [] : [{ value:'', label:'Select Customer', selected:alertFilters.client === '' }];
     clients.forEach(function(client){
       options.push({ value:client, label:client, selected:alertFilters.client === client });
     });
@@ -110,7 +110,7 @@ function populateAlertFilters(){
   const list = scopedDevices();
   if(machineSelect){
     const userRole = isUserRole();
-    const options = userRole ? [] : [{ value:'', label:'All Machines', selected:alertFilters.machine === '' }];
+    const options = userRole ? [] : [{ value:'', label:'Select machine', selected:alertFilters.machine === '' }];
     list.forEach(function(dev){
       options.push({ value:dev.id, label:dev.id, selected:alertFilters.machine === dev.id });
     });

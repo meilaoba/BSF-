@@ -58,6 +58,14 @@ test('collector persists deviceOnline status with each telemetry sample', () => 
   assert.match(source, /finiteNumber\(device\.onlineCode\)/);
 });
 
+test('one collector tick saves each physical device only once across accounts', () => {
+  const source = fs.readFileSync(path.join(root, 'src/services/vendor-collector.js'), 'utf8');
+  assert.match(source, /async function collectAccount\(account, now, seenDeviceIds = null\)/);
+  assert.match(source, /const seenDeviceIds = new Set\(\)/);
+  assert.match(source, /collectAccount\(account, now, seenDeviceIds\)/);
+  assert.match(source, /devicesToSave\.forEach\(\(device\) => seenDeviceIds\.add\(String\(device\.id\)\)\)/);
+});
+
 test('collector applies the confirmed 30 minute vendor cadence', () => {
   assert.equal(collectorIntervalSeconds('master_admin', {}), 1800);
   assert.equal(collectorIntervalSeconds('client_admin', {}), 1800);

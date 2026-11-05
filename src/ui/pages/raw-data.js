@@ -94,17 +94,19 @@ async function rawDataLoadHistory(){
 
   try {
     const result = await window.BSF_LOAD_RAW_SAMPLES(rawDataRequestOptions(rawDataPage, RAW_DATA_PAGE_SIZE));
+    if(key !== rawDataHistoryViewKey()) return;
     rawDataHistoryRows = Array.isArray(result.rows) ? result.rows : [];
     rawDataHistoryTotal = Number(result.total) || 0;
     rawDataPage = Math.min(Math.max(Number(result.page) || rawDataPage, 1), Math.max(1, Math.ceil(rawDataHistoryTotal / RAW_DATA_PAGE_SIZE)));
     rawDataHistoryCompletedKey = rawDataHistoryViewKey();
   } catch(error) {
+    if(key !== rawDataHistoryViewKey()) return;
     rawDataHistoryRows = [];
     rawDataHistoryTotal = 0;
     rawDataHistoryError = error && error.message ? error.message : 'Saved samples could not be loaded';
     rawDataHistoryCompletedKey = key;
   } finally {
-    rawDataHistoryLoading = false;
+    if(key === rawDataHistoryViewKey()) rawDataHistoryLoading = false;
   }
 
   if(currentPage === 'raw-data'){
@@ -142,6 +144,9 @@ function rawDataSetStartDate(value){
   const input=document.getElementById('raw-start-filter');
   if(input) input.value=rawDataFilters.start;
   rawDataUpdateDateLimits();
+  rawDataPage=1;
+  rawDataHistoryCompletedKey='';
+  rawDataLoadHistory();
 }
 function rawDataSetEndDate(value){
   rawDataFilterMessage='';
@@ -153,22 +158,11 @@ function rawDataSetEndDate(value){
   const input=document.getElementById('raw-end-filter');
   if(input) input.value=rawDataFilters.end;
   rawDataUpdateDateLimits();
-}
-function rawDataFilteredRows(){ return rawDataHistoryRows.slice(); }
-function applyRawDataFilter(){
-  let start=(document.getElementById('raw-start-filter')||{}).value||'';
-  let end=(document.getElementById('raw-end-filter')||{}).value||'';
-  rawDataFilterMessage='';
-  if(start && end && start > end){
-    end=start;
-    rawDataFilterMessage='Start date cannot be after end date. End date has been adjusted.';
-  }
-  rawDataFilters.start=start;
-  rawDataFilters.end=end;
   rawDataPage=1;
   rawDataHistoryCompletedKey='';
   rawDataLoadHistory();
 }
+function rawDataFilteredRows(){ return rawDataHistoryRows.slice(); }
 function rawCsvCell(value){ return '"' + bsfSpreadsheetSafeText(value).replace(/"/g,'""') + '"'; }
 function rawDataDisplay(value){ return bsfEscapeHtml(value === undefined || value === null || value === '' ? '—' : value); }
 function rawDeviceStateStyle(state){
@@ -285,7 +279,7 @@ function populateRawDataFilters(clients, clientDevices){
   const deviceSelect = document.getElementById('raw-device-filter');
   if(clientSelect){
     const scoped = isClientScopedRole();
-    const options = scoped ? [] : [{ value:'', label:'All Clients', selected:rawDataFilters.client === '' }];
+    const options = scoped ? [] : [{ value:'', label:'Select Customer', selected:rawDataFilters.client === '' }];
     clients.forEach(function(client){
       options.push({ value:client, label:client, selected:rawDataFilters.client === client });
     });
@@ -297,7 +291,7 @@ function populateRawDataFilters(clients, clientDevices){
   }
   if(deviceSelect){
     const userRole = isUserRole();
-    const options = userRole ? [] : [{ value:'', label:'All Machines', selected:rawDataFilters.device === '' }];
+    const options = userRole ? [] : [{ value:'', label:'Select machine', selected:rawDataFilters.device === '' }];
     clientDevices.forEach(function(dev){
       const value = dev.backendId || dev.id;
       options.push({ value:value, label:dev.id, selected:String(rawDataFilters.device) === String(value) });
@@ -344,7 +338,6 @@ function renderRawData(container){
         End Date
         <input id="raw-end-filter" type="datetime-local" value="${rawDataFilters.end || ''}" min="${rawDataFilters.start || ''}" onchange="rawDataSetEndDate(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
       </label>
-      <button style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;" onclick="applyRawDataFilter()">Filter</button>
       <button style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;" onclick="exportRawDataCsv()">Export CSV</button>
     </div>
     <p id="raw-date-validation" style="min-height:18px;margin:0 0 12px;color:${rawDataFilterMessage ? '#f59e0b' : 'transparent'};font-size:12px;">${rawDataFilterMessage || '.'}</p>

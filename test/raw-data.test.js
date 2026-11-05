@@ -106,3 +106,15 @@ test('raw data machine filter keeps the assigned user machine visible', () => {
   assert.match(source, /const value = dev\.backendId \|\| dev\.id/);
   assert.match(source, /selected:String\(rawDataFilters\.device\) === String\(value\)/);
 });
+
+test('raw data date filters apply immediately without a duplicate Filter button', () => {
+  assert.doesNotMatch(source, /applyRawDataFilter/);
+  assert.doesNotMatch(source, />Filter<\/button>/);
+  assert.match(source, /function rawDataSetStartDate\(value\)[\s\S]*rawDataLoadHistory\(\)/);
+  assert.match(source, /function rawDataSetEndDate\(value\)[\s\S]*rawDataLoadHistory\(\)/);
+});
+
+test('raw data ignores a stale automatic date-filter response', () => {
+  assert.match(source, /if\(key !== rawDataHistoryViewKey\(\)\) return;/);
+  assert.match(source, /if\(key === rawDataHistoryViewKey\(\)\) rawDataHistoryLoading = false;/);
+});

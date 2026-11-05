@@ -113,7 +113,7 @@ async function sampleExists({ vendorAccountId, capturedAt }) {
   return rows.length > 0;
 }
 
-async function collectAccount(account, now) {
+async function collectAccount(account, now, seenDeviceIds = null) {
   const vendorAccountId = collectorVendorAccountId(account);
   if (!vendorAccountId) throw new Error('VENDOR_ACCOUNT_ID_MISSING');
   const intervalSeconds = collectorIntervalSeconds(account.role);
@@ -148,12 +148,21 @@ async function collectAccount(account, now) {
     }
   }
 
-  const saved = await recordVendorTelemetrySamples(devices, {
+  const devicesToSave = devices.filter((device) => {
+    const deviceId = String(device?.id || '').trim();
+    return deviceId && (!seenDeviceIds || !seenDeviceIds.has(deviceId));
+  });
+  if (!devicesToSave.length) return { skipped: false, saved: 0 };
+
+  const saved = await recordVendorTelemetrySamples(devicesToSave, {
     vendorAccountId,
     capturedAt,
     sampleSource: 'worker',
     sampleIntervalSeconds: intervalSeconds,
   });
+  if (seenDeviceIds) {
+    devicesToSave.forEach((device) => seenDeviceIds.add(String(device.id)));
+  }
   return { skipped: false, saved };
 }
 
@@ -163,9 +172,10 @@ export async function runCollectorTick({ now = new Date() } = {}) {
   }
   const accounts = await collectorAccounts();
   const summary = { accounts: accounts.length, collected: 0, skipped: 0, failed: 0 };
+  const seenDeviceIds = new Set();
   for (const account of accounts) {
     try {
-      const result = await collectAccount(account, now);
+      const result = await collectAccount(account, now, seenDeviceIds);
       if (result.skipped) summary.skipped += 1;
       else if (result.saved > 0) summary.collected += 1;
     } catch (error) {

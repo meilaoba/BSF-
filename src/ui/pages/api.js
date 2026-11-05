@@ -262,10 +262,10 @@ function populateApiFilters(){
   const machineSelect = document.getElementById('api-machine-filter');
   const clients = [...new Set(devices.map(function(dev){ return dev.client; }))];
   if(clientSelect){
-    clientSelect.innerHTML = '<option value="">All Clients</option>' + clients.map(function(client){ return '<option value="'+bsfEscapeHtml(client)+'"'+(apiFilters.client===client?' selected':'')+'>'+bsfEscapeHtml(client)+'</option>'; }).join('');
+    clientSelect.innerHTML = '<option value="">Select Customer</option>' + clients.map(function(client){ return '<option value="'+bsfEscapeHtml(client)+'"'+(apiFilters.client===client?' selected':'')+'>'+bsfEscapeHtml(client)+'</option>'; }).join('');
   }
   const list = apiFilters.client ? devices.filter(function(dev){ return dev.client===apiFilters.client; }) : devices;
   if(machineSelect){
-    machineSelect.innerHTML = '<option value="">All Machines</option>' + list.map(function(dev){ return '<option value="'+bsfEscapeHtml(dev.id)+'"'+(apiFilters.machine===dev.id?' selected':'')+'>'+bsfEscapeHtml(dev.id)+'</option>'; }).join('');
+    machineSelect.innerHTML = '<option value="">Select machine</option>' + list.map(function(dev){ return '<option value="'+bsfEscapeHtml(dev.id)+'"'+(apiFilters.machine===dev.id?' selected':'')+'>'+bsfEscapeHtml(dev.id)+'</option>'; }).join('');
   }
 }

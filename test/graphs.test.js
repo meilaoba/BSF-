@@ -208,5 +208,14 @@ test('graph page uses the server analytics result rather than browser history fa
 test('user graph machine filter keeps the assigned machine visible', () => {
   assert.match(source, /device\.backendId \|\| device\.id/);
   assert.match(source, /const machineDevices = graphMachineOptions\(\)/);
-  assert.match(source, /\(isUserRole\(\) \? \[\] : \['<option value="">All Machines<\/option>'\]\)\.concat\(machineDevices\.map/);
+  assert.match(source, /\(isUserRole\(\) \? \[\] : \['<option value="">Select machine<\/option>'\]\)\.concat\(machineDevices\.map/);
+});
+
+test('graph filters apply immediately without a duplicate Apply button', () => {
+  assert.doesNotMatch(source, /applyGraphFilters/);
+  assert.doesNotMatch(source, />Apply<\/button>/);
+  assert.match(source, /onchange="graphSetClient\(this\.value\)"/);
+  assert.match(source, /onchange="graphSetMachine\(this\.value\)"/);
+  assert.match(source, /onchange="graphSetStartDate\(this\.value\)"/);
+  assert.match(source, /onchange="graphSetEndDate\(this\.value\)"/);
 });

@@ -102,7 +102,7 @@ async function saveSystemSetting(type){
   if(type==='ghg') {
     ghgDevice = ghgSelectedDevice();
     if(!ghgDevice){
-      alert('Select a machine first');
+      alert('Select machine first');
       return;
     }
     const distanceText = (document.getElementById('ghg-monthly-distance') || {}).value || '';

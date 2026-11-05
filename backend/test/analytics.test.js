@@ -336,7 +336,17 @@ test('device-data reads the canonical vendor telemetry store and keeps legacy in
   assert.doesNotMatch(route, /listStoredTelemetry/);
   assert.match(route, /source: 'legacy-machine-telemetry'/);
   assert.match(service, /FROM vendor_device_telemetry vt/);
-  assert.match(service, /LEFT JOIN machines m ON m\.vendor_device_id = vt\.vendor_device_id/);
+  assert.match(service, /LEFT JOIN machines m ON m\.vendor_device_id = d\.vendor_device_id/);
+});
+
+test('raw and analytics telemetry collapse duplicate account rows by device and capture time', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const service = fs.readFileSync(path.join(root, 'src/services/vendor-analytics.js'), 'utf8');
+  assert.match(service, /SELECT DISTINCT ON \(vendor_device_id, captured_at\)/);
+  assert.match(service, /SELECT DISTINCT ON \(vt\.vendor_device_id, vt\.captured_at\)/);
+  assert.match(service, /SELECT DISTINCT ON \(t\.vendor_device_id, t\.captured_at\)/);
+  assert.match(service, /SELECT deduped\.\*, count\(\*\) OVER\(\)::bigint AS total_count/);
+  assert.match(service, /const whereSql = where\.length \? `WHERE \$\{where\.join\(' AND '\)\}` : ''/);
 });
 
 test('canonical telemetry history maps to the existing device-data response contract', () => {

@@ -155,15 +155,20 @@ export async function loadVendorTelemetrySamples({
   const offsetParam = params.length;
 
   const { rows } = await query(
-    `SELECT id, vendor_account_id, vendor_device_id, vendor_device_name,
-            captured_at, source_recorded_at, sample_interval_seconds,
-            cabin_temp_c, humidity_pct, real_time_weight_kg, operating_status_code, device_online_code,
-            daily_input_t, weekly_input_t, monthly_input_t, yearly_input_t,
-            daily_output_t, weekly_output_t, monthly_output_t, yearly_output_t,
-            telemetry, input_data, output_data,
-            count(*) OVER()::bigint AS total_count
-       FROM vendor_device_telemetry
-      WHERE ${where.join(' AND ')}
+    `WITH deduped AS (
+       SELECT DISTINCT ON (vendor_device_id, captured_at)
+              id, vendor_account_id, vendor_device_id, vendor_device_name,
+              captured_at, source_recorded_at, sample_interval_seconds,
+              cabin_temp_c, humidity_pct, real_time_weight_kg, operating_status_code, device_online_code,
+              daily_input_t, weekly_input_t, monthly_input_t, yearly_input_t,
+              daily_output_t, weekly_output_t, monthly_output_t, yearly_output_t,
+              telemetry, input_data, output_data
+         FROM vendor_device_telemetry
+        WHERE ${where.join(' AND ')}
+        ORDER BY vendor_device_id ASC, captured_at DESC, created_at DESC, id DESC
+     )
+     SELECT deduped.*, count(*) OVER()::bigint AS total_count
+       FROM deduped
       ORDER BY captured_at DESC, vendor_device_id ASC
       LIMIT $${limitParam} OFFSET $${offsetParam}`,
     params
@@ -266,19 +271,31 @@ export async function loadVendorTelemetryHistory({
     where.push(`vt.captured_at <= $${params.length}::timestamptz`);
   }
   params.push(Math.max(1, Math.min(Number(limit) || 200, 1000)));
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
   const { rows } = await query(
-    `SELECT vt.id, vt.vendor_device_id, vt.vendor_device_name, vt.captured_at,
-            vt.created_at, vt.cabin_temp_c, vt.humidity_pct, vt.real_time_weight_kg,
-            vt.operating_status_code, vt.device_online_code,
-            vt.daily_input_t, vt.weekly_input_t, vt.monthly_input_t, vt.yearly_input_t,
-            vt.daily_output_t, vt.weekly_output_t, vt.monthly_output_t, vt.yearly_output_t,
-            vt.telemetry, vt.input_data, vt.output_data,
+    `WITH deduped AS (
+       SELECT DISTINCT ON (vt.vendor_device_id, vt.captured_at)
+              vt.id, vt.vendor_account_id, vt.vendor_device_id, vt.vendor_device_name,
+              vt.captured_at, vt.created_at, vt.cabin_temp_c, vt.humidity_pct, vt.real_time_weight_kg,
+              vt.operating_status_code, vt.device_online_code,
+              vt.daily_input_t, vt.weekly_input_t, vt.monthly_input_t, vt.yearly_input_t,
+              vt.daily_output_t, vt.weekly_output_t, vt.monthly_output_t, vt.yearly_output_t,
+              vt.telemetry, vt.input_data, vt.output_data
+         FROM vendor_device_telemetry vt
+        ${whereSql}
+        ORDER BY vt.vendor_device_id ASC, vt.captured_at DESC, vt.created_at DESC, vt.id DESC
+     )
+     SELECT d.id, d.vendor_device_id, d.vendor_device_name, d.captured_at,
+            d.created_at, d.cabin_temp_c, d.humidity_pct, d.real_time_weight_kg,
+            d.operating_status_code, d.device_online_code,
+            d.daily_input_t, d.weekly_input_t, d.monthly_input_t, d.yearly_input_t,
+            d.daily_output_t, d.weekly_output_t, d.monthly_output_t, d.yearly_output_t,
+            d.telemetry, d.input_data, d.output_data,
             m.id AS machine_id, m.serial AS machine_serial
-       FROM vendor_device_telemetry vt
-       LEFT JOIN machines m ON m.vendor_device_id = vt.vendor_device_id
-      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-      ORDER BY vt.captured_at DESC, vt.vendor_device_id ASC
+       FROM deduped d
+       LEFT JOIN machines m ON m.vendor_device_id = d.vendor_device_id
+      ORDER BY d.captured_at DESC, d.vendor_device_id ASC
       LIMIT $${params.length}`,
     params
   );
@@ -414,7 +431,13 @@ export async function loadVendorTelemetrySummaries({
     : `to_char(t.captured_at AT TIME ZONE 'Asia/Hong_Kong', 'YYYY-MM-DD')`;
 
   const { rows } = await query(
-    `SELECT
+    `WITH deduped AS (
+       SELECT DISTINCT ON (t.vendor_device_id, t.captured_at) t.*
+         FROM vendor_device_telemetry t
+        WHERE ${where.join(' AND ')}
+        ORDER BY t.vendor_device_id ASC, t.captured_at DESC, t.created_at DESC, t.id DESC
+     )
+     SELECT
        ${bucketExpression} AS bucket_key,
        t.vendor_device_id,
        max(t.daily_input_t) AS daily_input_t,
@@ -429,10 +452,9 @@ export async function loadVendorTelemetrySummaries({
        c.metadata->'ghgFormula' AS client_formula,
        m.metadata->'ghgFormula' AS machine_formula,
        count(*)::bigint AS sample_count
-     FROM vendor_device_telemetry t
+     FROM deduped t
      LEFT JOIN machines m ON m.vendor_device_id = t.vendor_device_id
      LEFT JOIN clients c ON c.id = m.client_id
-     WHERE ${where.join(' AND ')}
      GROUP BY bucket_key, t.vendor_device_id, COALESCE(m.region, c.region),
               m.metadata->'ghgFormula', c.metadata->'ghgFormula'
      ORDER BY bucket_key ASC, t.vendor_device_id ASC`,

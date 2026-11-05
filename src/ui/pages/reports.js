@@ -143,13 +143,13 @@ function reportMonthOptions(){
 function reportFilterOptions(){
   const clients = scopedClientNames();
   const clientScoped = isClientScopedRole();
-  const clientOptions = (clientScoped ? '' : '<option value="">All Clients</option>') + clients.map(function(client){
+  const clientOptions = (clientScoped ? '' : '<option value="">Select Customer</option>') + clients.map(function(client){
     return '<option value="' + bsfEscapeHtml(client) + '"' + (reportFilters.client===client?' selected':'') + '>' + bsfEscapeHtml(client) + '</option>';
   }).join('');
   const availableDevices = scopedDevices().filter(function(dev){
     return !reportFilters.client || dev.client === reportFilters.client;
   });
-  const deviceOptions = (isUserRole() ? '' : '<option value="">All Devices</option>') + availableDevices.map(function(dev){
+  const deviceOptions = (isUserRole() ? '' : '<option value="">Select machine</option>') + availableDevices.map(function(dev){
     const value = dev.backendId || dev.id;
     return '<option value="' + bsfEscapeHtml(value) + '"' + (String(reportFilters.device)===String(value)?' selected':'') + '>' + bsfEscapeHtml(dev.id) + '</option>';
   }).join('');
@@ -323,11 +323,11 @@ function renderReports(container, options){
   const range = reportPeriodRange();
   const metrics = reportMetricModel();
   const scopedDevice = scopedDevices()[0] || null;
-  const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'All Clients');
+  const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'Select Customer');
   const selectedDevice = scopedDevices().find(function(device){
     return String(device.backendId || device.id) === String(reportFilters.device);
   });
-  const reportDevice = selectedDevice ? selectedDevice.id : (reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'All Devices'));
+  const reportDevice = selectedDevice ? selectedDevice.id : (reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'Select machine'));
   const reportPeriod = range.start + ' - ' + range.end;
   const reportOptions = reportFilterOptions();
   const title = reportDisplayTitle();
@@ -343,16 +343,6 @@ function renderReports(container, options){
     ? '<p id="report-data-status" role="status" style="margin:-16px 0 24px;text-align:center;color:' + vendorDataStatus.color + ';font-size:13px;">' + bsfEscapeHtml(vendorDataStatus.text) + '</p>'
     : '';
   const energyCard = reportShowsEnergy() ? card('Energy Consumed', energyValue, 'kWh', '#ef4444') : '';
-  const alertSummaryMarkup = isClientScopedRole() ? '' : `
-    <div style="margin-bottom:24px;">
-      <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">Alert Summary</h3>
-      <div style="background:#0f172a;border-radius:8px;padding:16px;border:1px solid #334155;">
-        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155;"><span style="color:#e2e8f0;font-size:13px;">Critical</span><span style="color:#64748b;font-weight:600;">—</span></div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155;"><span style="color:#e2e8f0;font-size:13px;">Warning</span><span style="color:#64748b;font-weight:600;">—</span></div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="color:#e2e8f0;font-size:13px;">Info</span><span style="color:#64748b;font-weight:600;">—</span></div>
-      </div>
-    </div>`;
-
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Report Generation</h2>
@@ -383,7 +373,6 @@ function renderReports(container, options){
         <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">${chartTitle}</h3>
         <div id="report-food-waste-chart" style="background:#0f172a;border-radius:8px;padding:12px;border:1px solid #334155;"></div>
       </div>
-      ${alertSummaryMarkup}
       <div style="display:flex;gap:12px;justify-content:center;margin-top:32px;padding-top:24px;border-top:1px solid #334155;">
         <button style="padding:12px 24px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;" onclick="exportReportPdf()">Export PDF</button>
         <button style="padding:12px 24px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;" onclick="exportReportExcel()">Export Excel</button>
@@ -409,8 +398,8 @@ function reportExportModel(){
   const range = reportPeriodRange();
   const metrics = reportMetricModel();
   const scopedDevice = scopedDevices()[0] || null;
-  const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'All Clients');
-  const reportDevice = reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'All Devices');
+  const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'Select Customer');
+  const reportDevice = reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'Select machine');
   const reportPeriod = range.start + ' - ' + range.end;
   const title = reportDisplayTitle();
   const chartTitle = reportFilters.period === 'monthly' ? 'Daily Food Waste In (KG)' : 'Monthly Food Waste In (KG)';

@@ -125,3 +125,8 @@ test('report machine option uses the backend id and displays the machine name', 
   assert.match(source, /const selectedDevice = scopedDevices\(\)\.find/);
   assert.match(source, /const reportDevice = selectedDevice \? selectedDevice\.id/);
 });
+
+test('report preview hides the obsolete Alert Summary section', () => {
+  assert.doesNotMatch(source, /Alert Summary/);
+  assert.doesNotMatch(source, /alertSummaryMarkup/);
+});
