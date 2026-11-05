@@ -80,6 +80,43 @@ function syncUserMachineOptions(){
   machineSelect.innerHTML = userMachineOptions(clientSelect.value, machineSelect.value);
 }
 
+function userMobileValidationMessage(value){
+  const raw=String(value || '').trim();
+  if(!raw) return '';
+  if(!/^\+?[\d\s]+$/.test(raw)){
+    return 'Phone number can only contain digits and spaces, with an optional leading +';
+  }
+  const normalized=raw.replace(/\s+/g, '');
+  const hasCountryCode=normalized.startsWith('+');
+  const digits=hasCountryCode ? normalized.slice(1) : normalized;
+  if(!/^\d{6,15}$/.test(digits)) return 'Phone number must be 6–15 digits';
+  if(/^(\d)\1+$/.test(digits)) return 'Please enter a real phone number, not repeated digits';
+  if(!hasCountryCode && !(digits.length===8 || (digits.length===11 && digits.startsWith('1')))){
+    return 'Cannot determine the country code; please include it, e.g. +852 or +86';
+  }
+  return '';
+}
+
+function setUserMobileValidationMessage(message){
+  const input=document.getElementById('user-mobile-input');
+  const error=document.getElementById('user-mobile-error');
+  if(input){
+    input.style.borderColor=message ? '#ef4444' : '#334155';
+    input.setAttribute('aria-invalid', message ? 'true' : 'false');
+  }
+  if(error){
+    error.textContent=message || '';
+    error.style.display=message ? 'block' : 'none';
+  }
+}
+
+function validateUserMobileField(){
+  const input=document.getElementById('user-mobile-input');
+  const message=userMobileValidationMessage(input ? input.value : '');
+  setUserMobileValidationMessage(message);
+  return !message;
+}
+
 function openUserModal(userRef){
   const isAdd = userRef === undefined || userRef === null || userRef === '';
   const index = isAdd
@@ -110,7 +147,11 @@ function openUserModal(userRef){
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Email</label>' +
       '<input id="user-email-input" type="email" value="' + clientEscape(user.email) + '" style="' + fieldStyle + '" />' +
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Mobile</label>' +
-      '<input id="user-mobile-input" type="tel" value="' + clientEscape(user.phone) + '" style="' + fieldStyle + '" />' +
+      '<div style="margin-bottom:14px;">' +
+        '<input id="user-mobile-input" type="tel" inputmode="tel" autocomplete="tel" value="' + clientEscape(user.phone) + '" oninput="validateUserMobileField()" aria-describedby="user-mobile-hint user-mobile-error" style="' + fieldStyle.replace('margin-bottom:14px;','margin-bottom:6px;') + '" />' +
+        '<div id="user-mobile-hint" style="color:#64748b;font-size:12px;line-height:1.45;">Please enter the account holder\'s mobile number, including the country code if applicable, e.g. +852 9123 4567</div>' +
+        '<div id="user-mobile-error" role="alert" aria-live="polite" style="display:none;color:#f87171;font-size:12px;line-height:1.45;margin-top:5px;"></div>' +
+      '</div>' +
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Initial Password</label>' +
       '<input id="user-password-input" type="password" placeholder="' + (isEdit ? 'Leave blank to keep current password' : 'Required for a new user') + '" style="' + fieldStyle + '" />' +
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Role</label>' +
@@ -137,7 +178,22 @@ async function saveUserModal(){
   const editIndex=modal.dataset.editIndex===''?-1:Number(modal.dataset.editIndex);
   const existing=editIndex>=0?userRecords[editIndex]:null;
   if(!userName){ alert('Username is required'); return; }
-  if(!existing && (!mobile || !password)){ alert('Mobile and Initial Password are required for a new user'); return; }
+  if(!existing && !mobile){
+    setUserMobileValidationMessage('Please enter a phone number');
+    const input=document.getElementById('user-mobile-input');
+    if(input && input.focus) input.focus();
+    return;
+  }
+  if(mobile){
+    const mobileError=userMobileValidationMessage(mobile);
+    if(mobileError){
+      setUserMobileValidationMessage(mobileError);
+      const input=document.getElementById('user-mobile-input');
+      if(input && input.focus) input.focus();
+      return;
+    }
+  }
+  if(!existing && !password){ alert('Initial Password is required for a new user'); return; }
   if(role==='User' && !machineId){ alert('A User must be linked to a machine'); return; }
   const payload={id:existing?existing.id:'',userName:userName,email:email,mobile:mobile,password:password,role:role,clientId:clientId || null,machineId:machineId || null,status:'active'};
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){

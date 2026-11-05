@@ -65,29 +65,38 @@ export function optionalEmail(value, field = 'email') {
 
 /**
  * Normalises a phone number into E.164 (the format WhatsApp Cloud API requires).
- * `defaultCountryCode` is used when the caller supplies a bare local number.
+ * A bare Hong Kong or mainland China number is inferred from its length and
+ * prefix; every other bare number must be supplied with a country code.
  */
-export function requirePhone(value, field = 'phone', defaultCountryCode = '+852') {
+export function requirePhone(value, field = 'phone') {
   const raw = requireString(value, field, { max: 32 });
-  const cleaned = raw.replace(/[\s()\-.]/g, '');
+  const cleaned = raw.replace(/\s+/g, '');
 
-  if (cleaned.startsWith('+')) {
-    const digits = cleaned.slice(1);
-    if (!/^\d{6,15}$/.test(digits)) {
-      throw new ValidationError(`\`${field}\` is not a valid E.164 phone number`, { field });
-    }
-    return `+${digits}`;
+  if (!/^\+?\d{6,15}$/.test(cleaned)) {
+    throw new ValidationError(
+      `\`${field}\` must contain only digits with an optional leading + and 6 to 15 digits`,
+      { field }
+    );
   }
 
-  if (!/^\d{6,15}$/.test(cleaned)) {
-    throw new ValidationError(`\`${field}\` is not a valid phone number`, { field });
+  const digits = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned;
+  if (/^(\d)\1+$/.test(digits)) {
+    throw new ValidationError(`\`${field}\` must be a real phone number, not repeated digits`, { field });
   }
-  return `${defaultCountryCode}${cleaned.replace(/^0+/, '')}`;
+
+  if (cleaned.startsWith('+')) return `+${digits}`;
+  if (digits.length === 8) return `+852${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+86${digits}`;
+
+  throw new ValidationError(
+    `\`${field}\` requires a country code when its region cannot be inferred`,
+    { field }
+  );
 }
 
-export function optionalPhone(value, field = 'phone', defaultCountryCode = '+852') {
+export function optionalPhone(value, field = 'phone') {
   if (value === undefined || value === null || value === '') return null;
-  return requirePhone(value, field, defaultCountryCode);
+  return requirePhone(value, field);
 }
 
 export function optionalUuid(value, field) {

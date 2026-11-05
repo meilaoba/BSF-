@@ -15,7 +15,7 @@ test('Add User save submits a vendor user without a frontend exception', async (
   const values = {
     'user-username-input':'TT',
     'user-email-input':'3310103205@qq.com',
-    'user-mobile-input':'1783773595',
+    'user-mobile-input':'+852 9123 4567',
     'user-password-input':'password',
     'user-role-input':'User',
     'user-client-input':'client-1',
@@ -54,13 +54,89 @@ test('Add User save submits a vendor user without a frontend exception', async (
     id:'',
     userName:'TT',
     email:'3310103205@qq.com',
-    mobile:'1783773595',
+    mobile:'+852 9123 4567',
     password:'password',
     role:'User',
     clientId:'client-1',
     machineId:'machine-1',
     status:'active',
   });
+});
+
+test('Add User validates a placeholder mobile inline before calling the backend', async () => {
+  let createCalls = 0;
+  const error = { textContent:'', style:{} };
+  const input = {
+    value:'1111111',
+    style:{},
+    setAttribute(name, value){ this[name] = String(value); },
+    focus(){ this.focused = true; },
+  };
+  const values = {
+    'user-username-input':'TT',
+    'user-email-input':'user@example.com',
+    'user-password-input':'password',
+    'user-role-input':'User',
+    'user-client-input':'client-1',
+    'user-machine-input':'machine-1',
+  };
+  const modal = { dataset:{ editIndex:'' }, remove(){} };
+  const sandbox = {
+    console,
+    window:{
+      BSF_API_CONFIG:{ enabled:true },
+      BSF_API:{
+        async createUser(){ createCalls += 1; },
+        async updateUser(){ throw new Error('unexpected update'); },
+      },
+    },
+    document:{
+      getElementById(id){
+        if(id === 'user-modal') return modal;
+        if(id === 'user-mobile-input') return input;
+        if(id === 'user-mobile-error') return error;
+        if(id === 'page-content') return { innerHTML:'' };
+        return Object.prototype.hasOwnProperty.call(values, id) ? { value:values[id] } : null;
+      },
+    },
+    alert(){ throw new Error('invalid mobile should use inline validation'); },
+    currentClient:'',
+    isClientScopedRole(){ return true; },
+    clientEscape(value){ return String(value ?? ''); },
+    bsfEscapeHtml(value){ return String(value ?? ''); },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox, { filename:'users.js' });
+
+  await vm.runInContext('saveUserModal()', sandbox);
+
+  assert.equal(createCalls, 0);
+  assert.equal(error.textContent, 'Please enter a real phone number, not repeated digits');
+  assert.equal(error.style.display, 'block');
+  assert.equal(input['aria-invalid'], 'true');
+  assert.equal(input.focused, true);
+});
+
+test('mobile field contains the requested helper and immediate validation', () => {
+  assert.match(source, /Please enter the account holder\\'s mobile number, including the country code if applicable, e\.g\. \+852 9123 4567/);
+  assert.match(source, /oninput="validateUserMobileField\(\)"/);
+  assert.match(source, /digits\.length===8/);
+  assert.match(source, /digits\.length===11 && digits\.startsWith\('1'\)/);
+});
+
+test('frontend mobile validation matches the backend acceptance cases', () => {
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox, { filename:'users.js' });
+  const validate = (value) => vm.runInContext(`userMobileValidationMessage(${JSON.stringify(value)})`, sandbox);
+
+  assert.equal(validate('12345'), 'Phone number must be 6–15 digits');
+  assert.equal(validate('+86abc'), 'Phone number can only contain digits and spaces, with an optional leading +');
+  assert.equal(validate('1111111'), 'Please enter a real phone number, not repeated digits');
+  assert.equal(validate('1234567890'), 'Cannot determine the country code; please include it, e.g. +852 or +86');
+  assert.equal(validate('91234567'), '');
+  assert.equal(validate('13812345678'), '');
+  assert.equal(validate('+8613812345678'), '');
 });
 
 test('filtered client user rows keep their original record ids for edit and delete', () => {
