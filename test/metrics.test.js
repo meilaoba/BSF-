@@ -12,6 +12,7 @@ import {
   fertilizerKg,
   ghgReducedKg,
   hongKongDateKey,
+  humidityPercent,
   machineCarbonKg,
   periodRange,
   regionalEnergyFactor,
@@ -55,6 +56,15 @@ test('applies the confirmed GHG, fertilizer and standby energy formulas', () => 
   close(machineCarbonKg(2, 'non-hk', 1, CIC_FORMULA), 0.74 + CIC_DAILY_TRANSPORT);
   close(ghgReducedKg(10, 2, 'hk', 1, CIC_FORMULA), 10 * 1.5 - 2 * 0.71 - CIC_DAILY_TRANSPORT);
   close(ghgReducedKg(10, 2, 'non-hk', 1, CIC_FORMULA), 10 * 1.5 - 2 * 0.37 - CIC_DAILY_TRANSPORT);
+});
+
+test('normalizes fractional and percentage humidity without exceeding 100 percent', () => {
+  assert.equal(humidityPercent(0.2, { humidityScale: 100 }), 20);
+  assert.equal(humidityPercent(0.5, { humidityScale: 100 }), 50);
+  assert.equal(humidityPercent(50, { humidityScale: 100 }), 50);
+  assert.equal(humidityPercent(100, { humidityScale: 100 }), 100);
+  assert.equal(humidityPercent(120, { humidityScale: 100 }), null);
+  assert.equal(humidityPercent(-1, { humidityScale: 100 }), null);
 });
 
 test('transport formula annualizes the site monthly distance with fixed fuel constants', () => {

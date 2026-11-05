@@ -133,6 +133,37 @@ test('maps confirmed deviceOnline codes and humidity display scale', () => {
   sandbox.window.BSF_RUNTIME_CONFIG = {};
 });
 
+test('keeps percent humidity unchanged while converting fractional humidity', () => {
+  sandbox.window.BSF_RUNTIME_CONFIG = { humidityScale: 100 };
+  const snapshot = buildSnapshot([], [
+    {
+      id: 'vendor-percent',
+      serialNumber: 'PERCENT-50',
+      deviceName: 'Percent Humidity',
+      onlineCode: 2,
+      telemetry: { Humidity: 50 }
+    },
+    {
+      id: 'vendor-fraction',
+      serialNumber: 'FRACTION-50',
+      deviceName: 'Fraction Humidity',
+      onlineCode: 2,
+      telemetry: { Humidity: 0.5 }
+    },
+    {
+      id: 'vendor-invalid',
+      serialNumber: 'INVALID-HUMIDITY',
+      deviceName: 'Invalid Humidity',
+      onlineCode: 2,
+      telemetry: { Humidity: 120 }
+    }
+  ], []);
+  assert.equal(snapshot.devices.find((device) => device.id === 'PERCENT-50').humidity, 50);
+  assert.equal(snapshot.devices.find((device) => device.id === 'FRACTION-50').humidity, 50);
+  assert.equal(snapshot.devices.find((device) => device.id === 'INVALID-HUMIDITY').humidity, '—');
+  sandbox.window.BSF_RUNTIME_CONFIG = {};
+});
+
 test('unknown device states fall back to offline instead of creating an online state', () => {
   assert.equal(sandbox.bsfStatusFromDeviceState(9), 'offline');
   assert.equal(

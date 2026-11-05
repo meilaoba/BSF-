@@ -38,6 +38,13 @@ function formulaBoolean(formula, key) {
   return value === true || value === 'true' || value === 1 || value === '1';
 }
 
+export function humidityPercent(value, formula = {}) {
+  const humidity = finiteNumber(value);
+  if (humidity === null || humidity < 0 || humidity > 100) return null;
+  const scale = formulaNumber(formula, 'humidityScale');
+  return scale > 1 && humidity <= 1 ? humidity * scale : humidity;
+}
+
 export function asDate(value) {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value;
   if (value === undefined || value === null || value === '') return null;
@@ -235,10 +242,7 @@ function normalizeSnapshotRow(row, formula = {}) {
     capturedAt,
     deviceId: String(row.deviceId ?? row.vendorDeviceId ?? row.vendor_device_id ?? 'unknown'),
     cabinTempC: finiteNumber(row.cabinTempC ?? row.cabin_temp_c),
-    humidityPct: (() => {
-      const humidity = finiteNumber(row.humidityPct ?? row.humidity_pct);
-      return humidity === null ? null : humidity * formulaNumber(formula, 'humidityScale');
-    })(),
+    humidityPct: humidityPercent(row.humidityPct ?? row.humidity_pct, formula),
     operatingStatusCode: finiteNumber(row.operatingStatusCode ?? row.operating_status_code),
     dailyInputT: finiteNumber(row.dailyInputT ?? row.daily_input_t),
     monthlyInputT: finiteNumber(row.monthlyInputT ?? row.monthly_input_t),

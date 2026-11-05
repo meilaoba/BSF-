@@ -184,7 +184,9 @@ function bsfHumidityPercent(value){
   if(number === null) return null;
   const configured = window.BSF_RUNTIME_CONFIG && Number(window.BSF_RUNTIME_CONFIG.humidityScale);
   const scale = Number.isFinite(configured) && configured > 0 ? configured : 1;
-  return number * scale;
+  if(number < 0 || number > 100) return null;
+  if(scale > 1 && number <= 1) return number * scale;
+  return number;
 }
 
 function bsfReadTelemetry(data){
@@ -623,7 +625,7 @@ function bsfHistoryRow(item, device, groupBy){
   const recordedAt = bsfDate(rawRecordedAt);
   if(!recordedAt) return null;
   const temperature = bsfNumber(bsfField(item, ['temperature', 'CabinTemp', 'cabinTemp']));
-  const humidity = bsfNumber(bsfField(item, ['humidity', 'Humidity']));
+  const humidity = bsfHumidityPercent(bsfField(item, ['humidity', 'Humidity']));
   return {
     recordedAt:bsfFormatTime(recordedAt),
     receivedAtSeconds:bsfEpochSeconds(recordedAt),
