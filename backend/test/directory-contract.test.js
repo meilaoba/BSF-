@@ -14,7 +14,9 @@ const updateEnd = source.indexOf("router.delete('/api/v1/clients'", updateStart)
 const updateClientBlock = source.slice(updateStart, updateEnd);
 
 test('client creation SQL and parameter list stay aligned', () => {
-  assert.match(createClientBlock, /VALUES \(\$1,\$2,\$3,\$4,\$5,\$6,\$7\)/);
+  assert.match(createClientBlock, /VALUES \(\$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8\)/);
+  assert.match(createClientBlock, /vendor_account_id/);
+  assert.match(createClientBlock, /clientAdminVendorAccountId\(req\)/);
   assert.doesNotMatch(createClientBlock, /vendorDeviceId/);
 });
 
@@ -27,19 +29,27 @@ test('client updates can persist site GHG formula overrides', () => {
   assert.match(updateClientBlock, /JSON\.stringify\(metadata\)/);
 });
 
-test('client admins can manage only ordinary users inside their own client', () => {
+test('client admins manage ordinary users only inside their vendor-owned clients', () => {
   const userStart = source.indexOf("router.post('/api/v1/users'");
   const userEnd = source.indexOf("router.get('/api/v1/notification-recipients'", userStart);
   const block = source.slice(userStart, userEnd);
   assert.match(block, /requireUserManager\(req\)/);
-  assert.match(block, /if \(actorClientId\) \{/);
+  assert.match(block, /const actorVendorAccountId = clientAdminVendorAccountId\(req\)/);
   assert.match(block, /if \(role !== 'user'\) throw new ForbiddenError\(\)/);
-  assert.match(block, /String\(clientId\) !== String\(actorClientId\)/);
-  assert.match(block, /assertClientAdminCanManageUser\(req, before\.rows\[0\]\)/);
-  assert.match(block, /String\(machine\.rows\[0\]\.client_id \|\| ''\) !== String\(actorClientId\)/);
+  assert.match(block, /await assertClientAdminCanManageUser\(req, before\.rows\[0\]\)/);
+  assert.match(block, /machine\.rows\[0\]\.vendor_account_id/);
+  assert.match(block, /machine\.rows\[0\]\.client_vendor_account_id/);
   assert.match(block, /await addVendorUser\(/);
   assert.match(block, /vendor_username, vendor_type/);
   assert.match(block, /requireUserRole\(body\.role \?\? 'user'\)/);
+});
+
+test('vendor client admins only list clients owned by their vendor account', () => {
+  const getStart = source.indexOf("router.get('/api/v1/clients'");
+  const getEnd = source.indexOf("router.post('/api/v1/clients'", getStart);
+  const block = source.slice(getStart, getEnd);
+  assert.match(block, /c\.vendor_account_id = \$\$\{params\.length\}/);
+  assert.match(block, /clientAdminVendorAccountId\(req\)/);
 });
 
 test('user role input accepts frontend display labels without weakening the enum', () => {

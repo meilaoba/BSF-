@@ -54,7 +54,7 @@ test('normalizes directory rows into stable frontend fields', () => {
 });
 
 test('authenticated startup loads real clients and users from the backend', () => {
-  assert.match(source, /api\.getClients\(\{ limit:500, status:'active' \}\)/);
+  assert.match(source, /role === 'admin' \|\| role === 'client-admin'.*api\.getClients/);
   assert.match(source, /api\.getUsers\(\{ limit:500 \}\)/);
   assert.match(source, /await bsfLoadDirectoryData\(\)/);
   assert.match(source, /window\.BSF_LOAD_DIRECTORY_DATA = bsfLoadDirectoryData/);

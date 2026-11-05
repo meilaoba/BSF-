@@ -72,24 +72,24 @@ test('master admin may request a client or machine scope', () => {
   );
 });
 
-test('client admin cannot replace their client but may filter inside it', () => {
+test('client admin can select among vendor-owned clients without a fixed client binding', () => {
   assert.deepEqual(
     analyticsScopeForUser(
-      { role: 'client_admin', clientId: 'trusted-client' },
-      { clientId: 'forged-client', machineId: 'machine-a' }
+      { role: 'client_admin', vendorUserId: '51' },
+      { clientId: 'client-a', machineId: 'machine-a' }
     ),
-    { role: 'client_admin', clientId: 'trusted-client', machineId: 'machine-a' }
+    { role: 'client_admin', clientId: 'client-a', machineId: 'machine-a' }
   );
-  assert.throws(
-    () => analyticsScopeForUser({ role: 'client_admin', clientId: null }, {}),
-    (error) => error.code === 'VENDOR_ACCOUNT_SCOPE_REQUIRED'
+  assert.deepEqual(
+    analyticsScopeForUser({ role: 'client_admin', vendorUserId: '51' }, {}),
+    { role: 'client_admin', clientId: null, machineId: null }
   );
 });
 
 test('device lookup keeps client admin and user machine filters inside their trusted scope', () => {
   assert.deepEqual(
     analyticsDeviceLookup({ role: 'client_admin', clientId: 'trusted-client', machineId: 'machine-a' }),
-    { clientId: 'trusted-client', machineId: 'machine-a' }
+    { clientId: 'trusted-client', machineId: 'machine-a', vendorAccountId: null }
   );
   assert.deepEqual(
     analyticsDeviceLookup({ role: 'user', clientId: 'trusted-client', machineId: 'trusted-machine' }),
@@ -308,7 +308,7 @@ test('raw sample route is scheduled-worker data and caps pages at 30', () => {
   const service = fs.readFileSync(path.join(root, 'src/services/vendor-analytics.js'), 'utf8');
   assert.match(service, /sample_source = 'worker'/);
   assert.match(source, /pageSize[^\n]+max: 30/);
-  assert.match(source, /if \(!req\.auth\.user\.clientId\) throw forbiddenAccount\(\)/);
+  assert.match(source, /deviceIds = await resolveVendorDeviceIds\(\{ clientId, machineId, vendorAccountId \}\)/);
   assert.match(source, /source: 'worker'/);
 });
 

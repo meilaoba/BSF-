@@ -38,7 +38,8 @@
 4. `/api/v1/device-data`、`/api/v1/raw-data-samples`、Machines、Graphs 和
    Reports 统一读取 `vendor_device_telemetry`；`/api/v1/vendor-devices/history`
    只提供厂家历史温湿度曲线。
-5. Master Admin 每 3 分钟、Client Admin / User 每 10 分钟读取一次最新记录。
+5. Master Admin 每 3 分钟、Client Admin / User 每 10 分钟读取一次最新记录；
+   Client Admin 的可见范围由厂家账号设备池和其 Client 归属共同决定。
 6. 最新记录追加到本地角色隔离缓存，按设备与上报时间去重，不覆盖旧历史。
 7. 页面使用同一份后端遥测数据渲染 Machines、Locations、Graphs、Raw Data
    和 Reports。

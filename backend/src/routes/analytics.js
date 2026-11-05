@@ -1,4 +1,5 @@
 import { AppError, ValidationError } from '../lib/errors.js';
+import { query } from '../db.js';
 import { sendOk } from '../lib/http.js';
 import { optionalInt, optionalString } from '../lib/validate.js';
 import { config } from '../config.js';
@@ -91,9 +92,11 @@ export function analyticsDeviceLookup(scope) {
       : null;
   }
   if (scope.role === 'client_admin') {
-    return scope.clientId
-      ? { clientId: scope.clientId, machineId: scope.machineId || null }
-      : null;
+    return {
+      clientId: scope.clientId || null,
+      machineId: scope.machineId || null,
+      vendorAccountId: scope.vendorAccountId || null,
+    };
   }
   return null;
 }
@@ -101,8 +104,11 @@ export function analyticsDeviceLookup(scope) {
 export function analyticsScopeForUser(user, requested = {}) {
   const role = user?.role;
   if (role === 'client_admin') {
-    if (!user.clientId) throw forbiddenAccount();
-    return { role, clientId: user.clientId, machineId: requested.machineId || null };
+    return {
+      role,
+      clientId: requested.clientId || null,
+      machineId: requested.machineId || null,
+    };
   }
   if (role === 'user') {
     if (!user.machineId) throw forbiddenAccount();
@@ -125,6 +131,21 @@ async function analyticsContext(req, url) {
   const requestedMachine = optionalString(url.searchParams.get('machineId') ?? url.searchParams.get('machine'), 'machineId', { max: 160 });
   const scope = analyticsScopeForUser(req.auth.user, { clientId: requestedClient, machineId: requestedMachine });
   const role = scope.role;
+  if (role === 'client_admin') {
+    scope.vendorAccountId = vendorAccountId;
+    if (scope.clientId) {
+      const ownedClient = await query(
+        `SELECT id
+           FROM clients
+          WHERE vendor_account_id = $1
+            AND (id::text = $2 OR lower(name) = lower($2))
+          LIMIT 1`,
+        [vendorAccountId, scope.clientId]
+      );
+      if (!ownedClient.rows[0]) throw forbiddenAccount();
+      scope.clientId = ownedClient.rows[0].id;
+    }
+  }
   const effectiveClient = scope.clientId;
   const effectiveMachine = scope.machineId;
 
@@ -315,9 +336,22 @@ export function registerAnalyticsRoutes(router) {
       const machineId = optionalString(url.searchParams.get('machineId'), 'machineId', { max: 160 });
       deviceIds = clientId || machineId ? await resolveVendorDeviceIds({ clientId, machineId }) : null;
     } else if (role === 'client_admin') {
-      if (!req.auth.user.clientId) throw forbiddenAccount();
       const machineId = optionalString(url.searchParams.get('machineId'), 'machineId', { max: 160 });
-      deviceIds = await resolveVendorDeviceIds({ clientId: req.auth.user.clientId, machineId });
+      const clientRef = optionalString(url.searchParams.get('clientId'), 'clientId', { max: 160 });
+      let clientId = null;
+      if (clientRef) {
+        const ownedClient = await query(
+          `SELECT id
+             FROM clients
+            WHERE vendor_account_id = $1
+              AND (id::text = $2 OR lower(name) = lower($2))
+            LIMIT 1`,
+          [vendorAccountId, clientRef]
+        );
+        if (!ownedClient.rows[0]) throw forbiddenAccount();
+        clientId = ownedClient.rows[0].id;
+      }
+      deviceIds = await resolveVendorDeviceIds({ clientId, machineId, vendorAccountId });
     } else if (role === 'user') {
       if (!req.auth.user.machineId) throw forbiddenAccount();
       deviceIds = await resolveVendorDeviceIds({

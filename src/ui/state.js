@@ -60,7 +60,7 @@ function bsfSafeImageUrl(value){
 }
 
 function isClientScopedRole(){
-  return currentRole === 'client-admin' || currentRole === 'user';
+  return currentRole === 'user';
 }
 
 function isUserRole(){
@@ -111,8 +111,14 @@ function refreshMachineScope(){
 
 function scopedClientNames(){
   refreshClientScope();
-  const names = Array.from(new Set(devices.map(function(device){ return device.client || 'Unassigned'; })));
-  return isClientScopedRole() ? names.filter(function(name){ return name === currentClient; }) : names;
+  const names = new Set(devices.map(function(device){ return device.client || 'Unassigned'; }));
+  if(typeof clientRecords !== 'undefined' && Array.isArray(clientRecords)){
+    clientRecords.forEach(function(client){
+      if(client.name) names.add(client.name);
+    });
+  }
+  const list = Array.from(names);
+  return isClientScopedRole() ? list.filter(function(name){ return name === currentClient; }) : list;
 }
 
 function scopedDevices(){
@@ -124,6 +130,16 @@ function scopedDevices(){
 }
 
 function applyClientScopeToState(){
+  if(currentRole === 'client-admin'){
+    machineFilters.client = ''; machineFilters.device = '';
+    locationFilters.client = '';
+    rawDataFilters.client = ''; rawDataFilters.device = '';
+    alertFilters.client = ''; alertFilters.machine = '';
+    apiFilters.client = ''; apiFilters.machine = '';
+    if(typeof graphFilters !== 'undefined'){ graphFilters.client = ''; graphFilters.machine = ''; }
+    if(typeof reportFilters !== 'undefined'){ reportFilters.client = ''; reportFilters.device = ''; }
+    return;
+  }
   const client = refreshClientScope();
   if(!isClientScopedRole()) return;
   const machineId = refreshMachineScope();
@@ -168,6 +184,7 @@ const navItems = {
     {id:'graphs',label:'Graphs',icon:'📊'},
     {id:'raw-data',label:'Raw Data',icon:'📋'},
     {id:'reports',label:'Report Generation',icon:'📄'},
+    {id:'clients',label:'Clients',icon:'🏢'},
     {id:'users',label:'Users',icon:'👥'}
   ],
   user: [

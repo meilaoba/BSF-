@@ -119,6 +119,7 @@ POST /api/v1/alerts/temperature           温度阈值判断 + 分发告警
 GET|POST|PUT|DELETE /api/v1/clients       客户
 GET|POST|PUT|DELETE /api/v1/machines      设备（含客户关联）
 GET  /api/v1/vendor-devices              厂家设备列表（只读代理）
+PUT  /api/v1/vendor-devices/assignment   将自有设备分配给 Client
 POST /api/v1/vendor-devices/sync         同步厂家设备资料（不自动绑定）
 GET  /api/v1/device-data                 历史遥测查询
 POST /api/v1/device-data/ingest          遥测写入
@@ -131,15 +132,16 @@ GET  /api/v1/audit-logs                   操作审计
 ### 权限与数据可见范围
 
 - **Master Admin**：可见全部客户与设备。
-- **Client Admin**：只属于一个客户，界面不提供 Client 筛选。
+- **Client Admin**：按厂家账号拥有自己的设备池，可管理多个 Client，并只能把
+  自己设备池中的设备分配给自己的 Client。
 - **User**：只关联一台设备。
 
-后端接受 `clientId` / `machineId` 参数实现范围过滤；Client Admin 与 User
-登录后，后端会用会话中的客户/设备范围覆盖浏览器传入的参数。
+后端接受 `clientId` / `machineId` 参数实现范围过滤；Client Admin 的请求会
+进一步限制到其 `vendor_account_id` 所属 Client 和设备，User 仍固定到单一设备。
 
 Clients、Machines 和 Users 统一使用集合式接口：`GET/POST` 使用集合地址，
 `PUT` 在 JSON 请求体中传 `id`，`DELETE` 使用 `?id=...`。前端统一转换角色和
-状态枚举，Client Admin 只能管理自己客户下的普通 User。
+状态枚举，Client Admin 只能管理自己 Client 下的普通 User。
 
 新增普通 User 会调用厂家 `/user/add`。用户名、手机号用于本地记录，初始密码
 只用于厂家接口的 AES-CBC 加密请求，不保存到 BSF 数据库或日志。用户首次厂家

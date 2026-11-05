@@ -62,7 +62,6 @@ test('tenant roles cannot bypass master-only routes with a trailing slash', () =
 test('tenant roles cannot bypass master-only routes with a child path', () => {
   const session = { user: { role: 'client_admin', clientId: 'client-id' } };
   for (const path of [
-    '/api/v1/clients/client-id',
     '/api/v1/audit-logs/entry-id',
     '/api/v1/notification-recipients/recipient-id',
     '/api/v1/notifications/jobs/job-id',
@@ -75,8 +74,8 @@ test('tenant roles cannot bypass master-only routes with a child path', () => {
   }
 });
 
-test('unlinked accounts can inspect their session and vendor-scoped devices', () => {
-  const session = { user: { role: 'client_admin', clientId: null, machineId: null } };
+test('client admins can inspect their session and vendor-scoped devices without one client binding', () => {
+  const session = { user: { role: 'client_admin', vendorUserId: '51', clientId: null, machineId: null } };
 
   for (const path of [
     '/api/v1/auth/me',
@@ -90,18 +89,23 @@ test('unlinked accounts can inspect their session and vendor-scoped devices', ()
     assert.equal(req.url, path);
   }
 
-  assert.throws(
-    () => applyDataScope({ url: '/api/v1/machines?limit=1000' }, session),
-    (err) => err.code === 'FORBIDDEN' && /not linked to a client/.test(err.message)
-  );
+  const machinesRequest = { url: '/api/v1/machines?limit=1000' };
+  assert.doesNotThrow(() => applyDataScope(machinesRequest, session));
+  assert.equal(machinesRequest.url, '/api/v1/machines?limit=1000');
 });
 
-test('linked tenant scopes local data to the authenticated client', () => {
-  const req = { url: '/api/v1/machines?clientId=forged&limit=1000' };
-  applyDataScope(req, { user: { role: 'client_admin', clientId: 'trusted-client', machineId: null } });
+test('multi-client admins keep an explicit client filter for route-level ownership checks', () => {
+  const req = { url: '/api/v1/machines?clientId=client-a&limit=1000' };
+  applyDataScope(req, { user: { role: 'client_admin', vendorUserId: '51', clientId: null, machineId: null } });
   const url = new URL(req.url, 'http://localhost');
-  assert.equal(url.searchParams.get('clientId'), 'trusted-client');
+  assert.equal(url.searchParams.get('clientId'), 'client-a');
   assert.equal(url.searchParams.get('limit'), '1000');
+});
+
+test('client admins may manage their own multi-client directory', () => {
+  const session = { user: { role: 'client_admin', vendorUserId: '51' } };
+  assert.doesNotThrow(() => authorizeApiPath({}, '/api/v1/clients', session));
+  assert.doesNotThrow(() => authorizeApiPath({}, '/api/v1/clients/client-id', session));
 });
 
 test('client IP ignores spoofed forwarding headers unless the proxy is trusted', () => {

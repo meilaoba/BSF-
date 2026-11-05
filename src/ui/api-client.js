@@ -180,6 +180,7 @@
     getMachines:function(params){ return get('/machines', params); },
     getVendorDevices:function(params){ return get('/vendor-devices', params); },
     getVendorHistory:function(params){ return get('/vendor-devices/history', params); },
+    assignVendorDevice:function(deviceId, clientId){ return put('/vendor-devices/assignment', { deviceId:deviceId, clientId:clientId || null }); },
     getMachineMetrics:function(id, params){ return get(idPath('/machines', id, '/metrics'), params); },
     updateMachine:function(id, data){ return put('/machines', Object.assign({}, data, { id:id })); },
     deactivateMachine:function(id){ return put('/machines', { id:id, status:'inactive' }); },

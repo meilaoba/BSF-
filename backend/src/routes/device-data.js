@@ -1,5 +1,6 @@
 import { sendJson, sendOk, readJsonBody } from '../lib/http.js';
-import { ValidationError } from '../lib/errors.js';
+import { ForbiddenError, ValidationError } from '../lib/errors.js';
+import { query } from '../db.js';
 import { clampLimit, optionalString, optionalUuid } from '../lib/validate.js';
 import { requireApiKey } from '../middleware/auth.js';
 import {
@@ -23,7 +24,7 @@ export function registerDeviceDataRoutes(router) {
     if (!req.auth) throw new ValidationError('Authentication required');
     const url = new URL(req.url || '/', 'http://localhost');
     const machineId = optionalUuid(url.searchParams.get('machineId'), 'machineId');
-    const clientId = optionalUuid(url.searchParams.get('clientId'), 'clientId');
+    let clientId = optionalUuid(url.searchParams.get('clientId'), 'clientId');
     const from = dateFilter(url.searchParams.get('from'), 'from');
     const to = dateFilter(url.searchParams.get('to'), 'to');
     if (from && to && from > to) {
@@ -34,8 +35,20 @@ export function registerDeviceDataRoutes(router) {
     const vendorAccountId = vendorAccountIdForSession(req.auth);
     if (!vendorAccountId) throw new ValidationError('The account has no vendor scope');
     const includeAllAccounts = role === 'master_admin';
-    const deviceIds = clientId || machineId
-      ? await resolveVendorDeviceIds({ clientId, machineId })
+    let vendorScopeAccountId = null;
+    if (role === 'client_admin') {
+      vendorScopeAccountId = vendorAccountId;
+      if (clientId) {
+        const ownedClient = await query(
+          `SELECT id FROM clients WHERE id = $1 AND vendor_account_id = $2`,
+          [clientId, vendorAccountId]
+        );
+        if (!ownedClient.rows[0]) throw new ForbiddenError('Client is not managed by this vendor account');
+        clientId = ownedClient.rows[0].id;
+      }
+    }
+    const deviceIds = clientId || machineId || vendorScopeAccountId
+      ? await resolveVendorDeviceIds({ clientId, machineId, vendorAccountId: vendorScopeAccountId })
       : null;
     const rows = await loadVendorTelemetryHistory({
       vendorAccountId,

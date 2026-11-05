@@ -42,11 +42,17 @@ function requireUserManager(req) {
   requireApiKey(req);
 }
 
-function clientAdminClientId(req) {
+function clientAdminVendorAccountId(req) {
   if (req.auth?.user?.role !== 'client_admin') return null;
-  const clientId = req.auth.user.clientId;
-  if (!clientId) throw new ForbiddenError('Account is not linked to a client');
-  return clientId;
+  const vendorAccountId = req.auth.user.vendorUserId;
+  if (!vendorAccountId) throw new ForbiddenError('Account has no vendor account identity');
+  return String(vendorAccountId);
+}
+
+function requireClientManager(req) {
+  const role = req.auth?.user?.role;
+  if (role === 'master_admin' || role === 'client_admin') return;
+  requireApiKey(req);
 }
 
 function normalizeUserRole(value) {
@@ -61,10 +67,24 @@ function requireUserRole(value) {
   return requireEnum(normalizeUserRole(value), 'role', ['master_admin', 'client_admin', 'user']);
 }
 
-function assertClientAdminCanManageUser(req, user) {
-  const clientId = clientAdminClientId(req);
-  if (!clientId) return;
-  if (user.role !== 'user' || String(user.client_id || '') !== String(clientId)) {
+async function assertClientAdminCanManageUser(req, user) {
+  const vendorAccountId = clientAdminVendorAccountId(req);
+  if (!vendorAccountId) return;
+  if (user.role !== 'user' || !user.client_id) throw new ForbiddenError();
+  const owned = await query(
+    `SELECT 1
+       FROM clients
+      WHERE id = $1
+        AND vendor_account_id = $2`,
+    [user.client_id, vendorAccountId]
+  );
+  if (!owned.rows[0]) throw new ForbiddenError();
+}
+
+function assertClientAdminCanManageClient(req, client) {
+  const vendorAccountId = clientAdminVendorAccountId(req);
+  if (!vendorAccountId) return;
+  if (String(client.vendor_account_id || '') !== vendorAccountId) {
     throw new ForbiddenError();
   }
 }
@@ -105,6 +125,7 @@ export function registerDirectoryRoutes(router) {
   // Clients
   // =====================================================================
   router.get('/api/v1/clients', async (req, res) => {
+    requireClientManager(req);
     const search = q(req);
     const limit = clampLimit(search.get('limit'), { def: 100, max: 500 });
     const offset = clampOffset(search.get('offset'));
@@ -120,6 +141,11 @@ export function registerDirectoryRoutes(router) {
     if (clientId) {
       params.push(clientId);
       clauses.push(`id = $${params.length}`);
+    }
+    const vendorAccountId = clientAdminVendorAccountId(req);
+    if (vendorAccountId) {
+      params.push(vendorAccountId);
+      clauses.push(`c.vendor_account_id = $${params.length}`);
     }
 
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
@@ -138,13 +164,14 @@ export function registerDirectoryRoutes(router) {
   });
 
   router.post('/api/v1/clients', async (req, res) => {
-    requireApiKey(req);
+    requireClientManager(req);
     const body = await readJsonBody(req);
     const metadata = optionalObject(body.metadata, 'metadata') ?? {};
+    const vendorAccountId = clientAdminVendorAccountId(req);
 
     const { rows } = await query(
-      `INSERT INTO clients (name, code, contact_email, contact_phone, address, region, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO clients (name, code, contact_email, contact_phone, address, region, metadata, vendor_account_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING *`,
       [
         requireDisplayText(body.name, 'name', { max: 200 }),
@@ -154,6 +181,7 @@ export function registerDirectoryRoutes(router) {
         optionalDisplayText(body.address, 'address', { max: 500 }),
         optionalDisplayText(body.region, 'region', { max: 80 }),
         JSON.stringify(metadata),
+        vendorAccountId,
       ]
     );
 
@@ -169,7 +197,7 @@ export function registerDirectoryRoutes(router) {
   });
 
   router.put('/api/v1/clients', async (req, res) => {
-    requireApiKey(req);
+    requireClientManager(req);
     const body = await readJsonBody(req);
     const clientId = optionalUuid(body.id ?? q(req).get('id'), 'id');
     const metadata = optionalObject(body.metadata, 'metadata');
@@ -177,6 +205,7 @@ export function registerDirectoryRoutes(router) {
 
     const before = await query('SELECT * FROM clients WHERE id = $1', [clientId]);
     if (!before.rows[0]) throw new NotFoundError('Client not found');
+    assertClientAdminCanManageClient(req, before.rows[0]);
 
     const { rows } = await query(
       `UPDATE clients
@@ -216,10 +245,13 @@ export function registerDirectoryRoutes(router) {
   });
 
   router.delete('/api/v1/clients', async (req, res) => {
-    requireApiKey(req);
+    requireClientManager(req);
     const clientId = optionalUuid(q(req).get('id'), 'id');
     if (!clientId) throw new ValidationError('`id` query parameter is required');
 
+    const before = await query('SELECT id, name, vendor_account_id FROM clients WHERE id = $1', [clientId]);
+    if (!before.rows[0]) throw new NotFoundError('Client not found');
+    assertClientAdminCanManageClient(req, before.rows[0]);
     const { rows } = await query(
       `UPDATE clients SET status = 'archived' WHERE id = $1 RETURNING id, name, status`,
       [clientId]
@@ -256,6 +288,11 @@ export function registerDirectoryRoutes(router) {
     if (machineId) {
       params.push(machineId);
       clauses.push(`m.id = $${params.length}`);
+    }
+    const vendorAccountId = clientAdminVendorAccountId(req);
+    if (vendorAccountId) {
+      params.push(vendorAccountId);
+      clauses.push(`m.vendor_account_id = $${params.length}`);
     }
     const status = optionalString(search.get('status'), 'status', { max: 20 });
     if (status) {
@@ -456,6 +493,15 @@ export function registerDirectoryRoutes(router) {
       params.push(requireUserRole(role));
       clauses.push(`u.role = $${params.length}`);
     }
+    const vendorAccountId = clientAdminVendorAccountId(req);
+    if (vendorAccountId) {
+      params.push(vendorAccountId);
+      clauses.push(`EXISTS (
+        SELECT 1 FROM clients owned_client
+         WHERE owned_client.id = u.client_id
+           AND owned_client.vendor_account_id = $${params.length}
+      )`);
+    }
     clauses.push(...scopeFilter(search, 'u', params));
 
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
@@ -482,11 +528,9 @@ export function registerDirectoryRoutes(router) {
     let role = requireUserRole(body.role ?? 'user');
     let clientId = optionalUuid(body.clientId, 'clientId');
     const machineId = optionalUuid(body.machineId, 'machineId');
-    const actorClientId = clientAdminClientId(req);
-    if (actorClientId) {
+    const actorVendorAccountId = clientAdminVendorAccountId(req);
+    if (actorVendorAccountId) {
       if (role !== 'user') throw new ForbiddenError();
-      if (clientId && String(clientId) !== String(actorClientId)) throw new ForbiddenError();
-      clientId = actorClientId;
     }
 
     // A `user` is bound to exactly one machine and inherits that machine's client.
@@ -494,10 +538,21 @@ export function registerDirectoryRoutes(router) {
       throw new ValidationError('A `user` account must be linked to a machine.', { field: 'machineId' });
     }
     if (machineId) {
-      const machine = await query('SELECT id, client_id FROM machines WHERE id = $1', [machineId]);
+      const machine = await query(
+        `SELECT m.id, m.client_id, m.vendor_account_id,
+                c.vendor_account_id AS client_vendor_account_id
+           FROM machines m
+           LEFT JOIN clients c ON c.id = m.client_id
+          WHERE m.id = $1`,
+        [machineId]
+      );
       if (!machine.rows[0]) throw new NotFoundError('Linked machine not found');
-      if (actorClientId && String(machine.rows[0].client_id || '') !== String(actorClientId)) {
-        throw new ForbiddenError();
+      if (actorVendorAccountId) {
+        if (String(machine.rows[0].vendor_account_id || '') !== actorVendorAccountId
+          || !machine.rows[0].client_id
+          || String(machine.rows[0].client_vendor_account_id || '') !== actorVendorAccountId) {
+          throw new ForbiddenError();
+        }
       }
       if (role === 'user') clientId = machine.rows[0].client_id;
     }
@@ -587,13 +642,13 @@ export function registerDirectoryRoutes(router) {
 
     const before = await query('SELECT * FROM users WHERE id = $1', [userId]);
     if (!before.rows[0]) throw new NotFoundError('User not found');
-    assertClientAdminCanManageUser(req, before.rows[0]);
+    await assertClientAdminCanManageUser(req, before.rows[0]);
 
     let role = body.role
       ? requireUserRole(body.role)
       : before.rows[0].role;
-    const actorClientId = clientAdminClientId(req);
-    if (actorClientId) {
+    const actorVendorAccountId = clientAdminVendorAccountId(req);
+    if (actorVendorAccountId) {
       if (body.role && role !== 'user') throw new ForbiddenError();
       role = 'user';
     }
@@ -605,19 +660,23 @@ export function registerDirectoryRoutes(router) {
     let clientId = body.clientId === undefined
       ? before.rows[0].client_id
       : optionalUuid(body.clientId, 'clientId');
-    if (actorClientId) {
-      if (body.clientId !== undefined && String(clientId || '') !== String(actorClientId)) {
-        throw new ForbiddenError();
-      }
-      clientId = actorClientId;
-    }
-
     if (role === 'user') {
       if (!machineId) throw new ValidationError('A `user` account must stay linked to a machine.');
-      const machine = await query('SELECT client_id FROM machines WHERE id = $1', [machineId]);
+      const machine = await query(
+        `SELECT m.client_id, m.vendor_account_id,
+                c.vendor_account_id AS client_vendor_account_id
+           FROM machines m
+           LEFT JOIN clients c ON c.id = m.client_id
+          WHERE m.id = $1`,
+        [machineId]
+      );
       if (!machine.rows[0]) throw new NotFoundError('Linked machine not found');
-      if (actorClientId && String(machine.rows[0].client_id || '') !== String(actorClientId)) {
-        throw new ForbiddenError();
+      if (actorVendorAccountId) {
+        if (String(machine.rows[0].vendor_account_id || '') !== actorVendorAccountId
+          || !machine.rows[0].client_id
+          || String(machine.rows[0].client_vendor_account_id || '') !== actorVendorAccountId) {
+          throw new ForbiddenError();
+        }
       }
       clientId = machine.rows[0].client_id;
     } else {
@@ -669,7 +728,7 @@ export function registerDirectoryRoutes(router) {
       [userId]
     );
     if (!before.rows[0]) throw new NotFoundError('User not found');
-    assertClientAdminCanManageUser(req, before.rows[0]);
+    await assertClientAdminCanManageUser(req, before.rows[0]);
     const { rows } = await query(
       `DELETE FROM users WHERE id = $1
        RETURNING id, email, phone, full_name, role, status`,

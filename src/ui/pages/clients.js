@@ -6,39 +6,58 @@ function clientEscape(value){
   });
 }
 
-function clientMachineName(deviceId){
-  const device = devices.find(function(item){ return item.id === deviceId; });
-  return device && device.client && device.client !== 'Unassigned' ? device.client : 'Unassigned';
+async function reloadClientManagementData(){
+  if(window.BSF_LOAD_BACKEND_DATA) await window.BSF_LOAD_BACKEND_DATA(1000);
+  else if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
 }
 
-function clientMachineIds(clientName){
-  return devices.filter(function(device){ return device.client === clientName; }).map(function(device){ return device.id; });
+function clientMachineIds(clientOrName){
+  const clientId = clientOrName && typeof clientOrName === 'object' ? clientOrName.id : '';
+  const clientName = clientOrName && typeof clientOrName === 'object' ? clientOrName.name : clientOrName;
+  return devices.filter(function(device){
+    return clientId
+      ? String(device.clientId || '') === String(clientId)
+      : device.client === clientName;
+  }).map(function(device){ return device.id; });
 }
 
 function clientUnassignedDevices(){
   return devices.filter(function(device){ return !device.client || device.client === 'Unassigned'; });
 }
 
-function clientLinkedUsers(clientName){
-  return userRecords.filter(function(user){ return user.client === clientName; });
-}
-
-function machineLinkedUsers(deviceId){
-  const clientName = clientMachineName(deviceId);
-  const device = devices.find(function(item){ return item.id === deviceId; });
-  const backendId = device && device.backendId ? device.backendId : deviceId;
+function clientLinkedUsers(clientOrName){
+  const clientId = clientOrName && typeof clientOrName === 'object' ? clientOrName.id : '';
+  const clientName = clientOrName && typeof clientOrName === 'object' ? clientOrName.name : clientOrName;
   return userRecords.filter(function(user){
-    return user.machineId === backendId || (!user.machineId && user.client === clientName);
+    return clientId
+      ? String(user.clientId || '') === String(clientId)
+      : user.client === clientName;
   });
 }
 
-function clientAssignMachine(deviceId, clientName){
-  const normalized = clientName && clientName !== 'Unassigned' ? clientName : 'Unassigned';
+function machineLinkedUsers(deviceId){
   const device = devices.find(function(item){ return item.id === deviceId; });
-  if(device) device.client = normalized;
+  const backendId = device && device.backendId ? device.backendId : deviceId;
+  const clientId = device ? device.clientId : '';
+  return userRecords.filter(function(user){
+    return user.machineId === backendId || (!user.machineId && clientId && String(user.clientId || '') === String(clientId));
+  });
+}
+
+function clientAssignMachine(deviceId, clientOrName){
+  const clientId = clientOrName && typeof clientOrName === 'object' ? clientOrName.id : '';
+  const normalized = clientOrName && typeof clientOrName === 'object'
+    ? (clientOrName.name || 'Unassigned')
+    : (clientOrName && clientOrName !== 'Unassigned' ? clientOrName : 'Unassigned');
+  const device = devices.find(function(item){ return item.id === deviceId; });
+  if(device){
+    device.client = normalized;
+    device.clientId = clientId || '';
+  }
   clientRecords.forEach(function(client){
     const ids = new Set(client.machineIds || []);
-    if(normalized !== 'Unassigned' && client.name === normalized) ids.add(deviceId);
+    const matches = clientId ? String(client.id) === String(clientId) : client.name === normalized;
+    if(normalized !== 'Unassigned' && matches) ids.add(deviceId);
     else ids.delete(deviceId);
     client.machineIds = Array.from(ids);
   });
@@ -78,8 +97,8 @@ function renderClients(container){
         </tr></thead>
         <tbody>
           ${clientRecords.map(function(client, index){
-            const machineIds = clientMachineIds(client.name);
-            const users = clientLinkedUsers(client.name);
+            const machineIds = clientMachineIds(client);
+            const users = clientLinkedUsers(client);
             return '<tr style="border-bottom:1px solid #334155;background:' + (index % 2 === 0 ? '#1e293b' : '#1a2332') + ';"><td style="padding:14px 20px;color:#f8fafc;font-weight:600;">' + clientEscape(client.name) + '</td><td style="padding:10px 16px;">' + clientMachineChips(machineIds) + '</td><td style="padding:14px 20px;color:#e2e8f0;">' + users.length + '</td><td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(16,185,129,0.15);color:#10b981;">' + clientEscape(client.status || 'Active') + '</span></td><td style="padding:14px 20px;"><button onclick="openClientModal(' + index + ')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button><button style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;" onclick="deleteClient(' + index + ')">Delete</button></td></tr>';
           }).join('')}
           ${clientRecords.length ? '' : '<tr><td colspan="5" style="padding:28px 20px;text-align:center;color:#64748b;">No clients registered yet.</td></tr>'}
@@ -95,14 +114,16 @@ function renderClients(container){
 function openClientModal(index){
   const isEdit = typeof index === 'number';
   const client = isEdit ? clientRecords[index] : {id:'',name:'',machineIds:[]};
-  const selected = new Set(clientMachineIds(client.name));
+  const selected = new Set(devices.filter(function(device){
+    return isEdit && String(device.clientId || '') === String(client.id || '');
+  }).map(function(device){ return String(device.vendorDeviceId || ''); }));
   const machineRows = devices.map(function(device){
     const currentClient = device.client || 'Unassigned';
-    const backendId = device.backendId || '';
+    const vendorDeviceId = device.vendorDeviceId || '';
     const warning = isEdit && currentClient !== 'Unassigned' && currentClient !== client.name
       ? '<span style="color:#f59e0b;font-size:11px;margin-left:6px;">Currently: ' + clientEscape(currentClient) + '</span>'
       : '';
-    return '<label style="display:flex;align-items:center;gap:8px;padding:9px 0;color:#e2e8f0;font-size:13px;"><input type="checkbox" value="' + clientEscape(backendId) + '" data-device-id="' + clientEscape(device.id) + '"' + (selected.has(device.id) ? ' checked' : '') + (backendId ? '' : ' disabled') + ' /> <span>' + clientEscape(device.id) + ' · ' + clientEscape(currentClient) + (backendId ? '' : ' · Not registered as machine') + warning + '</span></label>';
+    return '<label style="display:flex;align-items:center;gap:8px;padding:9px 0;color:#e2e8f0;font-size:13px;"><input type="checkbox" value="' + clientEscape(vendorDeviceId) + '" data-device-id="' + clientEscape(device.id) + '"' + (selected.has(String(vendorDeviceId)) ? ' checked' : '') + (vendorDeviceId ? '' : ' disabled') + ' /> <span>' + clientEscape(device.id) + ' · ' + clientEscape(currentClient) + warning + '</span></label>';
   }).join('');
   let modal = document.getElementById('client-modal');
   if(!modal){ modal = document.createElement('div'); modal.id = 'client-modal'; document.body.appendChild(modal); }
@@ -123,7 +144,7 @@ async function saveClientModal(){
   const name = nameInput ? nameInput.value.trim() : '';
   if(!name){ alert('Client Name is required'); return; }
   const originalName = modal.dataset.originalName || '';
-  const machineBackendIds = Array.from(modal.querySelectorAll('input[type=checkbox]:checked')).map(function(input){ return input.value; }).filter(Boolean);
+  const vendorDeviceIds = Array.from(modal.querySelectorAll('input[type=checkbox]:checked')).map(function(input){ return input.value; }).filter(Boolean);
   const editIndex = modal.dataset.editIndex === '' ? -1 : Number(modal.dataset.editIndex);
   const existing = editIndex >= 0 ? clientRecords[editIndex] : null;
   const payload = {id:existing ? existing.id : '', name:name};
@@ -137,24 +158,30 @@ async function saveClientModal(){
   }
   const targetClientId = savedClient && savedClient.id ? savedClient.id : (existing ? existing.id : '');
   const previousDevices = devices.filter(function(device){
-    return existing && String(device.clientId || '') === String(existing.id) && machineBackendIds.indexOf(device.backendId || '') === -1;
+    return existing && String(device.clientId || '') === String(existing.id) && vendorDeviceIds.indexOf(String(device.vendorDeviceId || '')) === -1;
   });
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try {
       for(const device of previousDevices){
-        if(device.backendId) await window.BSF_API.updateMachine(device.backendId, { clientId:null });
+        if(device.vendorDeviceId) await window.BSF_API.assignVendorDevice(device.vendorDeviceId, null);
       }
-      for(const machineId of machineBackendIds){
-        await window.BSF_API.updateMachine(machineId, { clientId:targetClientId || null });
+      for(const vendorDeviceId of vendorDeviceIds){
+        await window.BSF_API.assignVendorDevice(vendorDeviceId, targetClientId || null);
       }
     } catch(error) {
       alert('Client saved, but machine assignment failed: ' + error.message);
-      if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
+      await reloadClientManagementData();
       renderClients(document.getElementById('page-content'));
       return;
     }
   }
-  if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
+  const targetClient = { id:targetClientId, name:name };
+  previousDevices.forEach(function(device){ clientAssignMachine(device.id, 'Unassigned'); });
+  vendorDeviceIds.forEach(function(vendorDeviceId){
+    const device = devices.find(function(item){ return String(item.vendorDeviceId || '') === String(vendorDeviceId); });
+    if(device) clientAssignMachine(device.id, targetClient);
+  });
+  await reloadClientManagementData();
   closeClientModal();
   renderClients(document.getElementById('page-content'));
 }
@@ -162,7 +189,6 @@ async function saveClientModal(){
 function openMachineAccount(deviceId){
   const device = devices.find(function(item){ return item.id === deviceId; });
   if(!device) return;
-  const linkedClient = clientMachineName(deviceId);
   const linkedUsers = machineLinkedUsers(deviceId);
   const clientOptions = '<option value=""' + (!device.clientId ? ' selected' : '') + '>Unassigned</option>' + clientRecords.map(function(client){
     return '<option value="' + clientEscape(client.id) + '"' + (String(device.clientId || '') === String(client.id) ? ' selected' : '') + '>' + clientEscape(client.name) + '</option>';
@@ -187,15 +213,14 @@ async function saveMachineAccountLinkage(){
   const select = document.getElementById('machine-account-client');
   const clientId = select ? select.value : '';
   const client = clientRecords.find(function(item){ return String(item.id) === String(clientId); });
-  const clientName = client ? client.name : 'Unassigned';
   const device = devices.find(function(item){ return String(item.id) === String(deviceId); });
-  if(!device || !device.backendId){ alert('This vendor device is not registered as a machine'); return; }
+  if(!device || !device.vendorDeviceId){ alert('This vendor device is not available for assignment'); return; }
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
-    try{ await window.BSF_API.updateMachine(device.backendId, { clientId:clientId || null }); }
+    try{ await window.BSF_API.assignVendorDevice(device.vendorDeviceId, clientId || null); }
     catch(error){ alert('Linkage update failed: ' + error.message); return; }
   }
-  clientAssignMachine(deviceId, clientName);
-  if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
+  clientAssignMachine(deviceId, client || 'Unassigned');
+  await reloadClientManagementData();
   closeMachineAccount();
   renderClients(document.getElementById('page-content'));
 }
@@ -212,7 +237,7 @@ async function toggleMachineAccountStatus(){
     catch(error){ alert('Status update failed: ' + error.message); return; }
   }
   device.accountStatus = deactivate ? 'Inactive' : 'Active';
-  if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
+  await reloadClientManagementData();
   closeMachineAccount();
   renderClients(document.getElementById('page-content'));
 }
@@ -220,14 +245,14 @@ async function toggleMachineAccountStatus(){
 async function deleteClient(index){
   const client = clientRecords[index];
   if(!client) return;
-  const linkedMachines = clientMachineIds(client.name);
-  const linkedUsers = clientLinkedUsers(client.name);
+  const linkedMachines = clientMachineIds(client);
+  const linkedUsers = clientLinkedUsers(client);
   if(!confirm('Delete client "' + client.name + '"? ' + linkedMachines.length + ' machine(s) will become Unassigned and ' + linkedUsers.length + ' linked user(s) will lose this client. Historical data will remain.')) return;
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{
       for(const deviceId of linkedMachines){
         const device = devices.find(function(item){ return String(item.id) === String(deviceId); });
-        if(device && device.backendId) await window.BSF_API.updateMachine(device.backendId, { clientId:null });
+        if(device && device.vendorDeviceId) await window.BSF_API.assignVendorDevice(device.vendorDeviceId, null);
       }
       await window.BSF_API.deleteClient(client.id);
     }
@@ -235,6 +260,6 @@ async function deleteClient(index){
   }
   linkedMachines.forEach(function(id){ clientAssignMachine(id, 'Unassigned'); });
   linkedUsers.forEach(function(user){ user.client = ''; user.machineId = ''; });
-  if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
+  await reloadClientManagementData();
   renderClients(document.getElementById('page-content'));
 }

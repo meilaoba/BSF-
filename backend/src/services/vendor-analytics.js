@@ -330,10 +330,14 @@ export async function loadLatestVendorTelemetrySnapshots({
   }]));
 }
 
-export async function resolveVendorDeviceIds({ clientId, machineId } = {}) {
-  if (!clientId && !machineId) return null;
+export async function resolveVendorDeviceIds({ clientId, machineId, vendorAccountId } = {}) {
+  if (!clientId && !machineId && !vendorAccountId) return null;
   const params = [];
   const clauses = [];
+  if (vendorAccountId) {
+    params.push(String(vendorAccountId));
+    clauses.push(`m.vendor_account_id = $${params.length}`);
+  }
   if (machineId) {
     params.push(String(machineId));
     clauses.push(`(m.vendor_device_id = $${params.length} OR m.id::text = $${params.length} OR m.device_id = $${params.length} OR m.serial = $${params.length})`);

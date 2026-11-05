@@ -558,12 +558,12 @@ async function bsfLoadDirectoryData(){
   if(!api) throw new Error('Backend API is unavailable');
   const role = typeof currentRole === 'undefined' ? 'user' : currentRole;
   const requests = [];
-  if(role === 'admin') requests.push(api.getClients({ limit:500, status:'active' }));
+  if(role === 'admin' || role === 'client-admin') requests.push(api.getClients({ limit:500, status:'active' }));
   if(role === 'admin' || role === 'client-admin') requests.push(api.getUsers({ limit:500 }));
   if(!requests.length) return false;
   const results = await Promise.allSettled(requests);
   let index = 0;
-  if(role === 'admin' && results[index]){
+  if((role === 'admin' || role === 'client-admin') && results[index]){
     const result = results[index++];
     if(result.status === 'fulfilled' && typeof clientRecords !== 'undefined'){
       const mapped = bsfList(result.value, 'clients').map(bsfDirectoryClientRow);

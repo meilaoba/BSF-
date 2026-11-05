@@ -305,8 +305,13 @@ export function authorizeApiPath(req, pathname, session) {
 
   if (path === '/api/v1/auth/me' || path === '/api/v1/auth/logout') return;
 
-  if (isPathOrChild('/api/v1/clients') || isPathOrChild('/api/v1/audit-logs')) {
+  if (isPathOrChild('/api/v1/audit-logs')) {
     if (role !== 'master_admin') throw new ForbiddenError();
+    return;
+  }
+
+  if (isPathOrChild('/api/v1/clients')) {
+    if (!['master_admin', 'client_admin'].includes(role)) throw new ForbiddenError();
     return;
   }
 
@@ -351,8 +356,7 @@ export function applyDataScope(req, session) {
   }
 
   if (role === 'client_admin') {
-    if (!session.user.clientId) throw new ForbiddenError('Account is not linked to a client');
-    url.searchParams.set('clientId', session.user.clientId);
+    if (!session.user.vendorUserId) throw new ForbiddenError('Account has no vendor account identity');
   } else if (role === 'user') {
     if (!session.user.machineId) throw new ForbiddenError('Account is not linked to a machine');
     url.searchParams.set('machineId', session.user.machineId);

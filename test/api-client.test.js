@@ -125,6 +125,7 @@ test('directory writes use the backend collection routes and canonical user fiel
   await client.updateClient('client-1', { name: 'Client A' });
   await client.deleteClient('client-1');
   await client.updateMachine('machine-1', { clientId: 'client-1' });
+  await client.assignVendorDevice('vendor-51', 'client-1');
   await client.createUser({
     userName: 'ress',
     name: 'User A',
@@ -145,8 +146,13 @@ test('directory writes use the backend collection routes and canonical user fiel
   assert.equal(calls[1].options.method, 'DELETE');
   assert.equal(calls[2].url, '/api/v1/machines');
   assert.deepEqual(JSON.parse(calls[2].options.body), { clientId: 'client-1', id: 'machine-1' });
-  assert.equal(calls[3].url, '/api/v1/users');
+  assert.equal(calls[3].url, '/api/v1/vendor-devices/assignment');
   assert.deepEqual(JSON.parse(calls[3].options.body), {
+    deviceId:'vendor-51',
+    clientId:'client-1',
+  });
+  assert.equal(calls[4].url, '/api/v1/users');
+  assert.deepEqual(JSON.parse(calls[4].options.body), {
     userName: 'ress',
     fullName: 'User A',
     email: 'user@example.com',
@@ -158,5 +164,5 @@ test('directory writes use the backend collection routes and canonical user fiel
     machineId: 'machine-1',
     status: 'active',
   });
-  assert.equal(calls[4].url, '/api/v1/users?id=user-1');
+  assert.equal(calls[5].url, '/api/v1/users?id=user-1');
 });

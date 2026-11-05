@@ -89,7 +89,8 @@ session; tenant roles are scoped by the backend.
 | POST | `/api/v1/device-data/ingest` | normalize and persist one vendor API telemetry record |
 | GET/POST/PUT/DELETE | `/api/v1/clients` | client records |
 | GET/POST/PUT/DELETE | `/api/v1/machines` | machine records + client linkage |
-| GET/POST/PUT/DELETE | `/api/v1/users` | Master Admin / Client Admin / User |
+| GET/POST/PUT/DELETE | `/api/v1/users` | Master Admin / Client Admin |
+| PUT | `/api/v1/vendor-devices/assignment` | assign an owned vendor device to a Client |
 | GET/POST/DELETE | `/api/v1/notification-recipients` | who receives alerts |
 | GET/PUT | `/api/v1/notification-preferences` | per-scope channel preferences |
 | GET/PUT | `/api/v1/alert-thresholds` | per-machine temperature limits |
@@ -174,13 +175,15 @@ are not configured. The full migration checklist is in `../docs/security-deploym
 ### Data scoping rules
 
 - **Master Admin** — no filter, sees every client and machine.
-- **Client Admin** — `clientId` is fixed to their own client; the client filter
-  is removed from the UI.
+- **Client Admin** — manages multiple Clients owned by the same vendor account.
+  The vendor token defines the device pool, and devices can only be assigned to
+  Clients with the same `vendor_account_id`.
 - **User** — `machineId` is fixed to their single machine.
 
 The API accepts `clientId` / `machineId` filters for Master Admin views. For
-Client Admin and User sessions, the backend overwrites those values from the
-authenticated principal; browser-supplied scope is never trusted.
+Client Admin and User sessions, the backend enforces the authenticated vendor
+account, Client ownership and device assignment; browser-supplied scope is never
+trusted for tenant isolation.
 
 ### Directory API contract
 
@@ -195,7 +198,7 @@ DELETE /api/v1/clients|machines|users?id=…
 
 User roles are sent as `master_admin`, `client_admin` or `user`; statuses are
 sent as `active`, `invited` or `disabled`. Client Admins may manage only
-ordinary `user` accounts linked to their own client and machines.
+ordinary `user` accounts linked to machines in their own Clients.
 
 `DELETE /api/v1/users?id=…` permanently deletes the local BSF user record.
 Related sessions, notification preferences and recipients are removed by
