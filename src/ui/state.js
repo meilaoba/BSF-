@@ -184,7 +184,6 @@ const navItems = {
     {id:'graphs',label:'Graphs',icon:'📊'},
     {id:'raw-data',label:'Raw Data',icon:'📋'},
     {id:'reports',label:'Report Generation',icon:'📄'},
-    {id:'clients',label:'Clients',icon:'🏢'},
     {id:'users',label:'Users',icon:'👥'}
   ],
   user: [

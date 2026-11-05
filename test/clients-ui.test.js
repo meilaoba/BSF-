@@ -9,9 +9,12 @@ const clients = fs.readFileSync(path.join(root, 'src/ui/pages/clients.js'), 'utf
 const state = fs.readFileSync(path.join(root, 'src/ui/state.js'), 'utf8');
 const backendData = fs.readFileSync(path.join(root, 'src/ui/backend-data.js'), 'utf8');
 
-test('client admins can manage multiple clients and assign their vendor device pool', () => {
-  assert.match(state, /'client-admin': \[/);
-  assert.match(state, /\{id:'clients',label:'Clients'/);
+test('client admin UI excludes the Clients page while retaining vendor device assignment support', () => {
+  const clientAdminNav = state.slice(
+    state.indexOf("'client-admin': ["),
+    state.indexOf('user: [', state.indexOf("'client-admin': ["))
+  );
+  assert.doesNotMatch(clientAdminNav, /\{id:'clients',label:'Clients'/);
   assert.match(clients, /assignVendorDevice/);
   assert.match(clients, /device\.vendorDeviceId/);
   assert.doesNotMatch(clients, /updateMachine\(device\.backendId, \{ clientId/);

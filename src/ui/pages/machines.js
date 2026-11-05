@@ -82,7 +82,6 @@ function machineMetricsMarkup(device){
     machineMetricCard('This Month Waste', machineMetricValue(metrics.wasteKg), 'kg', '#3b82f6', 'machine-metric-waste'),
     machineMetricCard('Est. Fertilizer This Month', machineMetricValue(metrics.fertilizerKg), 'kg', '#f59e0b', 'machine-metric-fertilizer'),
     machineMetricCard('Daily Waste', machineMetricValue(metrics.dailyWasteKg), 'kg', '#8b5cf6', 'machine-metric-daily-waste'),
-    ...(isClientScopedRole() ? [] : [machineMetricCard('Daily Energy', machineMetricValue(metrics.dailyEnergyKwh), 'kWh', '#ef4444', 'machine-metric-daily-energy')]),
     machineMetricCard('Avg Env Temp', machineMetricValue(metrics.environmentTempC), '°C', '#22c55e', 'machine-metric-env-temp'),
     machineMetricCard('Container Temp', machinePreviewEscape(device.containerTemp), '°C', '#f97316', 'machine-metric-temp'),
     machineMetricCard('Container Humidity', machinePreviewEscape(device.humidity), '%', '#0ea5e9', 'machine-metric-humidity')
@@ -115,16 +114,12 @@ async function loadMachineMetrics(device){
     const dailyWaste = Array.isArray(monthly.items)
       ? monthly.items.find(function(item){ return item.date === today; })
       : null;
-    const dailyEnergy = Array.isArray(monthly.energyItems)
-      ? monthly.energyItems.find(function(item){ return item.date === today; })
-      : null;
     const environment = results[1] || {};
     const data = {
       wasteKg:monthlySummary.wasteKg,
       ghgKg:monthlySummary.ghgKg,
       fertilizerKg:monthlySummary.fertilizerKg,
       dailyWasteKg:dailyWaste ? dailyWaste.value : null,
-      dailyEnergyKwh:dailyEnergy ? dailyEnergy.value : null,
       environmentTempC:environment.temperatureC
     };
     machineMetricCache.set(key, { savedAt:Date.now(), data:data });
@@ -133,7 +128,6 @@ async function loadMachineMetrics(device){
       applyMachineMetricText('machine-metric-waste', data.wasteKg);
       applyMachineMetricText('machine-metric-fertilizer', data.fertilizerKg);
       applyMachineMetricText('machine-metric-daily-waste', data.dailyWasteKg);
-      applyMachineMetricText('machine-metric-daily-energy', data.dailyEnergyKwh);
       applyMachineMetricText('machine-metric-env-temp', data.environmentTempC);
     }
   }).catch(function(){
