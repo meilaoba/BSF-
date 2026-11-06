@@ -70,7 +70,9 @@ function requireUserRole(value) {
 async function assertClientAdminCanManageUser(req, user) {
   const vendorAccountId = clientAdminVendorAccountId(req);
   if (!vendorAccountId) return;
-  if (user.role !== 'user' || !user.client_id) throw new ForbiddenError();
+  if (user.role !== 'user') throw new ForbiddenError();
+  if (String(user.metadata?.vendorAccountId || '') === vendorAccountId) return;
+  if (!user.client_id) throw new ForbiddenError();
   const owned = await query(
     `SELECT 1
        FROM clients
@@ -496,11 +498,11 @@ export function registerDirectoryRoutes(router) {
     const vendorAccountId = clientAdminVendorAccountId(req);
     if (vendorAccountId) {
       params.push(vendorAccountId);
-      clauses.push(`EXISTS (
+      clauses.push(`(EXISTS (
         SELECT 1 FROM clients owned_client
          WHERE owned_client.id = u.client_id
            AND owned_client.vendor_account_id = $${params.length}
-      )`);
+      ) OR u.metadata->>'vendorAccountId' = $${params.length})`);
     }
     clauses.push(...scopeFilter(search, 'u', params));
 
@@ -533,6 +535,8 @@ export function registerDirectoryRoutes(router) {
     if (actorVendorAccountId) {
       if (role !== 'user') throw new ForbiddenError();
     }
+    const metadata = optionalObject(body.metadata, 'metadata') ?? {};
+    if (actorVendorAccountId) metadata.vendorAccountId = actorVendorAccountId;
 
     // A user may exist before a device is assigned. In that state the user is
     // linked to a customer only and receives no device-scoped data access.
@@ -560,12 +564,7 @@ export function registerDirectoryRoutes(router) {
       machineId = machine.rows[0].id;
       if (role === 'user') clientId = machine.rows[0].client_id;
     } else if (role === 'user') {
-      if (!clientId) {
-        throw new ValidationError('A `user` account must be linked to a customer or machine.', {
-          field: 'clientId',
-        });
-      }
-      if (actorVendorAccountId) {
+      if (clientId && actorVendorAccountId) {
         const ownedClient = await query(
           `SELECT id
              FROM clients
@@ -639,7 +638,7 @@ export function registerDirectoryRoutes(router) {
         createVendorAccount
           ? 'active'
           : (body.status ? requireEnum(body.status, 'status', ['active', 'invited', 'disabled']) : null),
-        JSON.stringify(body.metadata ?? {}),
+        JSON.stringify(metadata),
       ]
     );
 
@@ -708,12 +707,7 @@ export function registerDirectoryRoutes(router) {
         machineId = machine.rows[0].id;
         clientId = machine.rows[0].client_id;
       } else if (!machineId) {
-        if (!clientId) {
-          throw new ValidationError('A `user` account must be linked to a customer or machine.', {
-            field: 'clientId',
-          });
-        }
-        if (actorVendorAccountId) {
+        if (clientId && actorVendorAccountId) {
           const ownedClient = await query(
             `SELECT id
                FROM clients
@@ -769,7 +763,7 @@ export function registerDirectoryRoutes(router) {
     if (!userId) throw new ValidationError('`id` query parameter is required');
 
     const before = await query(
-      'SELECT id, email, phone, full_name, role, client_id, machine_id, status FROM users WHERE id = $1',
+      'SELECT id, email, phone, full_name, role, client_id, machine_id, status, metadata FROM users WHERE id = $1',
       [userId]
     );
     if (!before.rows[0]) throw new NotFoundError('User not found');

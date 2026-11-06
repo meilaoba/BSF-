@@ -164,6 +164,53 @@ test('Add User can create a customer-scoped user without a machine', async () =>
   assert.equal(created.role, 'User');
 });
 
+test('Add User can create a fully unassigned user when no customer is available', async () => {
+  let created = null;
+  const alerts = [];
+  const modal = { dataset:{ editIndex:'' }, remove(){} };
+  const values = {
+    'user-username-input':'unassigned-user',
+    'user-email-input':'user@example.com',
+    'user-mobile-input':'+852 9123 4567',
+    'user-password-input':'password',
+    'user-role-input':'User',
+    'user-client-input':'',
+    'user-machine-input':'',
+  };
+  const sandbox = {
+    console,
+    window:{
+      BSF_API_CONFIG:{ enabled:true },
+      BSF_API:{
+        async createUser(payload){ created = payload; },
+        async updateUser(){ throw new Error('unexpected update'); },
+      },
+      BSF_LOAD_DIRECTORY_DATA:async () => true,
+    },
+    document:{
+      getElementById(id){
+        if(id === 'user-modal') return modal;
+        if(id === 'page-content') return { innerHTML:'' };
+        return Object.prototype.hasOwnProperty.call(values, id) ? { value:values[id] } : null;
+      },
+    },
+    alert(message){ alerts.push(String(message)); },
+    currentClient:'',
+    isClientScopedRole(){ return true; },
+    clientEscape(value){ return String(value ?? ''); },
+    bsfEscapeHtml(value){ return String(value ?? ''); },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox, { filename:'users.js' });
+
+  await vm.runInContext('saveUserModal()', sandbox);
+
+  assert.deepEqual(alerts, []);
+  assert.equal(created.clientId, null);
+  assert.equal(created.machineId, null);
+  assert.equal(created.role, 'User');
+});
+
 test('mobile field contains the requested helper and immediate validation', () => {
   assert.match(source, /Please enter the account holder\\'s mobile number, including the country code if applicable, e\.g\. \+852 9123 4567/);
   assert.match(source, /oninput="validateUserMobileField\(\)"/);

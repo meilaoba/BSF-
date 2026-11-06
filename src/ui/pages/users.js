@@ -197,7 +197,6 @@ async function saveUserModal(){
     }
   }
   if(!existing && !password){ alert('Initial Password is required for a new user'); return; }
-  if(role==='User' && !clientId){ alert('A User must be linked to a customer'); return; }
   const payload={id:existing?existing.id:'',userName:userName,email:email,mobile:mobile,password:password,role:role,clientId:clientId || null,machineId:machineId || null,status:'active'};
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{ if(existing) await window.BSF_API.updateUser(existing.id,payload); else await window.BSF_API.createUser(payload); }catch(error){ alert('Save failed: '+error.message); return; }
