@@ -291,7 +291,7 @@ function populateRawDataFilters(clients, clientDevices){
   }
   if(deviceSelect){
     const userRole = isUserRole();
-    const options = userRole ? [] : [{ value:'', label:'Select machine', selected:rawDataFilters.device === '' }];
+    const options = userRole ? [] : [{ value:'', label:'Select Machine', selected:rawDataFilters.device === '' }];
     clientDevices.forEach(function(dev){
       const value = dev.backendId || dev.id;
       options.push({ value:value, label:dev.id, selected:String(rawDataFilters.device) === String(value) });

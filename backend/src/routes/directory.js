@@ -21,7 +21,7 @@ import {
 } from '../lib/validate.js';
 import { requireApiKey } from '../middleware/auth.js';
 import { getVendorAccessToken } from '../middleware/session.js';
-import { addVendorUser } from '../providers/vendor-user.js';
+import { addVendorUser, findVendorUserByName } from '../providers/vendor-user.js';
 import { loadCollectorCredentials } from '../services/vendor-collector.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -91,10 +91,18 @@ function assertClientAdminCanManageClient(req, client) {
   }
 }
 
-async function vendorTokenForUserCreation(req) {
-  if (req.auth) return getVendorAccessToken(req.auth);
+async function vendorCredentialsForUserCreation(req) {
+  if (req.auth) {
+    return {
+      token: await getVendorAccessToken(req.auth),
+      userId: req.auth.user?.vendorUserId,
+    };
+  }
   const collector = await loadCollectorCredentials();
-  return collector?.accessToken || null;
+  return {
+    token: collector?.accessToken || null,
+    userId: collector?.vendorUserId || null,
+  };
 }
 
 /**
@@ -553,7 +561,7 @@ export function registerDirectoryRoutes(router) {
           LIMIT 1`,
         [machineRef]
       );
-      if (!machine.rows[0]) throw new NotFoundError('Linked machine not found');
+      if (!machine.rows[0]) throw new NotFoundError('Linked Machine not found');
       if (actorVendorAccountId) {
         if (String(machine.rows[0].vendor_account_id || '') !== actorVendorAccountId
           || !machine.rows[0].client_id
@@ -581,6 +589,9 @@ export function registerDirectoryRoutes(router) {
     const initialPassword = typeof body.password === 'string' ? body.password : null;
     const mobile = optionalPhone(body.mobile ?? body.phone, 'mobile');
     const createVendorAccount = Boolean(initialPassword);
+    let vendorUserId = null;
+    let vendorType = null;
+    let vendorUserReused = false;
     if (createVendorAccount) {
       if (role !== 'user') throw new ValidationError('Vendor registration is only available for User accounts');
       if (!userName || !initialPassword || !mobile) {
@@ -604,31 +615,55 @@ export function registerDirectoryRoutes(router) {
     }
 
     if (createVendorAccount) {
-      const token = await vendorTokenForUserCreation(req);
-      if (!token) {
+      const credentials = await vendorCredentialsForUserCreation(req);
+      if (!credentials.token) {
         throw new AppError('VENDOR_SESSION_EXPIRED', 'No vendor credential is available for user creation', {
           status: 401,
         });
       }
-      await addVendorUser({
-        token,
-        userName,
-        password: initialPassword,
-        mobile,
-        userIcon: body.userIcon || '',
-        status: 1,
-      });
+      if (credentials.userId) {
+        const existingVendorUser = await findVendorUserByName({
+          token: credentials.token,
+          userId: credentials.userId,
+          userName,
+        });
+        if (existingVendorUser) {
+          vendorUserId = existingVendorUser.id;
+          vendorType = existingVendorUser.userType;
+          vendorUserReused = true;
+        }
+      }
+      if (!vendorUserId) {
+        await addVendorUser({
+          token: credentials.token,
+          userName,
+          password: initialPassword,
+          mobile,
+          userIcon: body.userIcon || '',
+          status: 1,
+        });
+        vendorType = 3;
+        if (credentials.userId) {
+          const createdVendorUser = await findVendorUserByName({
+            token: credentials.token,
+            userId: credentials.userId,
+            userName,
+          });
+          if (createdVendorUser) vendorUserId = createdVendorUser.id;
+        }
+      }
     }
 
     const { rows } = await query(
       `INSERT INTO users
-         (vendor_username, vendor_type, email, phone, full_name, role, client_id, machine_id, status, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9,'invited'), $10)
-       RETURNING id, vendor_username, email, phone, full_name, role, status,
+         (vendor_user_id, vendor_username, vendor_type, email, phone, full_name, role, client_id, machine_id, status, metadata)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10,'invited'), $11)
+       RETURNING id, vendor_user_id, vendor_username, email, phone, full_name, role, status,
                  client_id, machine_id, created_at`,
       [
+        vendorUserId,
         userName,
-        createVendorAccount ? 3 : null,
+        createVendorAccount ? vendorType : null,
         email,
         phone,
         optionalDisplayText(body.fullName, 'fullName', { max: 200 }) || userName,
@@ -647,10 +682,19 @@ export function registerDirectoryRoutes(router) {
       actorType: 'api',
       entityType: 'user',
       entityId: rows[0].id,
-      after: { role, email, phone, userName, machineId, vendorAccountCreated: createVendorAccount },
+      after: {
+        role,
+        email,
+        phone,
+        userName,
+        machineId,
+        vendorAccountCreated: createVendorAccount,
+        vendorUserReused,
+        vendorUserId,
+      },
       ip: clientIp(req),
     });
-    sendJson(res, 201, { ok: true, data: rows[0] });
+    sendJson(res, 201, { ok: true, data: { ...rows[0], vendorUserReused } });
   });
 
   router.put('/api/v1/users', async (req, res) => {
@@ -696,7 +740,7 @@ export function registerDirectoryRoutes(router) {
             LIMIT 1`,
           [machineRef]
         );
-        if (!machine.rows[0]) throw new NotFoundError('Linked machine not found');
+        if (!machine.rows[0]) throw new NotFoundError('Linked Machine not found');
         if (actorVendorAccountId) {
           if (String(machine.rows[0].vendor_account_id || '') !== actorVendorAccountId
             || !machine.rows[0].client_id

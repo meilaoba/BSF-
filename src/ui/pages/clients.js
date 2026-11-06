@@ -64,7 +64,7 @@ function clientAssignMachine(deviceId, clientOrName){
 }
 
 function clientMachineChips(deviceIds){
-  if(!deviceIds.length) return '<span style="color:#64748b;">No machines linked</span>';
+  if(!deviceIds.length) return '<span style="color:#64748b;">No Machines linked</span>';
   return deviceIds.map(function(deviceId){
     return '<button type="button" data-machine-id="' + clientEscape(deviceId) + '" style="padding:4px 9px;margin:2px;background:#0f172a;border:1px solid #475569;border-radius:12px;color:#e2e8f0;font-size:11px;cursor:pointer;">' + clientEscape(deviceId) + '</button>';
   }).join('');
@@ -75,7 +75,7 @@ function renderClients(container){
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Client Management</h2>
-      <p style="color:#64748b;font-size:14px;margin:0;">Manage clients, machine assignments and account access</p>
+      <p style="color:#64748b;font-size:14px;margin:0;">Manage clients, Machine assignments and account access</p>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;">
       <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;"><p style="margin:0 0 6px;color:#94a3b8;font-size:12px;font-weight:600;">REGISTERED CLIENTS</p><p style="margin:0;color:#f8fafc;font-size:26px;font-weight:700;">${clientRecords.length}</p></div>
@@ -129,7 +129,7 @@ function openClientModal(index){
   if(!modal){ modal = document.createElement('div'); modal.id = 'client-modal'; document.body.appendChild(modal); }
   modal.dataset.editIndex = isEdit ? String(index) : '';
   modal.dataset.originalName = client.name || '';
-  modal.innerHTML = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;"><div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5);"><h3 style="margin:0 0 18px;color:#f8fafc;font-size:18px;">' + (isEdit ? 'Edit Client' : 'Add Client') + '</h3><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Client Name</label><input id="client-name-input" value="' + clientEscape(client.name) + '" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" /><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin:18px 0 6px;">Linked Machines</label><p style="margin:0 0 8px;color:#64748b;font-size:11px;">Selecting a machine reassigns it to this client. The newest linkage replaces the previous client.</p><div style="max-height:240px;overflow:auto;padding:6px 10px;background:#0f172a;border:1px solid #334155;border-radius:8px;">' + (machineRows || '<span style="color:#64748b;font-size:12px;">No machines available</span>') + '</div><div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;"><button onclick="closeClientModal()" style="padding:9px 18px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-size:13px;cursor:pointer;">Cancel</button><button onclick="saveClientModal()" style="padding:9px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save</button></div></div></div>';
+  modal.innerHTML = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;"><div style="width:min(620px,100%);max-height:90vh;overflow:auto;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5);"><h3 style="margin:0 0 18px;color:#f8fafc;font-size:18px;">' + (isEdit ? 'Edit Client' : 'Add Client') + '</h3><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Client Name</label><input id="client-name-input" value="' + clientEscape(client.name) + '" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" /><label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin:18px 0 6px;">Linked Machines</label><p style="margin:0 0 8px;color:#64748b;font-size:11px;">Selecting a Machine reassigns it to this client. The newest linkage replaces the previous client.</p><div style="max-height:240px;overflow:auto;padding:6px 10px;background:#0f172a;border:1px solid #334155;border-radius:8px;">' + (machineRows || '<span style="color:#64748b;font-size:12px;">No Machines available</span>') + '</div><div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;"><button onclick="closeClientModal()" style="padding:9px 18px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-size:13px;cursor:pointer;">Cancel</button><button onclick="saveClientModal()" style="padding:9px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save</button></div></div></div>';
 }
 
 function closeClientModal(){
@@ -169,7 +169,7 @@ async function saveClientModal(){
         await window.BSF_API.assignVendorDevice(vendorDeviceId, targetClientId || null);
       }
     } catch(error) {
-      alert('Client saved, but machine assignment failed: ' + error.message);
+      alert('Client saved, but Machine assignment failed: ' + error.message);
       await reloadClientManagementData();
       renderClients(document.getElementById('page-content'));
       return;
@@ -232,7 +232,7 @@ async function toggleMachineAccountStatus(){
   if(!device) return;
   const deactivate = device.accountStatus !== 'Inactive';
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
-    if(!device.backendId){ alert('This vendor device is not registered as a machine'); return; }
+    if(!device.backendId){ alert('This vendor device is not registered as a Machine'); return; }
     try{ await (deactivate ? window.BSF_API.deactivateMachine(device.backendId) : window.BSF_API.reactivateMachine(device.backendId)); }
     catch(error){ alert('Status update failed: ' + error.message); return; }
   }
@@ -247,7 +247,7 @@ async function deleteClient(index){
   if(!client) return;
   const linkedMachines = clientMachineIds(client);
   const linkedUsers = clientLinkedUsers(client);
-  if(!confirm('Delete client "' + client.name + '"? ' + linkedMachines.length + ' machine(s) will become Unassigned and ' + linkedUsers.length + ' linked user(s) will lose this client. Historical data will remain.')) return;
+  if(!confirm('Delete client "' + client.name + '"? ' + linkedMachines.length + ' Machine(s) will become Unassigned and ' + linkedUsers.length + ' linked user(s) will lose this client. Historical data will remain.')) return;
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{
       for(const deviceId of linkedMachines){

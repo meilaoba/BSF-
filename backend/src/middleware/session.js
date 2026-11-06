@@ -363,7 +363,7 @@ export function applyDataScope(req, session) {
   if (role === 'client_admin') {
     if (!session.user.vendorUserId) throw new ForbiddenError('Account has no vendor account identity');
   } else if (role === 'user') {
-    if (!session.user.machineId) throw new ForbiddenError('Account is not linked to a machine');
+    if (!session.user.machineId) throw new ForbiddenError('Account is not linked to a Machine');
     url.searchParams.set('machineId', session.user.machineId);
     if (session.user.clientId) url.searchParams.set('clientId', session.user.clientId);
   }

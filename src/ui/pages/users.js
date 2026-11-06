@@ -74,7 +74,7 @@ function userMachineOptions(clientId, selected, includeAllDevices){
         return dev.backendId && String(dev.clientId || '') === String(clientId);
       })
       : [];
-  return '<option value="">Select machine</option>' + list.map(function(dev){
+  return '<option value="">Select Machine</option>' + list.map(function(dev){
     const value = dev.backendId || dev.vendorDeviceId || dev.serial || dev.id || '';
     return '<option value="' + clientEscape(value) + '"' + (String(selected || '') === String(value) ? ' selected' : '') + '>' + clientEscape(dev.id) + '</option>';
   }).join('');

@@ -266,6 +266,6 @@ function populateApiFilters(){
   }
   const list = apiFilters.client ? devices.filter(function(dev){ return dev.client===apiFilters.client; }) : devices;
   if(machineSelect){
-    machineSelect.innerHTML = '<option value="">Select machine</option>' + list.map(function(dev){ return '<option value="'+bsfEscapeHtml(dev.id)+'"'+(apiFilters.machine===dev.id?' selected':'')+'>'+bsfEscapeHtml(dev.id)+'</option>'; }).join('');
+    machineSelect.innerHTML = '<option value="">Select Machine</option>' + list.map(function(dev){ return '<option value="'+bsfEscapeHtml(dev.id)+'"'+(apiFilters.machine===dev.id?' selected':'')+'>'+bsfEscapeHtml(dev.id)+'</option>'; }).join('');
   }
 }

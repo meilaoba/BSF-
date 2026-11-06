@@ -149,7 +149,7 @@ function reportFilterOptions(){
   const availableDevices = scopedDevices().filter(function(dev){
     return !reportFilters.client || dev.client === reportFilters.client;
   });
-  const deviceOptions = (isUserRole() ? '' : '<option value="">Select machine</option>') + availableDevices.map(function(dev){
+  const deviceOptions = (isUserRole() ? '' : '<option value="">Select Machine</option>') + availableDevices.map(function(dev){
     const value = dev.backendId || dev.id;
     return '<option value="' + bsfEscapeHtml(value) + '"' + (String(reportFilters.device)===String(value)?' selected':'') + '>' + bsfEscapeHtml(dev.id) + '</option>';
   }).join('');
@@ -327,7 +327,7 @@ function renderReports(container, options){
   const selectedDevice = scopedDevices().find(function(device){
     return String(device.backendId || device.id) === String(reportFilters.device);
   });
-  const reportDevice = selectedDevice ? selectedDevice.id : (reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'Select machine'));
+  const reportDevice = selectedDevice ? selectedDevice.id : (reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'Select Machine'));
   const reportPeriod = range.start + ' - ' + range.end;
   const reportOptions = reportFilterOptions();
   const title = reportDisplayTitle();
@@ -399,7 +399,7 @@ function reportExportModel(){
   const metrics = reportMetricModel();
   const scopedDevice = scopedDevices()[0] || null;
   const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'Select Customer');
-  const reportDevice = reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'Select machine');
+  const reportDevice = reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'Select Machine');
   const reportPeriod = range.start + ' - ' + range.end;
   const title = reportDisplayTitle();
   const chartTitle = reportFilters.period === 'monthly' ? 'Daily Food Waste In (KG)' : 'Monthly Food Waste In (KG)';

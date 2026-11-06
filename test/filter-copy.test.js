@@ -23,7 +23,7 @@ test('customer and machine filter placeholders use the requested copy', () => {
   }
 
   assert.match(readPage('graphs.js'), /Select Customer/);
-  assert.match(readPage('graphs.js'), /Select machine/);
+  assert.match(readPage('graphs.js'), /Select Machine/);
   assert.match(readPage('reports.js'), /Select Customer/);
-  assert.match(readPage('reports.js'), /Select machine/);
+  assert.match(readPage('reports.js'), /Select Machine/);
 });

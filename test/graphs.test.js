@@ -69,7 +69,7 @@ test('graph date filters define the real range instead of the entire period', ()
 test('graph errors distinguish missing account linkage from an empty dataset', () => {
   assert.equal(
     vm.runInContext("graphErrorMessage({code:'VENDOR_ACCOUNT_SCOPE_REQUIRED',message:'raw backend message'})", sandbox),
-    'This account is not linked to a client or machine. Please contact an administrator.'
+    'This account is not linked to a client or Machine. Please contact an administrator.'
   );
   assert.equal(
     vm.runInContext("graphErrorMessage({code:'NETWORK_ERROR',message:'fetch failed'})", sandbox),
@@ -91,7 +91,7 @@ test('a failed graph request is rendered once instead of starting a fetch loop',
   vm.runInContext("graphApiData=null;graphApiKey='';graphApiRequestKey='';graphApiError='';graphApiFailedKey='';graphApiLoading=false;graphFilters={client:'',machine:'',start:'2026-10-01',end:'2026-10-31'};graphPeriods={foodWaste:'monthly',ghg:'monthly',temp:'monthly',energy:'monthly'};", sandbox);
   await vm.runInContext('loadGraphApiData()', sandbox);
   assert.equal(calls, 1);
-  assert.match(pageContainer.innerHTML, /This account is not linked to a client or machine/);
+  assert.match(pageContainer.innerHTML, /This account is not linked to a client or Machine/);
 });
 
 test('graph requests retry transient failures and then recover', async () => {
@@ -208,7 +208,7 @@ test('graph page uses the server analytics result rather than browser history fa
 test('user graph machine filter keeps the assigned machine visible', () => {
   assert.match(source, /device\.backendId \|\| device\.id/);
   assert.match(source, /const machineDevices = graphMachineOptions\(\)/);
-  assert.match(source, /\(isUserRole\(\) \? \[\] : \['<option value="">Select machine<\/option>'\]\)\.concat\(machineDevices\.map/);
+  assert.match(source, /\(isUserRole\(\) \? \[\] : \['<option value="">Select Machine<\/option>'\]\)\.concat\(machineDevices\.map/);
 });
 
 test('graph filters apply immediately without a duplicate Apply button', () => {

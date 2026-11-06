@@ -202,7 +202,7 @@ function graphSeriesValidCount(rows, key){
 function graphErrorMessage(error){
   const code = error && error.code ? String(error.code) : '';
   if(code === 'VENDOR_ACCOUNT_SCOPE_REQUIRED'){
-    return 'This account is not linked to a client or machine. Please contact an administrator.';
+    return 'This account is not linked to a client or Machine. Please contact an administrator.';
   }
   if(code === 'VENDOR_SESSION_EXPIRED' || code === 'UNAUTHORIZED'){
     return 'Your session has expired. Please sign in again.';
@@ -509,7 +509,7 @@ function renderGraphs(container){
     return '<option value="' + graphEscape(client) + '"' + (graphFilters.client === client ? ' selected' : '') + '>' + graphEscape(client) + '</option>';
   }));
   const machineDevices = graphMachineOptions();
-  const machineOptions = (isUserRole() ? [] : ['<option value="">Select machine</option>']).concat(machineDevices.map(function(device){
+  const machineOptions = (isUserRole() ? [] : ['<option value="">Select Machine</option>']).concat(machineDevices.map(function(device){
     const value = device.backendId || device.id;
     return '<option value="' + graphEscape(value) + '"' + (String(graphFilters.machine) === String(value) ? ' selected' : '') + '>' + graphEscape(device.id) + '</option>';
   }));

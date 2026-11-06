@@ -247,7 +247,7 @@ test('machine selection stays empty until a customer is selected', () => {
   vm.runInContext(source, sandbox, { filename:'users.js' });
 
   const markup = sandbox.userMachineOptions('', '');
-  assert.match(markup, /<option value="">Select machine<\/option>/);
+  assert.match(markup, /<option value="">Select Machine<\/option>/);
   assert.doesNotMatch(markup, /SERIAL-LOCAL/);
 });
 

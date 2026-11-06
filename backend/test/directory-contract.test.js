@@ -40,6 +40,9 @@ test('client admins manage ordinary users only inside their vendor-owned clients
   assert.match(block, /machine\.rows\[0\]\.vendor_account_id/);
   assert.match(block, /machine\.rows\[0\]\.client_vendor_account_id/);
   assert.match(block, /await addVendorUser\(/);
+  assert.match(block, /findVendorUserByName\(/);
+  assert.match(block, /vendorUserReused = true/);
+  assert.match(block, /vendor_user_id, vendor_username, vendor_type/);
   assert.match(block, /vendor_username, vendor_type/);
   assert.match(block, /requireUserRole\(body\.role \?\? 'user'\)/);
   assert.match(block, /m\.vendor_device_id = \$1/);

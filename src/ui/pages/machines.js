@@ -178,7 +178,7 @@ function renderMachines(container){
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">
         Machine
         <select ${isUserRole()?'disabled':''} onchange="machineFilters.device=this.value;renderMachines(document.getElementById('page-content'));" style="padding:10px 16px;background:${isUserRole()?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${isUserRole()?'#94a3b8':'#e2e8f0'};font-size:14px;min-width:220px;cursor:${isUserRole()?'not-allowed':'pointer'};">
-          ${isUserRole() ? '' : '<option value="" ' + (machineFilters.device===''?'selected':'') + '>Select machine</option>'}
+          ${isUserRole() ? '' : '<option value="" ' + (machineFilters.device===''?'selected':'') + '>Select Machine</option>'}
           ${clientDevices.map(dev=>{ const value=dev.backendId || dev.id; return `<option value="${machinePreviewEscape(value)}" ${String(machineFilters.device)===String(value)?'selected':''}>${machinePreviewEscape(dev.id)} - ${machinePreviewEscape(dev.name)}</option>`; }).join('')}
         </select>
       </label>
