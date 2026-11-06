@@ -534,10 +534,8 @@ export function registerDirectoryRoutes(router) {
       if (role !== 'user') throw new ForbiddenError();
     }
 
-    // A `user` is bound to exactly one machine and inherits that machine's client.
-    if (role === 'user' && !machineRef) {
-      throw new ValidationError('A `user` account must be linked to a machine.', { field: 'machineId' });
-    }
+    // A user may exist before a device is assigned. In that state the user is
+    // linked to a customer only and receives no device-scoped data access.
     if (machineRef) {
       const machine = await query(
         `SELECT m.id, m.client_id, m.vendor_account_id,
@@ -561,6 +559,22 @@ export function registerDirectoryRoutes(router) {
       }
       machineId = machine.rows[0].id;
       if (role === 'user') clientId = machine.rows[0].client_id;
+    } else if (role === 'user') {
+      if (!clientId) {
+        throw new ValidationError('A `user` account must be linked to a customer or machine.', {
+          field: 'clientId',
+        });
+      }
+      if (actorVendorAccountId) {
+        const ownedClient = await query(
+          `SELECT id
+             FROM clients
+            WHERE id = $1
+              AND vendor_account_id = $2`,
+          [clientId, actorVendorAccountId]
+        );
+        if (!ownedClient.rows[0]) throw new ForbiddenError();
+      }
     }
 
     const email = optionalEmail(body.email, 'email');
@@ -659,32 +673,57 @@ export function registerDirectoryRoutes(router) {
       role = 'user';
     }
 
+    const machineRef = body.machineId === undefined
+      ? null
+      : optionalString(body.machineId, 'machineId', { max: 160 });
     let machineId = body.machineId === undefined
       ? before.rows[0].machine_id
-      : optionalUuid(body.machineId, 'machineId');
+      : null;
 
     let clientId = body.clientId === undefined
       ? before.rows[0].client_id
       : optionalUuid(body.clientId, 'clientId');
     if (role === 'user') {
-      if (!machineId) throw new ValidationError('A `user` account must stay linked to a machine.');
-      const machine = await query(
-        `SELECT m.client_id, m.vendor_account_id,
-                c.vendor_account_id AS client_vendor_account_id
-           FROM machines m
-           LEFT JOIN clients c ON c.id = m.client_id
-          WHERE m.id = $1`,
-        [machineId]
-      );
-      if (!machine.rows[0]) throw new NotFoundError('Linked machine not found');
-      if (actorVendorAccountId) {
-        if (String(machine.rows[0].vendor_account_id || '') !== actorVendorAccountId
-          || !machine.rows[0].client_id
-          || String(machine.rows[0].client_vendor_account_id || '') !== actorVendorAccountId) {
-          throw new ForbiddenError();
+      if (machineRef) {
+        const machine = await query(
+          `SELECT m.id, m.client_id, m.vendor_account_id,
+                  c.vendor_account_id AS client_vendor_account_id
+             FROM machines m
+             LEFT JOIN clients c ON c.id = m.client_id
+            WHERE m.id::text = $1
+               OR m.vendor_device_id = $1
+               OR m.device_id = $1
+               OR m.serial = $1
+            LIMIT 1`,
+          [machineRef]
+        );
+        if (!machine.rows[0]) throw new NotFoundError('Linked machine not found');
+        if (actorVendorAccountId) {
+          if (String(machine.rows[0].vendor_account_id || '') !== actorVendorAccountId
+            || !machine.rows[0].client_id
+            || String(machine.rows[0].client_vendor_account_id || '') !== actorVendorAccountId) {
+            throw new ForbiddenError();
+          }
+        }
+        machineId = machine.rows[0].id;
+        clientId = machine.rows[0].client_id;
+      } else if (!machineId) {
+        if (!clientId) {
+          throw new ValidationError('A `user` account must be linked to a customer or machine.', {
+            field: 'clientId',
+          });
+        }
+        if (actorVendorAccountId) {
+          const ownedClient = await query(
+            `SELECT id
+               FROM clients
+              WHERE id = $1
+                AND vendor_account_id = $2`,
+            [clientId, actorVendorAccountId]
+          );
+          if (!ownedClient.rows[0]) throw new ForbiddenError();
         }
       }
-      clientId = machine.rows[0].client_id;
     } else {
       machineId = null;
     }

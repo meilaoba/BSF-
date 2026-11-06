@@ -117,6 +117,53 @@ test('Add User validates a placeholder mobile inline before calling the backend'
   assert.equal(input.focused, true);
 });
 
+test('Add User can create a customer-scoped user without a machine', async () => {
+  let created = null;
+  const alerts = [];
+  const modal = { dataset:{ editIndex:'' }, remove(){} };
+  const values = {
+    'user-username-input':'unassigned-user',
+    'user-email-input':'user@example.com',
+    'user-mobile-input':'+852 9123 4567',
+    'user-password-input':'password',
+    'user-role-input':'User',
+    'user-client-input':'client-1',
+    'user-machine-input':'',
+  };
+  const sandbox = {
+    console,
+    window:{
+      BSF_API_CONFIG:{ enabled:true },
+      BSF_API:{
+        async createUser(payload){ created = payload; },
+        async updateUser(){ throw new Error('unexpected update'); },
+      },
+      BSF_LOAD_DIRECTORY_DATA:async () => true,
+    },
+    document:{
+      getElementById(id){
+        if(id === 'user-modal') return modal;
+        if(id === 'page-content') return { innerHTML:'' };
+        return Object.prototype.hasOwnProperty.call(values, id) ? { value:values[id] } : null;
+      },
+    },
+    alert(message){ alerts.push(String(message)); },
+    currentClient:'',
+    isClientScopedRole(){ return true; },
+    clientEscape(value){ return String(value ?? ''); },
+    bsfEscapeHtml(value){ return String(value ?? ''); },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox, { filename:'users.js' });
+
+  await vm.runInContext('saveUserModal()', sandbox);
+
+  assert.deepEqual(alerts, []);
+  assert.equal(created.clientId, 'client-1');
+  assert.equal(created.machineId, null);
+  assert.equal(created.role, 'User');
+});
+
 test('mobile field contains the requested helper and immediate validation', () => {
   assert.match(source, /Please enter the account holder\\'s mobile number, including the country code if applicable, e\.g\. \+852 9123 4567/);
   assert.match(source, /oninput="validateUserMobileField\(\)"/);
@@ -124,12 +171,13 @@ test('mobile field contains the requested helper and immediate validation', () =
   assert.match(source, /digits\.length===11 && digits\.startsWith\('1'\)/);
 });
 
-test('machine options submit a resolvable identifier instead of an empty value', () => {
+test('machine options only show locally linked machines for the selected customer', () => {
   const sandbox = {
     scopedDevices(){
       return [
-        { id:'SERIAL-BOUND', backendId:'', vendorDeviceId:'vendor-1', serial:'SERIAL-BOUND', clientId:'client-1' },
+        { id:'VENDOR-ONLY', backendId:'', vendorDeviceId:'vendor-1', serial:'VENDOR-ONLY', clientId:'client-1' },
         { id:'SERIAL-LOCAL', backendId:'machine-2', vendorDeviceId:'vendor-2', serial:'SERIAL-LOCAL', clientId:'client-1' },
+        { id:'OTHER-CLIENT', backendId:'machine-3', vendorDeviceId:'vendor-3', serial:'OTHER-CLIENT', clientId:'client-2' },
       ];
     },
     clientEscape(value){ return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); },
@@ -138,8 +186,22 @@ test('machine options submit a resolvable identifier instead of an empty value',
   vm.runInContext(source, sandbox, { filename:'users.js' });
 
   const markup = sandbox.userMachineOptions('client-1', '');
-  assert.match(markup, /<option value="vendor-1">SERIAL-BOUND<\/option>/);
+  assert.doesNotMatch(markup, /VENDOR-ONLY/);
+  assert.doesNotMatch(markup, /OTHER-CLIENT/);
   assert.match(markup, /<option value="machine-2">SERIAL-LOCAL<\/option>/);
+});
+
+test('machine selection stays empty until a customer is selected', () => {
+  const sandbox = {
+    scopedDevices(){ return [{ id:'SERIAL-LOCAL', backendId:'machine-2', clientId:'client-1' }]; },
+    clientEscape(value){ return String(value ?? ''); },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox, { filename:'users.js' });
+
+  const markup = sandbox.userMachineOptions('', '');
+  assert.match(markup, /<option value="">Select machine<\/option>/);
+  assert.doesNotMatch(markup, /SERIAL-LOCAL/);
 });
 
 test('frontend mobile validation matches the backend acceptance cases', () => {

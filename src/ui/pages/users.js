@@ -57,7 +57,8 @@ function userClientOptions(selectedId){
   const list = scoped
     ? [{ id:profile.clientId || '', name:currentClient || '' }]
     : clientRecords;
-  return list.map(function(client){
+  const placeholder = scoped ? '' : '<option value="">Select Customer</option>';
+  return placeholder + list.map(function(client){
     const selected = String(selectedId || (scoped ? profile.clientId : '')) === String(client.id);
     return '<option value="' + clientEscape(client.id) + '"' + (selected ? ' selected' : '') + '>' + clientEscape(client.name || 'Unassigned') + '</option>';
   }).join('');
@@ -65,10 +66,12 @@ function userClientOptions(selectedId){
 
 function userMachineOptions(clientId, selected){
   const list = clientId
-    ? scopedDevices().filter(function(dev){ return String(dev.clientId || '') === String(clientId); })
-    : scopedDevices();
-  return '<option value="">None</option>' + list.map(function(dev){
-    const value = dev.backendId || dev.vendorDeviceId || dev.serial || dev.id || '';
+    ? scopedDevices().filter(function(dev){
+      return dev.backendId && String(dev.clientId || '') === String(clientId);
+    })
+    : [];
+  return '<option value="">Select machine</option>' + list.map(function(dev){
+    const value = dev.backendId || '';
     return '<option value="' + clientEscape(value) + '"' + (String(selected || '') === String(value) ? ' selected' : '') + '>' + clientEscape(dev.id) + '</option>';
   }).join('');
 }
@@ -194,7 +197,7 @@ async function saveUserModal(){
     }
   }
   if(!existing && !password){ alert('Initial Password is required for a new user'); return; }
-  if(role==='User' && !machineId){ alert('A User must be linked to a machine'); return; }
+  if(role==='User' && !clientId){ alert('A User must be linked to a customer'); return; }
   const payload={id:existing?existing.id:'',userName:userName,email:email,mobile:mobile,password:password,role:role,clientId:clientId || null,machineId:machineId || null,status:'active'};
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{ if(existing) await window.BSF_API.updateUser(existing.id,payload); else await window.BSF_API.createUser(payload); }catch(error){ alert('Save failed: '+error.message); return; }

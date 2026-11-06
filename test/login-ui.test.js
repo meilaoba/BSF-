@@ -43,5 +43,5 @@ test('authenticated startup keeps the loading view until the first page is rende
   assert.ok(startup);
   assert.match(startup[0], /setAuthView\('loading', 'Loading system data\.\.\.'\)/);
   assert.match(startup[0], /await loadDataForCurrentRole\(\)/);
-  assert.match(startup[0], /navigate\('machines'\)[\s\S]*setAuthView\('app'\)/);
+  assert.match(startup[0], /navigate\(currentRole === 'user' && !currentUserHasMachineAssignment\(\) \? 'account' : 'machines'\)[\s\S]*setAuthView\('app'\)/);
 });

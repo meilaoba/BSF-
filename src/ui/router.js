@@ -166,7 +166,7 @@ async function enterAuthenticatedApp(authenticated){
   await loadDataForCurrentRole();
   applyClientScopeToState();
   scheduleDataRefresh();
-  navigate('machines');
+  navigate(currentRole === 'user' && !currentUserHasMachineAssignment() ? 'account' : 'machines');
   setAuthView('app');
 }
 
@@ -192,6 +192,12 @@ async function login(){
   await enterAuthenticatedApp(authenticated);
 }
 async function loadDataForCurrentRole(){
+  if(currentRole === 'user' && !currentUserHasMachineAssignment()){
+    if(typeof devices !== 'undefined') devices.splice(0, devices.length);
+    if(typeof rawDataRows !== 'undefined') rawDataRows.splice(0, rawDataRows.length);
+    if(typeof alerts !== 'undefined') alerts.splice(0, alerts.length);
+    return {loaded:true, changed:true, unassigned:true};
+  }
   if(!window.BSF_LOAD_BACKEND_DATA) return false;
   const limit = currentRole === 'admin' ? 100 : 1;
   const loaded = await window.BSF_LOAD_BACKEND_DATA(limit);
@@ -201,6 +207,7 @@ async function loadDataForCurrentRole(){
 }
 
 async function loadLatestForCurrentRole(){
+  if(currentRole === 'user' && !currentUserHasMachineAssignment()) return false;
   if(!window.BSF_LOAD_BACKEND_LATEST) return false;
   const limit = currentRole === 'admin' ? 1000 : 1;
   const changed = await window.BSF_LOAD_BACKEND_LATEST(limit);
@@ -310,7 +317,7 @@ function retryRestoreAuthenticatedSession(){
 
 function renderNav(){
   const menu = document.getElementById('nav-menu');
-  const items = navItems[currentRole];
+  const items = navItemsForCurrentRole();
   menu.innerHTML = items.map(item => `
     <a href="#" onclick="navigate('${item.id}');return false;" 
        style="display:flex;align-items:center;gap:12px;padding:12px 20px;color:${currentPage===item.id?'#10b981':'#94a3b8'};text-decoration:none;font-size:14px;font-weight:500;border-left:3px solid ${currentPage===item.id?'#10b981':'transparent'};background:${currentPage===item.id?'rgba(16,185,129,0.08)':'transparent'};transition:all 0.15s;"
@@ -323,8 +330,9 @@ function renderNav(){
 }
 
 function navigate(page){
-  const allowedPages = new Set((navItems[currentRole] || []).map(function(item){ return item.id; }));
-  if(!allowedPages.has(page)) page = 'machines';
+  const items = navItemsForCurrentRole();
+  const allowedPages = new Set(items.map(function(item){ return item.id; }));
+  if(!allowedPages.has(page)) page = (items[0] && items[0].id) || 'account';
   currentPage = page;
   renderNav();
   const content = document.getElementById('page-content');

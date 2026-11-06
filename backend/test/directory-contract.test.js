@@ -46,6 +46,8 @@ test('client admins manage ordinary users only inside their vendor-owned clients
   assert.match(block, /m\.device_id = \$1/);
   assert.match(block, /m\.serial = \$1/);
   assert.match(block, /machineId = machine\.rows\[0\]\.id/);
+  assert.doesNotMatch(block, /must be linked to a machine/);
+  assert.match(block, /must be linked to a customer or machine/);
 });
 
 test('vendor client admins only list clients owned by their vendor account', () => {

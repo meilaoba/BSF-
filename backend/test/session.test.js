@@ -94,6 +94,25 @@ test('client admins can inspect their session and vendor-scoped devices without 
   assert.equal(machinesRequest.url, '/api/v1/machines?limit=1000');
 });
 
+test('a user without a machine can sign in but cannot read device data', () => {
+  const session = {
+    user: {
+      role: 'user',
+      vendorUserId: '51',
+      clientId: 'client-1',
+      machineId: null,
+    },
+  };
+  const sessionRequest = { url: '/api/v1/auth/me' };
+  assert.doesNotThrow(() => applyDataScope(sessionRequest, session));
+
+  const machinesRequest = { url: '/api/v1/machines?limit=1000' };
+  assert.throws(
+    () => applyDataScope(machinesRequest, session),
+    (error) => error.code === 'FORBIDDEN'
+  );
+});
+
 test('multi-client admins keep an explicit client filter for route-level ownership checks', () => {
   const req = { url: '/api/v1/machines?clientId=client-a&limit=1000' };
   applyDataScope(req, { user: { role: 'client_admin', vendorUserId: '51', clientId: null, machineId: null } });

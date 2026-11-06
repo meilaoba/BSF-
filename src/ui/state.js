@@ -71,6 +71,12 @@ function isMasterAdminRole(){
   return currentRole === 'admin';
 }
 
+function currentUserHasMachineAssignment(){
+  if(currentRole !== 'user') return true;
+  const profile = window.BSF_USER_PROFILE || window.BSF_CURRENT_USER || {};
+  return Boolean(profile.machineId || profile.deviceId);
+}
+
 function resolveClientForCurrentUser(){
   const profile = window.BSF_USER_PROFILE || window.BSF_CURRENT_USER || {};
   if(profile.client) return profile.client;
@@ -198,3 +204,10 @@ const navItems = {
     {id:'reports',label:'Report Generation',icon:'📄'}
   ]
 };
+
+function navItemsForCurrentRole(){
+  if(currentRole === 'user' && !currentUserHasMachineAssignment()){
+    return [{id:'account',label:'Account',icon:'👤'}];
+  }
+  return navItems[currentRole] || [];
+}
