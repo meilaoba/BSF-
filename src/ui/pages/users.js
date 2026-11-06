@@ -68,7 +68,7 @@ function userMachineOptions(clientId, selected){
     ? scopedDevices().filter(function(dev){ return String(dev.clientId || '') === String(clientId); })
     : scopedDevices();
   return '<option value="">None</option>' + list.map(function(dev){
-    const value = dev.backendId || '';
+    const value = dev.backendId || dev.vendorDeviceId || dev.serial || dev.id || '';
     return '<option value="' + clientEscape(value) + '"' + (String(selected || '') === String(value) ? ' selected' : '') + '>' + clientEscape(dev.id) + '</option>';
   }).join('');
 }

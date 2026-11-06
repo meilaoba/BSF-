@@ -124,6 +124,24 @@ test('mobile field contains the requested helper and immediate validation', () =
   assert.match(source, /digits\.length===11 && digits\.startsWith\('1'\)/);
 });
 
+test('machine options submit a resolvable identifier instead of an empty value', () => {
+  const sandbox = {
+    scopedDevices(){
+      return [
+        { id:'SERIAL-BOUND', backendId:'', vendorDeviceId:'vendor-1', serial:'SERIAL-BOUND', clientId:'client-1' },
+        { id:'SERIAL-LOCAL', backendId:'machine-2', vendorDeviceId:'vendor-2', serial:'SERIAL-LOCAL', clientId:'client-1' },
+      ];
+    },
+    clientEscape(value){ return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox, { filename:'users.js' });
+
+  const markup = sandbox.userMachineOptions('client-1', '');
+  assert.match(markup, /<option value="vendor-1">SERIAL-BOUND<\/option>/);
+  assert.match(markup, /<option value="machine-2">SERIAL-LOCAL<\/option>/);
+});
+
 test('frontend mobile validation matches the backend acceptance cases', () => {
   const sandbox = {};
   vm.createContext(sandbox);

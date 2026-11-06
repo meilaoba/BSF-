@@ -42,6 +42,10 @@ test('client admins manage ordinary users only inside their vendor-owned clients
   assert.match(block, /await addVendorUser\(/);
   assert.match(block, /vendor_username, vendor_type/);
   assert.match(block, /requireUserRole\(body\.role \?\? 'user'\)/);
+  assert.match(block, /m\.vendor_device_id = \$1/);
+  assert.match(block, /m\.device_id = \$1/);
+  assert.match(block, /m\.serial = \$1/);
+  assert.match(block, /machineId = machine\.rows\[0\]\.id/);
 });
 
 test('vendor client admins only list clients owned by their vendor account', () => {

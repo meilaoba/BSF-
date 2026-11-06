@@ -527,24 +527,29 @@ export function registerDirectoryRoutes(router) {
 
     let role = requireUserRole(body.role ?? 'user');
     let clientId = optionalUuid(body.clientId, 'clientId');
-    const machineId = optionalUuid(body.machineId, 'machineId');
+    const machineRef = optionalString(body.machineId, 'machineId', { max: 160 });
+    let machineId = null;
     const actorVendorAccountId = clientAdminVendorAccountId(req);
     if (actorVendorAccountId) {
       if (role !== 'user') throw new ForbiddenError();
     }
 
     // A `user` is bound to exactly one machine and inherits that machine's client.
-    if (role === 'user' && !machineId) {
+    if (role === 'user' && !machineRef) {
       throw new ValidationError('A `user` account must be linked to a machine.', { field: 'machineId' });
     }
-    if (machineId) {
+    if (machineRef) {
       const machine = await query(
         `SELECT m.id, m.client_id, m.vendor_account_id,
                 c.vendor_account_id AS client_vendor_account_id
            FROM machines m
            LEFT JOIN clients c ON c.id = m.client_id
-          WHERE m.id = $1`,
-        [machineId]
+          WHERE m.id::text = $1
+             OR m.vendor_device_id = $1
+             OR m.device_id = $1
+             OR m.serial = $1
+          LIMIT 1`,
+        [machineRef]
       );
       if (!machine.rows[0]) throw new NotFoundError('Linked machine not found');
       if (actorVendorAccountId) {
@@ -554,6 +559,7 @@ export function registerDirectoryRoutes(router) {
           throw new ForbiddenError();
         }
       }
+      machineId = machine.rows[0].id;
       if (role === 'user') clientId = machine.rows[0].client_id;
     }
 
