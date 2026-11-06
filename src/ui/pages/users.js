@@ -64,14 +64,18 @@ function userClientOptions(selectedId){
   }).join('');
 }
 
-function userMachineOptions(clientId, selected){
-  const list = clientId
+function userMachineOptions(clientId, selected, includeAllDevices){
+  const list = includeAllDevices
     ? scopedDevices().filter(function(dev){
-      return dev.backendId && String(dev.clientId || '') === String(clientId);
+      return dev.backendId || dev.vendorDeviceId || dev.serial || dev.id;
     })
-    : [];
+    : clientId
+      ? scopedDevices().filter(function(dev){
+        return dev.backendId && String(dev.clientId || '') === String(clientId);
+      })
+      : [];
   return '<option value="">Select machine</option>' + list.map(function(dev){
-    const value = dev.backendId || '';
+    const value = dev.backendId || dev.vendorDeviceId || dev.serial || dev.id || '';
     return '<option value="' + clientEscape(value) + '"' + (String(selected || '') === String(value) ? ' selected' : '') + '>' + clientEscape(dev.id) + '</option>';
   }).join('');
 }
@@ -79,8 +83,13 @@ function userMachineOptions(clientId, selected){
 function syncUserMachineOptions(){
   const clientSelect = document.getElementById('user-client-input');
   const machineSelect = document.getElementById('user-machine-input');
-  if(!clientSelect || !machineSelect) return;
-  machineSelect.innerHTML = userMachineOptions(clientSelect.value, machineSelect.value);
+  if(!machineSelect) return;
+  const clientAdmin = typeof currentRole !== 'undefined' && currentRole === 'client-admin';
+  machineSelect.innerHTML = userMachineOptions(
+    clientSelect ? clientSelect.value : '',
+    machineSelect.value,
+    clientAdmin
+  );
 }
 
 function userMobileValidationMessage(value){
@@ -137,6 +146,7 @@ function openUserModal(userRef){
   if(!modal){ modal = document.createElement('div'); modal.id='user-modal'; document.body.appendChild(modal); }
   modal.dataset.editIndex = isEdit ? String(index) : '';
   const clientScoped = isClientScopedRole();
+  const clientAdmin = typeof currentRole !== 'undefined' && currentRole === 'client-admin';
   const availableRoles = clientScoped || !isEdit ? ['User'] : ['Master Admin','Client Admin','User'];
   const roles = availableRoles.map(function(role){ return '<option value="' + role + '"' + (user.role===role?' selected':'') + '>' + role + '</option>'; }).join('');
   const clientSelectAttrs = clientScoped ? ' disabled' : '';
@@ -159,10 +169,12 @@ function openUserModal(userRef){
       '<input id="user-password-input" type="password" placeholder="' + (isEdit ? 'Leave blank to keep current password' : 'Required for a new user') + '" style="' + fieldStyle + '" />' +
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Role</label>' +
       '<select id="user-role-input" style="' + fieldStyle + '">' + roles + '</select>' +
-      '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Client</label>' +
-      '<select id="user-client-input"' + clientSelectAttrs + ' onchange="syncUserMachineOptions()" style="' + fieldStyle + clientSelectStyle + '">' + userClientOptions(user.clientId) + '</select>' +
+      '<div style="display:' + (clientAdmin ? 'none' : 'block') + ';">' +
+        '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Client</label>' +
+        '<select id="user-client-input"' + clientSelectAttrs + ' onchange="syncUserMachineOptions()" style="' + fieldStyle + clientSelectStyle + '">' + userClientOptions(user.clientId) + '</select>' +
+      '</div>' +
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Machine</label>' +
-      '<select id="user-machine-input" style="' + fieldStyle + '">' + userMachineOptions(user.clientId, user.machineId) + '</select>' +
+      '<select id="user-machine-input" style="' + fieldStyle + '">' + userMachineOptions(user.clientId, user.machineId, clientAdmin) + '</select>' +
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;"><button onclick="closeUserModal()" style="padding:9px 18px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-size:13px;cursor:pointer;">Cancel</button><button onclick="saveUserModal()" style="padding:9px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save</button></div>' +
     '</div></div>';
 }

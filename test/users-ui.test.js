@@ -251,6 +251,29 @@ test('machine selection stays empty until a customer is selected', () => {
   assert.doesNotMatch(markup, /SERIAL-LOCAL/);
 });
 
+test('client admin machine options list account devices without a customer selection', () => {
+  const sandbox = {
+    scopedDevices(){
+      return [
+        { id:'DEVICE-A', backendId:'', vendorDeviceId:'vendor-a', serial:'SERIAL-A', clientId:'' },
+        { id:'DEVICE-B', backendId:'machine-b', vendorDeviceId:'vendor-b', serial:'SERIAL-B', clientId:'' },
+      ];
+    },
+    clientEscape(value){ return String(value ?? ''); },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox, { filename:'users.js' });
+
+  const markup = sandbox.userMachineOptions('', '', true);
+  assert.match(markup, /<option value="vendor-a">DEVICE-A<\/option>/);
+  assert.match(markup, /<option value="machine-b">DEVICE-B<\/option>/);
+});
+
+test('client admin Add User hides the linked customer field', () => {
+  assert.match(source, /const clientAdmin = typeof currentRole !== 'undefined' && currentRole === 'client-admin'/);
+  assert.match(source, /\(clientAdmin \? 'none' : 'block'\)/);
+});
+
 test('frontend mobile validation matches the backend acceptance cases', () => {
   const sandbox = {};
   vm.createContext(sandbox);
