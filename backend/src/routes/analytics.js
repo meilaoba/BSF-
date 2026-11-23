@@ -425,6 +425,7 @@ export function registerAnalyticsRoutes(router) {
       summaryMode: period,
       now: new Date(),
       formula: config.formula,
+      wasteSource: 'daily-input',
     });
     sendOk(res, {
       period,
@@ -459,6 +460,7 @@ export function registerAnalyticsRoutes(router) {
       summaryMode: period,
       now: new Date(),
       formula: config.formula,
+      wasteSource: 'daily-input',
     });
     sendOk(res, {
       period,
@@ -490,6 +492,7 @@ export function registerAnalyticsRoutes(router) {
       summaryMode: period,
       now: new Date(),
       formula: config.formula,
+      wasteSource: 'daily-stats',
     });
     sendOk(res, {
       period,

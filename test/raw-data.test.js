@@ -37,6 +37,7 @@ const sampleRow = {
   device: 'KW-300',
   deviceState: 'Running',
   weight: 10.8,
+  dailyFeedWeight: 5.5,
   temperature: 40.9,
   humidity: 0.2,
   operatingStatus: 'Running',
@@ -58,11 +59,27 @@ test('client and user raw tables render six columns instead of CSS-hiding extra 
   assert.match(source, /isMasterAdminRole\(\) \? rawDataFullTableMarkup/);
 });
 
-test('master admin keeps the full raw table', () => {
+test('master admin keeps the full raw table and shows daily feed weight', () => {
   const html = sandbox.rawDataFullTableMarkup([sampleRow]);
   assert.match(html, />Operating</);
   assert.match(html, />Hot Plate Temp\(°C\)</);
+  assert.match(html, />Daily Feed\(kg\)</);
+  assert.match(html, />5\.5</);
   assert.match(html, />Total Add\(kg\)</);
+});
+
+test('master admin CSV export includes the daily feed weight column and value', () => {
+  const csvRows = sandbox.rawDataCsvRows([sampleRow], false);
+  const feedIndex = csvRows[0].indexOf('Daily Feed(kg)');
+  assert.notEqual(feedIndex, -1);
+  assert.equal(csvRows[1][feedIndex], 5.5);
+  assert.equal(csvRows[0].length, csvRows[1].length);
+});
+
+test('client and user CSV export keeps the compact six-column contract', () => {
+  const csvRows = sandbox.rawDataCsvRows([sampleRow], true);
+  assert.deepEqual(JSON.parse(JSON.stringify(csvRows[0])), ['Recorded At','Device','State','Weight(kg)','Temp(°C)','Hum(%)']);
+  assert.equal(csvRows[1].length, 6);
 });
 
 test('raw data uses blue running, amber standby and red offline status badges', () => {

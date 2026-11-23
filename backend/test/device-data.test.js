@@ -29,6 +29,7 @@ test('maps vendor API telemetry fields without coercing invalid values', () => {
       HotPlateTemp: 49.75,
       Humidity: 120,
       RealTimeWeight: '18.25',
+      DailyFeedWeight: '50',
       TotalAddMaterial: 6.053,
       SingleAddMaterial: 1.2,
       TotalDischarge: -3.2,
@@ -53,6 +54,7 @@ test('maps vendor API telemetry fields without coercing invalid values', () => {
   assert.equal(mapped.hotPlateTempC, 49.75);
   assert.equal(mapped.humidityPct, null);
   assert.equal(mapped.realTimeWeightKg, 18.25);
+  assert.equal(mapped.dailyFeedWeightKg, 50);
   assert.equal(mapped.totalAddedMaterialKg, 6053);
   assert.equal(mapped.singleAddedMaterialKg, 1.2);
   assert.equal(mapped.totalDischargeKg, -3200);
@@ -63,6 +65,7 @@ test('maps vendor API telemetry fields without coercing invalid values', () => {
   assert.equal(mapped.fanCode, 0);
   assert.equal(mapped.signalPct, 85);
   assert.equal(mapped.rawData.CabinTemp, '42.5');
+  assert.equal(mapped.rawData.DailyFeedWeight, '50');
 });
 
 test('expands a batch payload and retains timestamp plus device key', () => {

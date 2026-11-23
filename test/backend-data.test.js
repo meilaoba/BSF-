@@ -371,6 +371,7 @@ test('preserves every vendor telemetry field required by the full device view', 
     TotalDischarge: 0,
     CabinTemp: 40,
     RealTimeWeight: 10.8,
+    DailyFeedWeight: 5.5,
     Feed: 0
   };
   const snapshot = buildSnapshot([], [{
@@ -404,6 +405,7 @@ test('preserves every vendor telemetry field required by the full device view', 
   assert.equal(snapshot.devices[0].vendorLastSyncedAt, '2026-10-27T05:14:46.078Z');
   assert.equal(snapshot.rows.length, 1);
   assert.equal(snapshot.rows[0].weight, 10.8);
+  assert.equal(snapshot.rows[0].dailyFeedWeight, 5.5);
   assert.equal(snapshot.rows[0].temperature, 40);
   assert.equal(snapshot.rows[0].hotPlateTemp, 38.2);
   assert.equal(snapshot.rows[0].totalAddMaterial, 100);
@@ -423,6 +425,7 @@ test('maps scheduled raw samples to the compact six-column contract with real fi
       cabinTempC: 40.9,
       humidityPct: 0.2,
       realTimeWeightKg: 10.8,
+      dailyFeedWeightKg: 5.5,
       operatingStatusCode: 1
     },
     telemetry: {
@@ -441,6 +444,7 @@ test('maps scheduled raw samples to the compact six-column contract with real fi
   assert.equal(row.device, 'KW-300');
   assert.equal(row.deviceState, 'Standby');
   assert.equal(row.weight, 10.8);
+  assert.equal(row.dailyFeedWeight, 5.5);
   assert.equal(row.temperature, 40.9);
   assert.equal(row.humidity, 0.2);
   assert.equal(row.totalAddMaterial, 100);
@@ -477,6 +481,7 @@ test('leaves missing raw sample fields empty instead of fabricating values', () 
   }, { id: 'KW-301', vendorDeviceId: 'vendor-301' });
 
   assert.equal(row.weight, '—');
+  assert.equal(row.dailyFeedWeight, '—');
   assert.equal(row.temperature, '—');
   assert.equal(row.humidity, '—');
   assert.equal(row.hotPlateTemp, '—');

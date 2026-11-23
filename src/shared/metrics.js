@@ -278,7 +278,11 @@ export function aggregateTelemetrySnapshots(rows, {
   summaryMode = groupBy === 'month' ? 'yearly' : groupBy === 'hour' ? 'daily' : 'monthly',
   now = new Date(),
   formula = {},
+  wasteSource = 'auto',
 } = {}) {
+  if (!['auto', 'daily-input', 'daily-stats'].includes(wasteSource)) {
+    throw new TypeError('wasteSource must be auto, daily-input, or daily-stats');
+  }
   const normalized = (Array.isArray(rows) ? rows : []).map((row) => normalizeSnapshotRow(row, formula)).filter(Boolean);
   const unique = new Map();
   for (const row of normalized) {
@@ -383,7 +387,12 @@ export function aggregateTelemetrySnapshots(rows, {
     if (day.dateKey > currentDateKey) continue;
     day.formula = mergeFormulaConfig(formula, day.siteFormula);
     day.region = day.siteRegion || region;
-    const wasteKg = day.directWasteKg !== null ? day.directWasteKg : tonsToKg(day.maxDailyInputT);
+    const dailyInputWasteKg = tonsToKg(day.maxDailyInputT);
+    const wasteKg = wasteSource === 'daily-input'
+      ? dailyInputWasteKg
+      : wasteSource === 'daily-stats'
+        ? day.directWasteKg
+        : (day.directWasteKg !== null ? day.directWasteKg : dailyInputWasteKg);
     if (wasteKg === null) continue;
     const energyKwh = day.dailyAggregate
       ? (day.energyKwh ?? 0)
@@ -538,6 +547,7 @@ export function aggregateTelemetrySnapshots(rows, {
     : null;
   const summary = {
     wasteKg,
+    wasteSource,
     ghgKg,
     energyKwh,
     fertilizerKg: fertilizerKg(wasteKg, formula),

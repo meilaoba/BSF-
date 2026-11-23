@@ -195,6 +195,7 @@ function bsfReadTelemetry(data){
     hotPlateTempC: bsfNumber(bsfField(data, ['HotPlateTemp', 'hotPlateTemp', 'hot_plate_temp', 'hot_plate_temp_c'])),
     humidityPct: bsfHumidityPercent(bsfField(data, ['Humidity', 'humidity', 'humidity_pct'])),
     realTimeWeightKg: bsfNumber(bsfField(data, ['RealTimeWeight', 'realTimeWeight', 'real_time_weight', 'real_time_weight_kg', 'weight'])),
+    dailyFeedWeightKg: bsfNumber(bsfField(data, ['DailyFeedWeight', 'dailyFeedWeight', 'daily_feed_weight_kg'])),
     totalAddedMaterialKg: bsfTelemetryKilograms(data, ['TotalAddMaterial', 'totalAddMaterial'], ['total_added_material_kg']),
     singleAddedMaterialKg: bsfNumber(bsfField(data, ['SingleAddMaterial', 'singleAddMaterial', 'single_added_material_kg'])),
     totalDischargeKg: bsfTelemetryKilograms(data, ['TotalDischarge', 'totalDischarge', 'OtalUnloadingWeight'], ['total_discharge_kg']),
@@ -303,6 +304,7 @@ function bsfDeviceFromMachine(machine, vendor, stored){
     containerTemp:bsfDisplay(reading.cabinTempC),
     humidity:bsfDisplay(reading.humidityPct),
     realTimeWeight:bsfDisplay(reading.realTimeWeightKg),
+    dailyFeedWeight:bsfDisplay(reading.dailyFeedWeightKg),
     totalAddMaterial:bsfDisplay(reading.totalAddedMaterialKg),
     singleAddMaterial:bsfDisplay(reading.singleAddedMaterialKg),
     totalDischarge:bsfDisplay(reading.totalDischargeKg),
@@ -364,6 +366,7 @@ function bsfDeviceFromVendor(vendor){
     containerTemp:bsfDisplay(reading.cabinTempC),
     humidity:bsfDisplay(reading.humidityPct),
     realTimeWeight:bsfDisplay(reading.realTimeWeightKg),
+    dailyFeedWeight:bsfDisplay(reading.dailyFeedWeightKg),
     totalAddMaterial:bsfDisplay(reading.totalAddedMaterialKg),
     singleAddMaterial:bsfDisplay(reading.singleAddedMaterialKg),
     totalDischarge:bsfDisplay(reading.totalDischargeKg),
@@ -406,6 +409,7 @@ function bsfStoredRow(row, machineById){
     fan:bsfDisplay(reading.fanCode),
     zipper:bsfDisplay(reading.zipperCode),
     weight:bsfDisplay(reading.realTimeWeightKg),
+    dailyFeedWeight:bsfDisplay(reading.dailyFeedWeightKg),
     totalAddMaterial:bsfDisplay(reading.totalAddedMaterialKg),
     singleAddMaterial:bsfDisplay(reading.singleAddedMaterialKg),
     totalDischarge:bsfDisplay(reading.totalDischargeKg),
@@ -451,6 +455,7 @@ function bsfVendorRow(vendor, machine){
     fan:bsfDisplay(reading.fanCode),
     zipper:bsfDisplay(reading.zipperCode),
     weight:bsfDisplay(reading.realTimeWeightKg),
+    dailyFeedWeight:bsfDisplay(reading.dailyFeedWeightKg),
     totalAddMaterial:bsfDisplay(reading.totalAddedMaterialKg),
     singleAddMaterial:bsfDisplay(reading.singleAddedMaterialKg),
     totalDischarge:bsfDisplay(reading.totalDischargeKg),
@@ -609,7 +614,7 @@ function bsfRowSortTimestamp(row){
 function bsfSnapshotFingerprint(deviceList, rows){
   return JSON.stringify({
     devices:deviceList.map(function(device){ return [device.id, device.status, device.lastUpdate, device.containerTemp, device.realTimeWeight, device.telemetry]; }),
-    rows:rows.slice(0, 50).map(function(row){ return [row.device, row.recordedAt, row.temperature, row.weight, row.humidity]; })
+    rows:rows.slice(0, 50).map(function(row){ return [row.device, row.recordedAt, row.temperature, row.weight, row.dailyFeedWeight, row.humidity]; })
   });
 }
 
@@ -640,6 +645,7 @@ function bsfHistoryRow(item, device, groupBy){
     fan:'\u2014',
     zipper:'\u2014',
     weight:'\u2014',
+    dailyFeedWeight:'\u2014',
     totalAddMaterial:'\u2014',
     singleAddMaterial:'\u2014',
     totalDischarge:'\u2014',
@@ -670,6 +676,7 @@ function bsfRawSampleRow(sample, device){
     cabin_temp_c:bsfField(normalized, ['cabinTempC']),
     humidity_pct:bsfField(normalized, ['humidityPct']),
     real_time_weight_kg:bsfField(normalized, ['realTimeWeightKg']),
+    daily_feed_weight_kg:bsfField(normalized, ['dailyFeedWeightKg']),
     operating_status_code:bsfField(normalized, ['operatingStatusCode']),
     device_online_code:bsfField(normalized, ['onlineCode', 'deviceOnlineCode'])
   });
@@ -696,6 +703,7 @@ function bsfRawSampleRow(sample, device){
     fan:bsfDisplay(reading.fanCode),
     zipper:bsfDisplay(reading.zipperCode),
     weight:bsfDisplay(reading.realTimeWeightKg),
+    dailyFeedWeight:bsfDisplay(reading.dailyFeedWeightKg),
     totalAddMaterial:bsfDisplay(reading.totalAddedMaterialKg),
     singleAddMaterial:bsfDisplay(reading.singleAddedMaterialKg),
     totalDischarge:bsfDisplay(reading.totalDischargeKg),
@@ -811,7 +819,7 @@ function bsfWriteStoredHistory(rows){
 function bsfRowValueFingerprint(row){
   return JSON.stringify([
     row.deviceState, row.operatingStatus, row.fermentState, row.feed, row.shredder,
-    row.mixingMotor, row.fan, row.zipper, row.weight, row.totalAddMaterial,
+    row.mixingMotor, row.fan, row.zipper, row.weight, row.dailyFeedWeight, row.totalAddMaterial,
     row.singleAddMaterial, row.totalDischarge, row.singleDischarge, row.discharge,
     row.runTime, row.temperature, row.hotPlateTemp, row.humidity, row.energy, row.solarPower,
     row.co2, row.no2, row.h2s, row.gps, row.signal

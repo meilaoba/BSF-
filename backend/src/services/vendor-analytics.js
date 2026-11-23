@@ -1,4 +1,5 @@
 import { query, withTransaction } from '../db.js';
+import { canonicalDailyInputT, vendorDailyFeedWeightKg } from '../shared/vendor-weight.js';
 
 function finiteNumber(value) {
   if (value === undefined || value === null || value === '') return null;
@@ -55,6 +56,7 @@ export async function recordVendorTelemetrySamples(devices, {
       const telemetry = safeObject(device.telemetry);
       const input = safeObject(device.input);
       const output = safeObject(device.output);
+      const dailyInputT = canonicalDailyInputT({ telemetry, input });
       if (!Object.keys(telemetry).length && !Object.keys(input).length && !Object.keys(output).length) continue;
       const recordedAt = sourceDate(device.recordedAt ?? telemetry.timestamp ?? telemetry.recordedAt ?? telemetry.updateTime);
 
@@ -103,7 +105,7 @@ export async function recordVendorTelemetrySamples(devices, {
           finiteNumber(telemetry.RealTimeWeight ?? telemetry.realTimeWeight),
           finiteNumber(telemetry.OperatingStatus ?? telemetry.operatingStatus),
           finiteNumber(device.onlineCode),
-          finiteNumber(input.dailyInput),
+          dailyInputT,
           finiteNumber(input.weeklyInput),
           finiteNumber(input.monthlyInput),
           finiteNumber(input.yearlyInput),
@@ -199,6 +201,7 @@ export async function loadVendorTelemetrySamples({
         monthlyInputT: row.monthly_input_t,
         yearlyInputT: row.yearly_input_t,
         dailyOutputT: row.daily_output_t,
+        dailyFeedWeightKg: vendorDailyFeedWeightKg(row.telemetry),
         weeklyOutputT: row.weekly_output_t,
         monthlyOutputT: row.monthly_output_t,
         yearlyOutputT: row.yearly_output_t,
@@ -225,6 +228,7 @@ export function mapVendorTelemetryHistoryRow(row) {
     cabin_temp_c: row.cabin_temp_c,
     humidity_pct: row.humidity_pct,
     real_time_weight_kg: row.real_time_weight_kg,
+    daily_feed_weight_kg: vendorDailyFeedWeightKg(row.telemetry),
     operating_status_code: row.operating_status_code,
     daily_input_t: row.daily_input_t,
     weekly_input_t: row.weekly_input_t,

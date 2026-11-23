@@ -1,4 +1,5 @@
 import { query, withTransaction } from '../db.js';
+import { vendorDailyFeedWeightKg } from '../shared/vendor-weight.js';
 import { ValidationError } from '../lib/errors.js';
 
 const TELEMETRY_SOURCES = new Set(['vendor', 'api', 'manual']);
@@ -92,6 +93,7 @@ export function mapTelemetryInput(input, { receivedAt = new Date() } = {}) {
     hotPlateTempC: finiteNumber(firstDefined(payload.HotPlateTemp, payload.hotPlateTemp, payload.hot_plate_temp)),
     humidityPct: boundedNumber(firstDefined(payload.Humidity, payload.humidity), 0, 100),
     realTimeWeightKg: finiteNumber(firstDefined(payload.RealTimeWeight, payload.realTimeWeight, payload.weight)),
+    dailyFeedWeightKg: vendorDailyFeedWeightKg(payload),
     singleAddedMaterialKg: finiteNumber(firstDefined(payload.SingleAddMaterial, payload.singleAddMaterial)),
     totalAddedMaterialKg: tonsToKg(firstDefined(payload.TotalAddMaterial, payload.totalAddMaterial)),
     singleDischargeKg: finiteNumber(firstDefined(payload.SingleDischarge, payload.singleDischarge)),

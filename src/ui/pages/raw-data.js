@@ -191,6 +191,18 @@ async function rawDataLoadAllForExport(){
   if(rows.length < total) throw new Error('The export contains too many records; narrow the date range.');
   return rows;
 }
+function rawDataCsvRows(rows, compact){
+  const head = compact
+    ? ['Recorded At','Device','State','Weight(kg)','Temp(°C)','Hum(%)']
+    : ['Recorded At','Device','State','Operating','Ferment','Run Time(min)','Weight(kg)','Daily Feed(kg)','Total Add(kg)','Single Add(kg)','Total Discharge(kg)','Single Discharge(kg)','Discharge','Feed','Shredder','Mixing Motor','Fan','Zipper','Temp(°C)','Hot Plate Temp(°C)','Hum(%)','Energy(kWh)','Solar Power(kW)','CO2(ppm)','NO2(ppm)','H2S(ppm)','Signal'];
+  const body = rows.map(function(row){
+    const state = row.operatingStatus && row.operatingStatus !== '—' ? row.operatingStatus : row.deviceState;
+    return compact
+      ? [row.recordedAt,row.device,state,row.weight,row.temperature,row.humidity]
+      : [row.recordedAt,row.device,row.deviceState,row.operatingStatus,row.fermentState,row.runTime,row.weight,row.dailyFeedWeight,row.totalAddMaterial,row.singleAddMaterial,row.totalDischarge,row.singleDischarge,row.discharge,row.feed,row.shredder,row.mixingMotor,row.fan,row.zipper,row.temperature,row.hotPlateTemp,row.humidity,row.energy,row.solarPower,row.co2,row.no2,row.h2s,row.signal];
+  });
+  return [head].concat(body);
+}
 async function exportRawDataCsv(){
   let rows = rawDataFilteredRows();
   if(window.BSF_LOAD_RAW_SAMPLES){
@@ -201,17 +213,7 @@ async function exportRawDataCsv(){
       return;
     }
   }
-  const compact = !isMasterAdminRole();
-  const head = compact
-    ? ['Recorded At','Device','State','Weight(kg)','Temp(°C)','Hum(%)']
-    : ['Recorded At','Device','State','Operating','Ferment','Run Time(min)','Weight(kg)','Total Add(kg)','Single Add(kg)','Total Discharge(kg)','Single Discharge(kg)','Discharge','Feed','Shredder','Mixing Motor','Fan','Zipper','Temp(°C)','Hot Plate Temp(°C)','Hum(%)','Energy(kWh)','Solar Power(kW)','CO2(ppm)','NO2(ppm)','H2S(ppm)','Signal'];
-  const body = rows.map(function(row){
-    const state = row.operatingStatus && row.operatingStatus !== '—' ? row.operatingStatus : row.deviceState;
-    return compact
-      ? [row.recordedAt,row.device,state,row.weight,row.temperature,row.humidity]
-      : [row.recordedAt,row.device,row.deviceState,row.operatingStatus,row.fermentState,row.runTime,row.weight,row.totalAddMaterial,row.singleAddMaterial,row.totalDischarge,row.singleDischarge,row.discharge,row.feed,row.shredder,row.mixingMotor,row.fan,row.zipper,row.temperature,row.hotPlateTemp,row.humidity,row.energy,row.solarPower,row.co2,row.no2,row.h2s,row.signal];
-  });
-  const csv = [head].concat(body).map(function(row){ return row.map(rawCsvCell).join(','); }).join('\r\n');
+  const csv = rawDataCsvRows(rows, !isMasterAdminRole()).map(function(row){ return row.map(rawCsvCell).join(','); }).join('\r\n');
   const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -251,7 +253,7 @@ function rawDataFullTableMarkup(rows){
     <thead><tr style="background:#0f172a;border-bottom:1px solid #334155;">
       <th style="${th}">Recorded At</th><th style="${th}">Device</th><th style="${th}">State</th>
       <th style="${th}">Operating</th><th style="${th}">Ferment</th><th style="${th}">Run Time(min)</th>
-      <th style="${th}">Weight(kg)</th><th style="${th}">Total Add(kg)</th><th style="${th}">Single Add(kg)</th>
+      <th style="${th}">Weight(kg)</th><th style="${th}">Daily Feed(kg)</th><th style="${th}">Total Add(kg)</th><th style="${th}">Single Add(kg)</th>
       <th style="${th}">Total Discharge(kg)</th><th style="${th}">Single Discharge(kg)</th><th style="${th}">Discharge</th>
       <th style="${th}">Feed</th><th style="${th}">Shredder</th><th style="${th}">Mixing Motor</th><th style="${th}">Fan</th><th style="${th}">Zipper</th>
       <th style="${th}">Temp(°C)</th><th style="${th}">Hot Plate Temp(°C)</th><th style="${th}">Hum(%)</th>
@@ -261,7 +263,7 @@ function rawDataFullTableMarkup(rows){
       <td style="${td}">${rawDataDisplay(row.recordedAt)}</td><td style="${td}font-weight:600;">${rawDataDisplay(row.device)}</td>
       <td style="padding:10px 16px;">${rawDeviceStateMarkup(row.deviceState)}</td>
       <td style="${td}">${rawDataDisplay(row.operatingStatus)}</td><td style="${td}">${rawDataDisplay(row.fermentState)}</td><td style="${td}">${rawDataDisplay(row.runTime)}</td>
-      <td style="${td}">${rawDataDisplay(row.weight)}</td><td style="${td}">${rawDataDisplay(row.totalAddMaterial)}</td><td style="${td}">${rawDataDisplay(row.singleAddMaterial)}</td>
+      <td style="${td}">${rawDataDisplay(row.weight)}</td><td style="${td}">${rawDataDisplay(row.dailyFeedWeight)}</td><td style="${td}">${rawDataDisplay(row.totalAddMaterial)}</td><td style="${td}">${rawDataDisplay(row.singleAddMaterial)}</td>
       <td style="${td}">${rawDataDisplay(row.totalDischarge)}</td><td style="${td}">${rawDataDisplay(row.singleDischarge)}</td><td style="${td}">${rawDataDisplay(row.discharge)}</td>
       <td style="${td}">${rawDataDisplay(row.feed)}</td><td style="${td}">${rawDataDisplay(row.shredder)}</td><td style="${td}">${rawDataDisplay(row.mixingMotor)}</td><td style="${td}">${rawDataDisplay(row.fan)}</td><td style="${td}">${rawDataDisplay(row.zipper)}</td>
       <td style="${td}">${rawDataDisplay(row.temperature)}</td><td style="${td}">${rawDataDisplay(row.hotPlateTemp)}</td><td style="${td}">${rawDataDisplay(row.humidity)}</td>

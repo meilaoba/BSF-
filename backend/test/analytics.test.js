@@ -29,6 +29,7 @@ const {
   mapVendorTelemetryHistoryRow,
   vendorAccountIdForSession,
 } = await import('../src/services/vendor-analytics.js');
+const { aggregateTelemetrySnapshots } = await import('../src/shared/metrics.js');
 
 test.after(async () => closePool());
 
@@ -364,7 +365,7 @@ test('canonical telemetry history maps to the existing device-data response cont
     real_time_weight_kg: '12.3',
     operating_status_code: 2,
     daily_input_t: '0.004',
-    telemetry: { CabinTemp: 28.5 },
+    telemetry: { CabinTemp: 28.5, DailyFeedWeight: 50 },
     input_data: { dailyInput: 0.004 },
     output_data: {},
   });
@@ -374,7 +375,8 @@ test('canonical telemetry history maps to the existing device-data response cont
   assert.equal(row.device_state, 2);
   assert.equal(row.cabin_temp_c, '28.5');
   assert.equal(row.daily_input_t, '0.004');
-  assert.deepEqual(row.telemetry, { CabinTemp: 28.5 });
+  assert.equal(row.daily_feed_weight_kg, 50);
+  assert.deepEqual(row.telemetry, { CabinTemp: 28.5, DailyFeedWeight: 50 });
   assert.equal(row.source, 'vendor_device_telemetry');
 });
 
@@ -385,6 +387,8 @@ test('graphs read telemetry while reports use daily metrics and only supplementa
   assert.match(source, /groupBy: sampleGroupBy/);
   assert.match(source, /loadGraphAnalytics\(context, range, sourceGroupBy\)/);
   assert.match(source, /loadReportAnalytics\(req, context, range\)/);
+  assert.match(source, /wasteSource: 'daily-input'/);
+  assert.match(source, /wasteSource: 'daily-stats'/);
   assert.match(source, /reportTemperatureHumidityRows\(environmentRows, dailyResult\.snapshots\)/);
   const reportLoader = source.slice(
     source.indexOf('async function loadReportAnalytics'),
@@ -397,6 +401,33 @@ test('graphs read telemetry while reports use daily metrics and only supplementa
     source.indexOf('async function loadReportAnalytics')
   );
   assert.doesNotMatch(graphLoader, /loadVendorDailyStatSnapshots/);
+});
+
+test('Food Waste In and Waste Collected cannot fall back to each other', () => {
+  const row = {
+    capturedAt: '2026-11-01T12:00:00+08:00',
+    deviceId: '52',
+    dailyInputT: 0.005,
+    wasteKg: 99,
+  };
+  const common = {
+    groupBy: 'day',
+    start: '2026-11-01',
+    end: '2026-11-01',
+    now: new Date('2026-11-02T00:00:00+08:00'),
+  };
+  const foodWasteIn = aggregateTelemetrySnapshots([row], {
+    ...common,
+    wasteSource: 'daily-input',
+  });
+  const wasteCollected = aggregateTelemetrySnapshots([row], {
+    ...common,
+    wasteSource: 'daily-stats',
+  });
+  assert.equal(foodWasteIn.items[0].value, 5);
+  assert.equal(wasteCollected.items[0].value, 99);
+  assert.equal(foodWasteIn.summary.wasteSource, 'daily-input');
+  assert.equal(wasteCollected.summary.wasteSource, 'daily-stats');
 });
 
 test('reports use the server collector credential so tenant roles share vendor daily data', () => {
