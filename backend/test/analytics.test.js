@@ -16,7 +16,7 @@ const {
   dateRangeForRequest,
   matchVendorDeviceId,
   rawSampleRange,
-  reportTemperatureHumidityRows,
+  reportTelemetrySupplementRows,
 } = await import('../src/routes/analytics.js');
 const {
   listVendorDevicesWithCollectorRefresh,
@@ -415,7 +415,7 @@ test('canonical telemetry history maps to the existing device-data response cont
   assert.equal(row.source, 'vendor_device_telemetry');
 });
 
-test('graphs read telemetry while reports use daily waste with supplemental status and environment data', () => {
+test('graphs read telemetry while reports use daily waste plus telemetry status, environment and food trend', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const source = fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8');
   assert.match(source, /const sourceGroupBy = groupBy === 'hour' \? 'hour' : 'day';/);
@@ -424,13 +424,15 @@ test('graphs read telemetry while reports use daily waste with supplemental stat
   assert.match(source, /loadReportAnalytics\(req, context, range\)/);
   assert.match(source, /wasteSource: 'daily-input'/);
   assert.match(source, /wasteSource: 'daily-stats'/);
-  assert.match(source, /reportTemperatureHumidityRows\(environmentRows, dailyResult\.snapshots\)/);
+  assert.match(source, /reportTelemetrySupplementRows\(telemetryRows\)/);
   const reportLoader = source.slice(
     source.indexOf('async function loadReportAnalytics'),
     source.indexOf('function forbiddenAccount')
   );
   assert.match(reportLoader, /groupBy: 'day'/);
   assert.match(source, /rows: \[\.\.\.dailyResult\.snapshots, \.\.\.supplementalRows\]/);
+  assert.match(source, /items: foodWasteResult\.items/);
+  assert.match(source, /wasteSource: 'daily-input'/);
   const graphLoader = source.slice(
     source.indexOf('async function loadGraphAnalytics'),
     source.indexOf('async function loadReportAnalytics')
@@ -520,8 +522,8 @@ test('reports use the server collector credential so tenant roles share vendor d
   assert.match(reportLoader, /reportCredential: \{ status: collector \? 'collector' : 'session' \}/);
 });
 
-test('report supplements only reported device days and cannot replace daily waste', () => {
-  const rows = reportTemperatureHumidityRows([
+test('report telemetry supplements status and environment even when daily waste is absent', () => {
+  const rows = reportTelemetrySupplementRows([
     {
       capturedAt: '2026-11-01T12:00:00+08:00',
       deviceId: '52',
@@ -540,17 +542,56 @@ test('report supplements only reported device days and cannot replace daily wast
       wasteKg: 88,
       energyKwh: 88,
     },
-  ], [
-    { capturedAt: '2026-11-01T12:00:00+08:00', deviceId: '52', wasteKg: 5, energyKwh: 1.5 },
   ]);
 
-  assert.deepEqual(rows, [{
-    capturedAt: '2026-11-01T12:00:00+08:00',
-    deviceId: '52',
-    cabinTempC: 28,
-    humidityPct: 41,
+  assert.deepEqual(rows, [
+    {
+      capturedAt: '2026-11-01T12:00:00+08:00',
+      deviceId: '52',
+      cabinTempC: 28,
+      humidityPct: 41,
+      operatingStatusCode: 1,
+    },
+    {
+      capturedAt: '2026-11-02T12:00:00+08:00',
+      deviceId: '52',
+      cabinTempC: 30,
+      humidityPct: 45,
+      operatingStatusCode: 2,
+    },
+  ]);
+});
+
+test('report food trend uses daily input independently from vendor daily waste', () => {
+  const telemetryRows = [{
+    capturedAt: '2026-11-07T12:00:00+08:00',
+    deviceId: '50',
+    dailyInputT: 0.003,
     operatingStatusCode: 1,
-  }]);
+  }];
+  const dailySnapshots = [{
+    capturedAt: '2026-11-07T12:00:00+08:00',
+    deviceId: '50',
+    wasteKg: 0,
+    dailyAggregate: true,
+  }];
+  const common = {
+    groupBy: 'day',
+    start: '2026-11-07',
+    end: '2026-11-07',
+    now: new Date('2026-11-08T00:00:00.000Z'),
+  };
+  const summary = aggregateTelemetrySnapshots(
+    [...dailySnapshots, ...reportTelemetrySupplementRows(telemetryRows)],
+    { ...common, wasteSource: 'daily-stats' }
+  );
+  const trend = aggregateTelemetrySnapshots(telemetryRows, {
+    ...common,
+    wasteSource: 'daily-input',
+  });
+  assert.equal(summary.summary.wasteKg, 0);
+  assert.equal(summary.summary.energyKwh, 1.5);
+  assert.equal(trend.items[0].value, 3);
 });
 
 test('graph and report responses allow only short private browser caching', () => {

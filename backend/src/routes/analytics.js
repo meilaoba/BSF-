@@ -225,18 +225,9 @@ async function loadGraphAnalytics(context, range, sampleGroupBy = 'day') {
   };
 }
 
-export function reportTemperatureHumidityRows(sampleRows, dailySnapshots) {
-  const reportedDeviceDays = new Set(
-    (Array.isArray(dailySnapshots) ? dailySnapshots : []).map(
-      (row) => `${row.deviceId}|${hongKongDateKey(row.capturedAt)}`
-    )
-  );
-  if (!reportedDeviceDays.size) return [];
+export function reportTelemetrySupplementRows(sampleRows) {
   return (Array.isArray(sampleRows) ? sampleRows : [])
     .filter((row) => {
-      if (!row || !reportedDeviceDays.has(`${row.deviceId}|${hongKongDateKey(row.capturedAt)}`)) {
-        return false;
-      }
       const hasTemperature = row.cabinTempC !== null && row.cabinTempC !== undefined && row.cabinTempC !== '';
       const hasHumidity = row.humidityPct !== null && row.humidityPct !== undefined && row.humidityPct !== '';
       const hasOperatingStatus = row.operatingStatusCode !== null
@@ -287,22 +278,21 @@ async function loadReportAnalytics(req, context, range) {
   const status = dailyResult.unavailableDeviceCount > 0
     ? (dailyResult.snapshots.length ? 'partial' : 'unavailable')
     : (dailyResult.snapshots.length ? 'vendor' : 'empty');
-  const environmentRows = dailyResult.snapshots.length
-    ? await loadVendorTelemetrySummaries({
-      vendorAccountId: context.vendorAccountId,
-      includeAllAccounts: context.includeAllAccounts,
-      deviceIds: context.deviceIds,
-      start: range.start,
-      end: range.end,
-      groupBy: 'day',
-    })
-    : [];
-  const supplementalRows = reportTemperatureHumidityRows(environmentRows, dailyResult.snapshots);
+  const telemetryRows = await loadVendorTelemetrySummaries({
+    vendorAccountId: context.vendorAccountId,
+    includeAllAccounts: context.includeAllAccounts,
+    deviceIds: context.deviceIds,
+    start: range.start,
+    end: range.end,
+    groupBy: 'day',
+  });
+  const supplementalRows = reportTelemetrySupplementRows(telemetryRows);
   return {
     rows: [...dailyResult.snapshots, ...supplementalRows],
+    telemetryRows,
     dataSources: {
       dailyStats: { status },
-      telemetry: { status: supplementalRows.length ? 'status-temperature-humidity' : 'unavailable' },
+      telemetry: { status: telemetryRows.length ? 'samples' : 'unavailable' },
       reportCredential: { status: collector ? 'collector' : 'session' },
     },
   };
@@ -492,7 +482,7 @@ export function registerAnalyticsRoutes(router) {
     const sourceGroupBy = 'day';
     const analytics = await loadReportAnalytics(req, context, range);
     const region = await resolveReportRegion({ clientId: context.clientId });
-    const result = aggregateTelemetrySnapshots(analytics.rows, {
+    const summaryResult = aggregateTelemetrySnapshots(analytics.rows, {
       groupBy,
       start: range.start,
       end: range.end,
@@ -502,18 +492,29 @@ export function registerAnalyticsRoutes(router) {
       formula: config.formula,
       wasteSource: 'daily-stats',
     });
+    const foodWasteResult = aggregateTelemetrySnapshots(analytics.telemetryRows, {
+      groupBy,
+      start: range.start,
+      end: range.end,
+      region,
+      summaryMode: period,
+      now: new Date(),
+      formula: config.formula,
+      wasteSource: 'daily-input',
+    });
     sendOk(res, {
       period,
       range,
       groupBy,
       title: period === 'yearly' ? 'Yearly Report' : 'Monthly Report',
-      items: result.items,
-      ghgItems: result.ghgItems,
-      energyItems: result.energyItems,
-      tempItems: result.tempItems,
-      humidityItems: result.humidityItems,
-      summary: result.summary,
-      empty: result.summary.pointCount === 0,
+      items: foodWasteResult.items,
+      foodWasteSource: 'daily-input',
+      ghgItems: summaryResult.ghgItems,
+      energyItems: summaryResult.energyItems,
+      tempItems: summaryResult.tempItems,
+      humidityItems: summaryResult.humidityItems,
+      summary: summaryResult.summary,
+      empty: summaryResult.summary.pointCount === 0,
       dataSources: analytics.dataSources,
     }, undefined, ANALYTICS_CACHE_HEADERS);
   });
