@@ -40,6 +40,8 @@ export function createBackendApi(options = {}) {
     getRawData(params) { return http.get('/device-data', params); },
     getRawSamples(params) { return http.get('/raw-data-samples', params); },
     getReports(params) { return http.get('/reports', params); },
+    downloadDeviceExport(params) { return http.download('/exports/device-data', params); },
+    downloadAlarmExport(params) { return http.download('/exports/alarms', params); },
 
     getAlerts(params) { return http.get('/alerts', params); },
     getNotifications(params) { return http.get('/notifications', params); },

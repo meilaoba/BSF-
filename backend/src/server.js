@@ -21,6 +21,7 @@ import { registerDeviceDataRoutes } from './routes/device-data.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerSettingsRoutes } from './routes/settings.js';
+import { registerExportRoutes } from './routes/exports.js';
 import { hasValidApiKey } from './middleware/auth.js';
 import {
   applyDataScope,
@@ -40,6 +41,7 @@ registerVendorInformationRoutes(router);
 registerDeviceDataRoutes(router);
 registerAnalyticsRoutes(router);
 registerSettingsRoutes(router);
+registerExportRoutes(router);
 
 const server = http.createServer(async (req, res) => {
   const started = Date.now();

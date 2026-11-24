@@ -14,7 +14,7 @@ function renderAlerts(container){
       <label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">${isUserRole() ? 'Machine' : 'Machine Filter'}
         <select id="alert-machine-filter" onchange="alertFilters.machine=this.value;renderAlerts(document.getElementById('page-content'));" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:220px;"></select>
       </label>
-      ${currentRole === 'admin' ? '<button onclick="openThresholdModal()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Edit the threshold of each Machine</button>' : ''}<button ${alertFilters.machine ? '' : 'disabled title="Select Machine first"'} onclick="restartSelectedMachine()" style="padding:10px 20px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:${alertFilters.machine ? 'pointer' : 'not-allowed'};opacity:${alertFilters.machine ? '1' : '.55'};">Restart Machine</button>
+      ${currentRole === 'admin' ? '<button onclick="openThresholdModal()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Edit the threshold of each Machine</button>' : ''}<button onclick="exportAlarmRecords()" style="padding:10px 20px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-weight:600;font-size:14px;cursor:pointer;">Export Alarms</button><button ${alertFilters.machine ? '' : 'disabled title="Select Machine first"'} onclick="restartSelectedMachine()" style="padding:10px 20px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:${alertFilters.machine ? 'pointer' : 'not-allowed'};opacity:${alertFilters.machine ? '1' : '.55'};">Restart Machine</button>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 20px;background:#1e293b;border:1px solid #334155;border-left:3px solid #ef4444;border-radius:12px;margin-bottom:20px;flex-wrap:wrap;">
       <div><div style="font-size:14px;font-weight:600;color:#f8fafc;">Sample Alert Preview</div><div style="margin-top:5px;font-size:12px;color:#94a3b8;">Temperature High · Device exceeds 58 °C · Email / WhatsApp</div></div>
@@ -203,6 +203,33 @@ function alertPushToast(message){
   toast.textContent=message;
   toast.style.cssText='position:fixed;top:20px;right:20px;z-index:100000;padding:12px 18px;border-radius:8px;color:#e2e8f0;background:#1d4ed8;border:1px solid #3b82f6;box-shadow:0 12px 30px rgba(0,0,0,.35);font-size:13px;font-weight:600;';
   setTimeout(function(){ if(toast) toast.remove(); }, 3200);
+}
+
+async function exportAlarmRecords(){
+  if(!window.BSF_API || typeof window.BSF_API.downloadAlarmExport !== 'function'){
+    alertPushToast('Vendor alarm export is unavailable');
+    return;
+  }
+  const selected = alertFilters.machine
+    ? scopedDevices().find(function(device){
+      return device.id === alertFilters.machine || String(device.backendId || '') === String(alertFilters.machine);
+    })
+    : null;
+  try {
+    alertPushToast('Downloading vendor alarm export...');
+    const file = await window.BSF_API.downloadAlarmExport(selected ? { machineId:selected.id } : {});
+    const url = URL.createObjectURL(file.blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.filename || 'AlarmRecord.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    alertPushToast('Vendor alarm export downloaded');
+  } catch(error) {
+    alertPushToast(error && error.message ? error.message : 'Vendor alarm export failed');
+  }
 }
 
 function applyPushTemplate(){

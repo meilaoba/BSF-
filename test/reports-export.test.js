@@ -61,6 +61,8 @@ test('report preview exposes PDF and Excel exports without a CSV button', () => 
   assert.match(source, /onclick="exportReportPdf\(\)"/);
   assert.match(source, /onclick="exportReportExcel\(\)"/);
   assert.doesNotMatch(source, /onclick="exportReportCsv\(\)"/);
+  assert.match(source, /downloadDeviceExport/);
+  assert.doesNotMatch(source, /bsf-report-.*\.xls/);
 });
 
 test('PDF library is loaded only when PDF export is requested', () => {

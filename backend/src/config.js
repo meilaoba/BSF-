@@ -138,6 +138,8 @@ export const config = {
       realtimeTimeoutMs: num('VENDOR_REALTIME_TIMEOUT_MS', 4000),
       historyUrl: str('VENDOR_HISTORY_URL', 'https://iot.creekscomposter.com:8888/historyData/temperatureHumidityCurve'),
       historyTimeoutMs: num('VENDOR_HISTORY_TIMEOUT_MS', 15000),
+      deviceExportUrl: str('VENDOR_EXPORT_TABLE_URL', 'https://iot.creekscomposter.com:8888/export/table'),
+      faultExportUrl: str('VENDOR_EXPORT_FAULT_URL', 'https://iot.creekscomposter.com:8888/export/emFault'),
       requestFormat: str('VENDOR_LOGIN_FORMAT', 'json').toLowerCase(),
       timeoutMs: num('VENDOR_AUTH_TIMEOUT_MS', 10000),
       deviceTimeoutMs: num('VENDOR_DEVICE_TIMEOUT_MS', 15000),

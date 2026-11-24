@@ -128,6 +128,37 @@
     }
   }
 
+  async function download(path, params){
+    const controller = new AbortController();
+    const timer = setTimeout(function(){ controller.abort(); }, 120000);
+    const url = runtime.apiBaseUrl + path + buildQuery(params);
+    try {
+      const response = await fetch(url, {
+        method:'GET',
+        credentials:'include',
+        signal:controller.signal
+      });
+      if(!response.ok){
+        const payload = await response.json().catch(function(){ return {}; });
+        const apiError = payload && payload.error ? payload.error : {};
+        throw new BsfApiError(apiError.message || payload.message || ('HTTP ' + response.status), apiError.code || response.status, payload);
+      }
+      const blob = await response.blob();
+      if(!blob.size) throw new BsfApiError('The export contained no data', 'EMPTY_EXPORT');
+      const disposition = response.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      const fallback = path.indexOf('/alarms') >= 0 ? 'AlarmRecord.xlsx' : 'DeviceData.xlsx';
+      const filename = match ? decodeURIComponent(match[1]) : fallback;
+      return { blob:blob, filename:filename.replace(/[^a-zA-Z0-9._-]/g, '_') };
+    } catch(error) {
+      if(error && error.name === 'AbortError') throw new BsfApiError('Export timed out', 'TIMEOUT');
+      if(!(error instanceof BsfApiError)) throw new BsfApiError('Unable to download the export', 'NETWORK_ERROR');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   function get(path, params){ return request(path, { params:params }); }
   function post(path, data){ return request(path, { method:'POST', data:data }); }
   function put(path, data){ return request(path, { method:'PUT', data:data }); }
@@ -196,6 +227,8 @@
     getRawData:function(params){ return get('/device-data', params); },
     getRawSamples:function(params){ return get('/raw-data-samples', params); },
     getReports:function(params){ return get('/reports', params); },
+    downloadDeviceExport:function(params){ return download('/exports/device-data', params); },
+    downloadAlarmExport:function(params){ return download('/exports/alarms', params); },
     getAlerts:function(params){ return get('/alerts', params); },
     getNotifications:function(params){ return get('/notifications', params); },
     markNotificationRead:function(id){ return put(idPath('/notifications', id, '/read')); },

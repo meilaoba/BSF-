@@ -74,8 +74,32 @@ export function createHttpClient(options = {}) {
     }
   }
 
+  async function download(path, params = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120000);
+    const url = baseUrl + path + buildQuery(params);
+    try {
+      const response = await fetch(url, { method: 'GET', credentials: 'include', signal: controller.signal });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const apiError = payload && payload.error ? payload.error : {};
+        throw new ApiError(apiError.message || payload.message || ('HTTP ' + response.status), apiError.code || response.status, payload);
+      }
+      const blob = await response.blob();
+      if (!blob.size) throw new ApiError('The export contained no data', 'EMPTY_EXPORT');
+      const match = String(response.headers.get('content-disposition') || '').match(/filename="?([^";]+)"?/i);
+      return { blob, filename: match ? decodeURIComponent(match[1]) : 'export.xlsx' };
+    } catch (error) {
+      if (error && error.name === 'AbortError') throw new ApiError('Export timed out', 'TIMEOUT');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   return {
     request,
+    download,
     get(path, params) { return request(path, { params }); },
     post(path, data) { return request(path, { method: 'POST', data }); },
     put(path, data) { return request(path, { method: 'PUT', data }); },
