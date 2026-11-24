@@ -106,6 +106,9 @@ export const config = {
     pollIntervalMs: num('TELEMETRY_COLLECTOR_POLL_INTERVAL_MS', 30000),
     masterIntervalSeconds: num('TELEMETRY_COLLECTOR_MASTER_INTERVAL_SECONDS', 1800),
     clientIntervalSeconds: num('TELEMETRY_COLLECTOR_CLIENT_INTERVAL_SECONDS', 1800),
+    dailyStatsSyncIntervalSeconds: num('TELEMETRY_DAILY_STATS_SYNC_INTERVAL_SECONDS', 1800),
+    dailyStatsBackfillDays: num('TELEMETRY_DAILY_STATS_BACKFILL_DAYS', 60),
+    dailyStatsRefreshDays: num('TELEMETRY_DAILY_STATS_REFRESH_DAYS', 3),
   },
 
   formula: {

@@ -60,9 +60,9 @@ test('collector persists deviceOnline status with each telemetry sample', () => 
 
 test('one collector tick saves each physical device only once across accounts', () => {
   const source = fs.readFileSync(path.join(root, 'src/services/vendor-collector.js'), 'utf8');
-  assert.match(source, /async function collectAccount\(account, now, seenDeviceIds = null\)/);
+  assert.match(source, /async function collectAccount\([\s\S]+?seenDeviceIds = null/);
   assert.match(source, /const seenDeviceIds = new Set\(\)/);
-  assert.match(source, /collectAccount\(account, now, seenDeviceIds\)/);
+  assert.match(source, /collectAccount\(account, now, seenDeviceIds, seenDailyStatsDeviceIds\)/);
   assert.match(source, /devicesToSave\.forEach\(\(device\) => seenDeviceIds\.add\(String\(device\.id\)\)\)/);
 });
 
@@ -95,4 +95,14 @@ test('collector migration allows the confirmed 30 minute interval', () => {
   const sql = fs.readFileSync(path.join(root, 'db/migrations/011_vendor_collector_30minute_interval.sql'), 'utf8');
   assert.match(sql, /1800/);
   assert.match(sql, /vendor_device_telemetry_sample_interval_check/);
+});
+
+test('collector syncs persistent daily stats on the confirmed 30 minute cadence', () => {
+  const source = fs.readFileSync(path.join(root, 'src/services/vendor-collector.js'), 'utf8');
+  assert.match(source, /claimVendorDailyStatsSync/);
+  assert.match(source, /syncVendorDailyStatsForDevices/);
+  assert.match(source, /finishVendorDailyStatsSync/);
+  assert.match(source, /dailyStatsSyncIntervalSeconds/);
+  assert.match(source, /dailyStatsAttempted/);
+  assert.match(source, /dailyStatsSaved/);
 });

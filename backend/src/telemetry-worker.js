@@ -14,7 +14,9 @@ async function tick() {
     if (summary.accounts || summary.failed) {
       console.log(
         `[telemetry-worker] accounts=${summary.accounts} collected=${summary.collected} ` +
-        `skipped=${summary.skipped} failed=${summary.failed}`
+        `skipped=${summary.skipped} failed=${summary.failed} ` +
+        `daily_attempted=${summary.dailyStatsAttempted} ` +
+        `daily_saved=${summary.dailyStatsSaved} daily_failed=${summary.dailyStatsFailed}`
       );
     }
   } catch (error) {

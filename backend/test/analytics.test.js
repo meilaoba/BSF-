@@ -50,6 +50,9 @@ test('confirmed formula and polling defaults remain configurable', () => {
   assert.equal(config.auth.vendor.realtimeEnabled, true);
   assert.equal(config.auth.vendor.accessTokenTtlDays, 7);
   assert.equal(config.auth.vendor.refreshTokenTtlDays, 8);
+  assert.equal(config.telemetryCollector.dailyStatsSyncIntervalSeconds, 1800);
+  assert.equal(config.telemetryCollector.dailyStatsBackfillDays, 60);
+  assert.equal(config.telemetryCollector.dailyStatsRefreshDays, 3);
 });
 
 test('graph range uses explicit start and end dates for every period', () => {
@@ -430,7 +433,10 @@ test('graphs read telemetry while reports use daily waste plus telemetry status,
     source.indexOf('function forbiddenAccount')
   );
   assert.match(reportLoader, /groupBy: 'day'/);
-  assert.match(source, /rows: \[\.\.\.dailyResult\.snapshots, \.\.\.supplementalRows\]/);
+  assert.match(source, /rows: \[\.\.\.dailyRows, \.\.\.supplementalRows\]/);
+  assert.match(source, /loadStoredVendorDailyStats/);
+  assert.match(source, /mergeDailyStatSnapshots\(storedDailyRows, liveDailyRows\)/);
+  assert.match(source, /persist: true/);
   assert.match(source, /items: foodWasteResult\.items/);
   assert.match(source, /wasteSource: 'daily-input'/);
   const graphLoader = source.slice(

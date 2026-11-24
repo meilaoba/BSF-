@@ -19,7 +19,12 @@ import {
 import { getEnvironmentTemperature } from '../services/environment-temperature.js';
 import { getVendorAccessToken } from '../middleware/session.js';
 import { listAllVendorDevicesCached } from '../providers/vendor-devices.js';
-import { loadVendorDailyStatSnapshots } from '../services/vendor-daily-stats-analytics.js';
+import {
+  loadStoredVendorDailyStats,
+  loadVendorDailyStatSnapshots,
+  mergeDailyStatSnapshots,
+  vendorDailyStatsRefreshRange,
+} from '../services/vendor-daily-stats-analytics.js';
 import {
   loadCollectorCredentials,
   refreshCollectorCredentials,
@@ -249,35 +254,17 @@ export function reportTelemetrySupplementRows(sampleRows) {
 }
 
 async function loadReportAnalytics(req, context, range) {
-  const collector = await loadCollectorCredentials();
-  let token = collector?.accessToken || await getVendorAccessToken(req.auth);
-  let vendorDevices;
-  try {
-    vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
-  } catch (error) {
-    if (error?.code !== 'VENDOR_SESSION_EXPIRED' || !collector?.refreshToken) throw error;
-    token = await refreshCollectorCredentials(collector, token);
-    vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
-  }
-  const allowedIds = Array.isArray(context.deviceIds)
-    ? new Set(context.deviceIds.map(String))
-    : null;
-  const devices = vendorDevices.records.filter((device) => (
-    !allowedIds || allowedIds.has(String(device.id))
-  ));
   const settingsByDevice = await loadVendorDeviceReportSettings({
     deviceIds: context.deviceIds,
   });
-  const dailyResult = await loadVendorDailyStatSnapshots({
-    token,
-    devices,
+  const storedDailyRows = await loadStoredVendorDailyStats({
+    vendorAccountId: context.vendorAccountId,
+    includeAllAccounts: context.includeAllAccounts,
+    deviceIds: context.deviceIds,
     start: range.start,
     end: range.end,
     settingsByDevice,
   });
-  const status = dailyResult.unavailableDeviceCount > 0
-    ? (dailyResult.snapshots.length ? 'partial' : 'unavailable')
-    : (dailyResult.snapshots.length ? 'vendor' : 'empty');
   const telemetryRows = await loadVendorTelemetrySummaries({
     vendorAccountId: context.vendorAccountId,
     includeAllAccounts: context.includeAllAccounts,
@@ -287,11 +274,95 @@ async function loadReportAnalytics(req, context, range) {
     groupBy: 'day',
   });
   const supplementalRows = reportTelemetrySupplementRows(telemetryRows);
+  const refreshRange = vendorDailyStatsRefreshRange(range.start, range.end, new Date());
+  let collector = null;
+  let unavailableDeviceCount = 0;
+  let liveDailyRows = [];
+  let persistedDeviceCount = 0;
+  let persistFailureCount = 0;
+
+  if (!refreshRange) {
+    return {
+      rows: [...storedDailyRows, ...supplementalRows],
+      telemetryRows,
+      dataSources: {
+        dailyStats: {
+          status: storedDailyRows.length ? 'local' : 'empty',
+          storedCount: storedDailyRows.length,
+          liveCount: 0,
+          persistedDeviceCount: 0,
+          persistFailureCount: 0,
+        },
+        telemetry: { status: telemetryRows.length ? 'samples' : 'unavailable' },
+        reportCredential: { status: 'not-needed' },
+      },
+    };
+  }
+
+  try {
+    collector = await loadCollectorCredentials();
+    let token = collector?.accessToken || await getVendorAccessToken(req.auth);
+    let vendorDevices;
+    try {
+      vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
+    } catch (error) {
+      if (error?.code !== 'VENDOR_SESSION_EXPIRED' || !collector?.refreshToken) throw error;
+      token = await refreshCollectorCredentials(collector, token);
+      vendorDevices = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
+    }
+    const allowedIds = Array.isArray(context.deviceIds)
+      ? new Set(context.deviceIds.map(String))
+      : null;
+    const devices = vendorDevices.records.filter((device) => (
+      !allowedIds || allowedIds.has(String(device.id))
+    ));
+    const liveResult = await loadVendorDailyStatSnapshots({
+      token,
+      vendorAccountId: context.vendorAccountId,
+      persist: true,
+      devices,
+      start: refreshRange.start,
+      end: refreshRange.end,
+      settingsByDevice,
+    });
+    liveDailyRows = liveResult.snapshots;
+    unavailableDeviceCount = liveResult.unavailableDeviceCount;
+    persistedDeviceCount = liveResult.persistedDeviceCount;
+    persistFailureCount = liveResult.persistFailureCount;
+  } catch (error) {
+    if (!storedDailyRows.length) throw error;
+    unavailableDeviceCount = Array.isArray(context.deviceIds) && context.deviceIds.length
+      ? context.deviceIds.length
+      : 1;
+    console.warn(
+      '[vendor-daily-stats] live refresh unavailable, using stored reports:',
+      error.code || error.message
+    );
+  }
+
+  const dailyRows = mergeDailyStatSnapshots(storedDailyRows, liveDailyRows);
+  let status;
+  if (unavailableDeviceCount > 0 || persistFailureCount > 0) {
+    status = dailyRows.length ? 'partial' : 'unavailable';
+  } else if (liveDailyRows.length || persistedDeviceCount > 0) {
+    status = 'vendor';
+  } else if (storedDailyRows.length) {
+    status = 'local';
+  } else {
+    status = 'empty';
+  }
+
   return {
-    rows: [...dailyResult.snapshots, ...supplementalRows],
+    rows: [...dailyRows, ...supplementalRows],
     telemetryRows,
     dataSources: {
-      dailyStats: { status },
+      dailyStats: {
+        status,
+        storedCount: storedDailyRows.length,
+        liveCount: liveDailyRows.length,
+        persistedDeviceCount,
+        persistFailureCount,
+      },
       telemetry: { status: telemetryRows.length ? 'samples' : 'unavailable' },
       reportCredential: { status: collector ? 'collector' : 'session' },
     },

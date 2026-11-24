@@ -5,6 +5,11 @@ import { listAllVendorDevices } from '../providers/vendor-devices.js';
 import { fetchVendorRealtimeDevices, mergeRealtimeDevices } from '../providers/vendor-realtime.js';
 import { refreshVendorToken } from '../providers/vendor-auth.js';
 import { recordVendorTelemetrySamples } from './vendor-analytics.js';
+import {
+  claimVendorDailyStatsSync,
+  finishVendorDailyStatsSync,
+  syncVendorDailyStatsForDevices,
+} from './vendor-daily-stats-analytics.js';
 
 const DEFAULT_INTERVALS = Object.freeze({ master_admin: 1800, client_admin: 1800, user: 1800 });
 
@@ -113,19 +118,44 @@ async function sampleExists({ vendorAccountId, capturedAt }) {
   return rows.length > 0;
 }
 
-async function collectAccount(account, now, seenDeviceIds = null) {
+async function collectAccount(
+  account,
+  now,
+  seenDeviceIds = null,
+  seenDailyStatsDeviceIds = null
+) {
   const vendorAccountId = collectorVendorAccountId(account);
   if (!vendorAccountId) throw new Error('VENDOR_ACCOUNT_ID_MISSING');
   const intervalSeconds = collectorIntervalSeconds(account.role);
   const capturedAt = collectorBucketStart(now, intervalSeconds);
-  if (await sampleExists({ vendorAccountId, capturedAt })) {
-    return { skipped: true, saved: 0 };
+  const telemetryDue = !(await sampleExists({ vendorAccountId, capturedAt }));
+  const dailyStatsDue = await claimVendorDailyStatsSync(vendorAccountId, {
+    now,
+    intervalSeconds: config.telemetryCollector.dailyStatsSyncIntervalSeconds,
+  });
+  if (!telemetryDue && !dailyStatsDue) {
+    return {
+      skipped: true,
+      saved: 0,
+      dailyStatsAttempted: 0,
+      dailyStatsSaved: 0,
+      dailyStatsFailed: 0,
+      dailyStatsDeviceIds: [],
+    };
   }
 
   let token;
   try {
     token = decryptSecret(account.vendor_access_token_enc, config.auth.tokenEncryptionKey);
   } catch {
+    if (dailyStatsDue) {
+      await finishVendorDailyStatsSync({
+        vendorAccountId,
+        success: false,
+        errorCode: 'VENDOR_SESSION_UNREADABLE',
+        now,
+      }).catch(() => {});
+    }
     throw new Error('VENDOR_SESSION_UNREADABLE');
   }
   if (!token) throw new Error('VENDOR_SESSION_UNREADABLE');
@@ -134,11 +164,64 @@ async function collectAccount(account, now, seenDeviceIds = null) {
   try {
     result = await listAllVendorDevices({ token, pageNum: 1, pageSize: 100 });
   } catch (error) {
+    if (dailyStatsDue) {
+      await finishVendorDailyStatsSync({
+        vendorAccountId,
+        success: false,
+        errorCode: error?.code || 'VENDOR_DEVICE_LIST_FAILED',
+        now,
+      }).catch(() => {});
+    }
     if (error?.code !== 'VENDOR_SESSION_EXPIRED') throw error;
     token = await refreshCollectorCredentials(account, token);
     result = await listAllVendorDevices({ token, pageNum: 1, pageSize: 100 });
   }
   let devices = result.records;
+
+  let dailyStats = {
+    attempted: 0,
+    saved: 0,
+    failed: 0,
+    successfulDeviceIds: [],
+  };
+  if (dailyStatsDue) {
+    try {
+      dailyStats = await syncVendorDailyStatsForDevices({
+        token,
+        vendorAccountId,
+        devices,
+        now,
+        skipDeviceIds: seenDailyStatsDeviceIds,
+      });
+      await finishVendorDailyStatsSync({
+        vendorAccountId,
+        success: dailyStats.failed === 0,
+        errorCode: dailyStats.failed === 0 ? null : 'VENDOR_DAILY_STATS_PARTIAL',
+        now,
+      });
+    } catch (error) {
+      dailyStats.failed += 1;
+      await finishVendorDailyStatsSync({
+        vendorAccountId,
+        success: false,
+        errorCode: error?.code || 'VENDOR_DAILY_STATS_SYNC_FAILED',
+        now,
+      }).catch(() => {});
+      console.warn('[telemetry-worker] daily stats sync failed:', error.code || error.message);
+    }
+  }
+
+  if (!telemetryDue) {
+    return {
+      skipped: false,
+      saved: 0,
+      dailyStatsAttempted: dailyStats.attempted,
+      dailyStatsSaved: dailyStats.saved,
+      dailyStatsFailed: dailyStats.failed,
+      dailyStatsDeviceIds: dailyStats.successfulDeviceIds,
+    };
+  }
+
   if (config.auth.vendor.realtimeEnabled && devices.length) {
     try {
       const live = await fetchVendorRealtimeDevices({ token, devices });
@@ -152,7 +235,16 @@ async function collectAccount(account, now, seenDeviceIds = null) {
     const deviceId = String(device?.id || '').trim();
     return deviceId && (!seenDeviceIds || !seenDeviceIds.has(deviceId));
   });
-  if (!devicesToSave.length) return { skipped: false, saved: 0 };
+  if (!devicesToSave.length) {
+    return {
+      skipped: false,
+      saved: 0,
+      dailyStatsAttempted: dailyStats.attempted,
+      dailyStatsSaved: dailyStats.saved,
+      dailyStatsFailed: dailyStats.failed,
+      dailyStatsDeviceIds: dailyStats.successfulDeviceIds,
+    };
+  }
 
   const saved = await recordVendorTelemetrySamples(devicesToSave, {
     vendorAccountId,
@@ -163,21 +255,51 @@ async function collectAccount(account, now, seenDeviceIds = null) {
   if (seenDeviceIds) {
     devicesToSave.forEach((device) => seenDeviceIds.add(String(device.id)));
   }
-  return { skipped: false, saved };
+  return {
+    skipped: false,
+    saved,
+    dailyStatsAttempted: dailyStats.attempted,
+    dailyStatsSaved: dailyStats.saved,
+    dailyStatsFailed: dailyStats.failed,
+    dailyStatsDeviceIds: dailyStats.successfulDeviceIds,
+  };
 }
 
 export async function runCollectorTick({ now = new Date() } = {}) {
   if (!config.telemetryCollector.enabled || !config.auth.enabled) {
-    return { accounts: 0, collected: 0, skipped: 0, failed: 0 };
+    return {
+      accounts: 0,
+      collected: 0,
+      skipped: 0,
+      failed: 0,
+      dailyStatsAttempted: 0,
+      dailyStatsSaved: 0,
+      dailyStatsFailed: 0,
+    };
   }
   const accounts = await collectorAccounts();
-  const summary = { accounts: accounts.length, collected: 0, skipped: 0, failed: 0 };
+  const summary = {
+    accounts: accounts.length,
+    collected: 0,
+    skipped: 0,
+    failed: 0,
+    dailyStatsAttempted: 0,
+    dailyStatsSaved: 0,
+    dailyStatsFailed: 0,
+  };
   const seenDeviceIds = new Set();
+  const seenDailyStatsDeviceIds = new Set();
   for (const account of accounts) {
     try {
-      const result = await collectAccount(account, now, seenDeviceIds);
+      const result = await collectAccount(account, now, seenDeviceIds, seenDailyStatsDeviceIds);
       if (result.skipped) summary.skipped += 1;
       else if (result.saved > 0) summary.collected += 1;
+      summary.dailyStatsAttempted += result.dailyStatsAttempted || 0;
+      summary.dailyStatsSaved += result.dailyStatsSaved || 0;
+      summary.dailyStatsFailed += result.dailyStatsFailed || 0;
+      for (const deviceId of result.dailyStatsDeviceIds || []) {
+        seenDailyStatsDeviceIds.add(String(deviceId));
+      }
     } catch (error) {
       summary.failed += 1;
       console.warn('[telemetry-worker] account collection failed:', error.code || error.message);

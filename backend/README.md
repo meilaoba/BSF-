@@ -55,9 +55,9 @@ set -a; . /etc/bsf-backend.env; set +a
 npm run migrate
 
 # 4. services
-sudo cp deploy/bsf-backend.service deploy/bsf-notification-worker.service /etc/systemd/system/
+sudo cp deploy/bsf-backend.service deploy/bsf-notification-worker.service deploy/bsf-telemetry-worker.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now bsf-backend bsf-notification-worker
+sudo systemctl enable --now bsf-backend bsf-notification-worker bsf-telemetry-worker
 ```
 
 ## API
@@ -84,6 +84,7 @@ session; tenant roles are scoped by the backend.
 | POST | `/api/v1/notifications/jobs/retry` | retry a job / requeue waiting_config |
 | POST | `/api/v1/alerts/temperature` | threshold check + fan-out |
 | GET | /api/v1/vendor-devices | read-only vendor device list (session token, no local writes) |
+| GET | `/api/v1/vendor-daily-stats` | one device's vendor daily statistics |
 | POST | `/api/v1/vendor-devices/sync` | mirror the current vendor page into `vendor_devices` (no automatic linkage) |
 | GET | `/api/v1/device-data` | stored time-series telemetry with machine/client/date filters |
 | POST | `/api/v1/device-data/ingest` | normalize and persist one vendor API telemetry record |
@@ -110,6 +111,11 @@ syncing a vendor device never assigns it to a client or machine automatically.
   `/device-data`, `/raw-data-samples`, Graphs, Reports and machine latest
   values. It stores normalized temperature, humidity, weight, operating state,
   cumulative input/output values and the original vendor payload.
+- `vendor_daily_stats` stores the vendor's daily report by account, device and
+  date. The telemetry worker refreshes it every 30 minutes, backfills 60 days on
+  first sync and retains data beyond the vendor's 60-day API window.
+- `vendor_daily_stats_sync_state` prevents repeated account refreshes inside
+  the 30-minute cadence and records the last success or error code.
 - `machine_telemetry` remains only for the legacy
   `/api/v1/device-data/ingest` compatibility path. It is no longer read by the
   main dashboard or analytics APIs.

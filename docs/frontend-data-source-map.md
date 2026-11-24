@@ -119,14 +119,14 @@
 | 界面数据 | 来源 | 原始字段或计算 |
 | --- | --- | --- |
 | Client / Machine / Period | 用户输入 + 本地映射 | 页面筛选条件 |
-| Waste Collected | 厂家字段 | 厂家日报 `kitchenWaste` × 配置因子 |
+| Waste Collected | 本地数据库 + 厂家字段 | `vendor_daily_stats.kitchen_waste_kg`；由厂家日报 `kitchenWaste` 同步并长期保存 |
 | GHG Reduced | BSF 计算 | 厨余量 × 1.5 − 电力碳排 − 运输碳排 |
 | Energy Consumed | BSF 计算 | 厂家 `deviceOnline` 聚合后的运行/待机日 × 每日能耗 |
 | Est. Fertilizer | BSF 计算 | 厂家日报厨余量 × `fertilizerRatio` |
 | Avg Container Temp | 厂家汇总 | 遥测 `CabinTemp` 平均值 |
 | Avg Humidity | 厂家汇总 | 遥测 `Humidity` 平均值 |
 | Food Waste In 图表 | 厂家汇总 | 遥测 `input.dailyInput`，不依赖厂家日报是否存在 |
-| `No vendor daily report` | API 状态 | 厂家日报返回空 |
+| `No vendor daily report` | API 状态 | 本地和厂家日报都没有所选周期的数据 |
 | `Some vendor daily reports are unavailable` | API 状态 | 部分设备日报请求失败 |
 | Export Excel | 厂家文件 | 后端代理厂家 `/export/table`，日期结束日自动转换为排他日期 |
 
@@ -206,7 +206,7 @@
 
 ## 重要现状
 
-1. Reports 的 `Waste Collected` 使用厂家日报，Metric 为空时 GHG/Fertilizer 也为空。
+1. Reports 的 `Waste Collected` 读取 BSF `vendor_daily_stats`；最近 60 天会从厂家日报刷新并回写，更早数据只从本地数据库读取。Metric 为空时 GHG/Fertilizer 也为空。
 2. Reports 的 Food Waste In 图表使用遥测 `input.dailyInput`，与 `Waste Collected` 不是同一指标。
 3. Graphs 的 Energy Consumed 是 BSF 按设备状态计算的，不是厂家 `powerConsume`。
 4. Graphs/Reports 的 GHG 是 BSF 计算公式，不是厂家 `saveCarbon`。
@@ -238,3 +238,20 @@
 - 接口请求失败：显示错误状态，不补造数据。
 - 厂家日报为空：只影响依赖日报的字段，不应清空遥测字段。
 - GHG 公式不完整：显示 `—`，不使用默认 GHG 结果。
+
+## 日报长期保存
+
+| 数据 | 保存位置 | 同步规则 |
+| --- | --- | --- |
+| 每日厨余处理量 | `vendor_daily_stats.kitchen_waste_kg` | 厂家 `kitchenWaste` × 配置因子 |
+| 每日运行时间 | `vendor_daily_stats.run_time_hours` | 厂家 `runTime` |
+| 厂家日报耗电 | `vendor_daily_stats.vendor_power_consume_kwh` | 只作审计，不覆盖 BSF 的状态能耗 |
+| 厂家节省碳排 | `vendor_daily_stats.saved_carbon_kg` | 只作审计，不替代 BSF GHG |
+| 输出量 | `vendor_daily_stats.unloading_weight_raw` | 保留厂家原值 |
+
+- `Telemetry Worker` 每 30 分钟同步一次日报。
+- 每台设备首次同步回填最近 60 天，之后滚动刷新最近 3 天。
+- 数据库同时保存厂家原值；读取时按当前 kg/kWh 因子重新计算，避免因子调整后历史口径不一致。
+- Reports 优先使用本地日报，再合并厂家最近 60 天结果；厂家不可用时不清空已保存数据。
+- 不存在的日报保持缺失，不补零。
+- `RealTimeWeight` 是设备模板点位，只在 Machines/Raw Data 展示，不参与 Food Waste In、GHG 或肥料计算。
