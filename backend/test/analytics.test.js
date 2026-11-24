@@ -409,7 +409,7 @@ test('canonical telemetry history maps to the existing device-data response cont
   assert.equal(row.device_key, '52');
   assert.equal(row.device_state, 2);
   assert.equal(row.cabin_temp_c, '28.5');
-  assert.equal(row.daily_input_t, '0.004');
+  assert.equal(row.daily_input_kg, '0.004');
   assert.equal(row.daily_feed_weight_kg, 50);
   assert.deepEqual(row.telemetry, { CabinTemp: 28.5, DailyFeedWeight: 50 });
   assert.equal(row.source, 'vendor_device_telemetry');
@@ -486,7 +486,7 @@ test('Food Waste In and Waste Collected cannot fall back to each other', () => {
   const row = {
     capturedAt: '2026-11-01T12:00:00+08:00',
     deviceId: '52',
-    dailyInputT: 0.005,
+    dailyInputKg: 5,
     wasteKg: 99,
   };
   const common = {
@@ -566,7 +566,7 @@ test('report food trend uses daily input independently from vendor daily waste',
   const telemetryRows = [{
     capturedAt: '2026-11-07T12:00:00+08:00',
     deviceId: '50',
-    dailyInputT: 0.003,
+    dailyInputKg: 3,
     operatingStatusCode: 1,
   }];
   const dailySnapshots = [{

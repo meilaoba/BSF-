@@ -19,10 +19,14 @@ export function vendorDailyFeedWeightKg(telemetry) {
 }
 
 /**
- * Canonical daily input counter used by Food Waste In. The vendor reports
- * input.dailyInput in tonnes. DailyFeedWeight must not replace this field until
- * the vendor confirms its reset and cross-day behaviour.
+ * Canonical daily input counter used by Food Waste In. The vendor API reports
+ * input.dailyInput in kilograms. DailyFeedWeight must not replace this field
+ * until the vendor confirms its reset and cross-day behaviour.
  */
-export function canonicalDailyInputT({ input } = {}) {
+export function canonicalDailyInputKg({ input } = {}) {
   return finiteNumber(objectOrEmpty(input).dailyInput);
 }
+
+// Compatibility alias for older imports. The value is kilograms, despite the
+// historical function name.
+export const canonicalDailyInputT = canonicalDailyInputKg;

@@ -7,7 +7,7 @@
 
 | 页面指标 | 权威字段 | 数据来源 | 统一转换 |
 | --- | --- | --- | ---: |
-| Food Waste In | `input.dailyInput` | `vendor_device_telemetry` | 当天最大值，吨 × 1000 = kg |
+| Food Waste In | `input.dailyInput` | `vendor_device_telemetry` | 当天最大值，单位 kg |
 | Waste Collected | 厂家日报 `kitchenWaste` | 厂家日报接口 | 乘以配置的 `kitchenWasteToKgFactor` |
 | Total Added | `TotalAddMaterial` | 厂家实时接口 | 吨 × 1000 = kg |
 | Total Discharge | `TotalDischarge` | 厂家实时接口 | 吨 × 1000 = kg |
@@ -18,8 +18,8 @@
 ## 已确认事实
 
 - 厂家没有上报机器自身重量；所有重量相关数据均与投料、物料或处理量有关。
-- `input.dailyInput`、`monthlyInput`、`yearlyInput` 的单位是吨（t）。
-- 厂家累计投料量与累计出料量的单位是吨；展示和进入公式前转换为 kg。
+- `input.dailyInput`、`weeklyInput`、`monthlyInput`、`yearlyInput` 的单位是 kg。
+- 厂家累计投料量与累计出料量的单位必须按厂家最终确认口径展示。
 - 厂家日报按日返回；月报和年报按有效日逐日累加，不使用累计计数器差分。
 - `deviceOnline`：`0=离线`、`1=待机`、`2=运行中`。
 - 厂家数据按 30 分钟一批更新，界面不得承诺秒级实时。
@@ -28,7 +28,7 @@
 
 | 厂家字段 | 单位 | 当前用途 |
 | --- | ---: | --- |
-| `input.dailyInput` | t | Food Waste In 的唯一权威字段 |
+| `input.dailyInput` | kg | Food Waste In 的唯一权威字段 |
 | `TotalAddMaterial` | t | 累计投料展示；不能逐条相加 |
 | `TotalDischarge` | t | 累计出料展示；不能逐条相加 |
 | `DailyFeedWeight` | kg | 仅保留为 Raw Data 原始字段；跨日规则未确认，不参与业务计算 |

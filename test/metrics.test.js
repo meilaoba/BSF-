@@ -112,7 +112,7 @@ test('formula settings can be overridden without changing code', () => {
     {
       capturedAt: '2026-10-01T02:00:00.000Z',
       deviceId: 'device-a',
-      dailyInputT: 0.01,
+      dailyInputKg: 10,
       operatingStatusCode: 1,
       humidityPct: 0.2,
     },
@@ -132,7 +132,7 @@ test('missing site mileage keeps raw metrics and leaves GHG unknown', () => {
     {
       capturedAt: '2026-10-01T02:00:00.000Z',
       deviceId: 'unconfigured-site',
-      dailyInputT: 0.01,
+      dailyInputKg: 10,
       operatingStatusCode: 1,
     },
   ], {
@@ -155,9 +155,9 @@ test('aggregates only real snapshots and emits nulls for missing and future buck
     {
       capturedAt: '2026-10-01T02:00:00.000Z',
       deviceId: 'device-a',
-      dailyInputT: 0.01,
-      monthlyInputT: 0.1,
-      yearlyInputT: 1,
+      dailyInputKg: 10,
+      monthlyInputKg: 0.1,
+      yearlyInputKg: 1,
       operatingStatusCode: 1,
       cabinTempC: 40,
       humidityPct: 50,
@@ -165,9 +165,9 @@ test('aggregates only real snapshots and emits nulls for missing and future buck
     {
       capturedAt: '2026-10-01T05:00:00.000Z',
       deviceId: 'device-a',
-      dailyInputT: 0.02,
-      monthlyInputT: 0.1,
-      yearlyInputT: 1,
+      dailyInputKg: 20,
+      monthlyInputKg: 0.1,
+      yearlyInputKg: 1,
       operatingStatusCode: 2,
       cabinTempC: 42,
       humidityPct: 52,
@@ -175,9 +175,9 @@ test('aggregates only real snapshots and emits nulls for missing and future buck
     {
       capturedAt: '2026-10-02T02:00:00.000Z',
       deviceId: 'device-b',
-      dailyInputT: 0.03,
-      monthlyInputT: 0.2,
-      yearlyInputT: 2,
+      dailyInputKg: 30,
+      monthlyInputKg: 0.2,
+      yearlyInputKg: 2,
       operatingStatusCode: 2,
       cabinTempC: 44,
       humidityPct: 54,
@@ -185,9 +185,9 @@ test('aggregates only real snapshots and emits nulls for missing and future buck
     {
       capturedAt: '2026-10-02T08:00:00.000Z',
       deviceId: 'device-a',
-      dailyInputT: 99,
-      monthlyInputT: 99,
-      yearlyInputT: 99,
+      dailyInputKg: 99,
+      monthlyInputKg: 99,
+      yearlyInputKg: 99,
       operatingStatusCode: 2,
     },
   ], {
@@ -216,9 +216,9 @@ test('aggregates only real snapshots and emits nulls for missing and future buck
 
 test('monthly and yearly results sum per-device daily values and retain negative GHG', () => {
   const result = aggregateTelemetrySnapshots([
-    { capturedAt:'2026-01-01T03:00:00Z', deviceId:'device-a', dailyInputT:0, operatingStatusCode:1 },
-    { capturedAt:'2026-01-02T03:00:00Z', deviceId:'device-a', dailyInputT:0.01, operatingStatusCode:1 },
-    { capturedAt:'2026-02-01T03:00:00Z', deviceId:'device-b', dailyInputT:0.02, operatingStatusCode:2 },
+    { capturedAt:'2026-01-01T03:00:00Z', deviceId:'device-a', dailyInputKg:0, operatingStatusCode:1 },
+    { capturedAt:'2026-01-02T03:00:00Z', deviceId:'device-a', dailyInputKg:10, operatingStatusCode:1 },
+    { capturedAt:'2026-02-01T03:00:00Z', deviceId:'device-b', dailyInputKg:20, operatingStatusCode:2 },
   ], {
     groupBy:'month',
     start:'2026-01-01',
@@ -246,7 +246,7 @@ test('applies per-site monthly mileage and the solar electricity branch', () => 
     {
       capturedAt: '2026-10-01T02:00:00.000Z',
       deviceId: 'cic',
-      dailyInputT: 0.002,
+      dailyInputKg: 2,
       operatingStatusCode: 2,
       clientRegion: 'non-hk',
       ghgFormula: CIC_FORMULA
@@ -254,7 +254,7 @@ test('applies per-site monthly mileage and the solar electricity branch', () => 
     {
       capturedAt: '2026-10-01T02:00:00.000Z',
       deviceId: 'hsitp',
-      dailyInputT: 0.002,
+      dailyInputKg: 2,
       operatingStatusCode: 2,
       clientRegion: 'non-hk',
       ghgFormula: { monthlyDistanceKm: 24, solar: true }
@@ -281,7 +281,7 @@ test('CIC standby days use the 140 km site transport deduction', () => {
     {
       capturedAt: '2026-10-28T12:00:00+08:00',
       deviceId: 'cic',
-      dailyInputT: 0,
+      dailyInputKg: 0,
       operatingStatusCode: 1,
       clientRegion: 'non-hk',
       ghgFormula: CIC_FORMULA,
@@ -289,7 +289,7 @@ test('CIC standby days use the 140 km site transport deduction', () => {
     {
       capturedAt: '2026-10-29T12:00:00+08:00',
       deviceId: 'cic',
-      dailyInputT: 0,
+      dailyInputKg: 0,
       operatingStatusCode: 1,
       clientRegion: 'non-hk',
       ghgFormula: CIC_FORMULA,
@@ -362,7 +362,7 @@ test('daily aggregate vendor power does not override operating-status energy', (
     {
       capturedAt: '2026-10-28T12:00:00+08:00',
       deviceId: 'cic',
-      dailyInputT: 0,
+      dailyInputKg: 0,
       operatingStatusCode: 1
     }
   ], {
@@ -386,7 +386,7 @@ test('Graphs and Reports resolve the same energy from matching operating status'
   const graph = aggregateTelemetrySnapshots([{
     capturedAt: '2026-11-07T12:00:00+08:00',
     deviceId: 'cic',
-    dailyInputT: 0.002,
+    dailyInputKg: 2,
     operatingStatusCode: 1,
     clientRegion: 'non-hk',
     ghgFormula: CIC_FORMULA,
@@ -457,8 +457,8 @@ test('daily aggregate zero is plotted once at noon without copying GHG forward',
 
 test('hourly telemetry summaries keep hourly temperature points in the daily view', () => {
   const result = aggregateTelemetrySnapshots([
-    { capturedAt: '2026-11-01T09:00:00+08:00', deviceId: '52', cabinTempC: 28, operatingStatusCode: 2, dailyInputT: 0.01 },
-    { capturedAt: '2026-11-01T10:00:00+08:00', deviceId: '52', cabinTempC: 29, operatingStatusCode: 2, dailyInputT: 0.02 },
+    { capturedAt: '2026-11-01T09:00:00+08:00', deviceId: '52', cabinTempC: 28, operatingStatusCode: 2, dailyInputKg: 10 },
+    { capturedAt: '2026-11-01T10:00:00+08:00', deviceId: '52', cabinTempC: 29, operatingStatusCode: 2, dailyInputKg: 20 },
     { capturedAt: '2026-11-01T12:00:00+08:00', deviceId: '52', wasteKg: 0, energyKwh: 1.5, dailyAggregate: true, clientRegion: 'non-hk' },
   ], {
     groupBy: 'hour',
@@ -514,9 +514,9 @@ test('report daily totals keep vendor waste while telemetry supplies status and 
 
 test('daily view shows sampled input hours when vendor kitchen waste is zero', () => {
   const result = aggregateTelemetrySnapshots([
-    { capturedAt: '2026-11-01T08:00:00+08:00', deviceId: '52', dailyInputT: 0.004, operatingStatusCode: 2 },
-    { capturedAt: '2026-11-01T09:00:00+08:00', deviceId: '52', dailyInputT: 0.006, operatingStatusCode: 2 },
-    { capturedAt: '2026-11-01T12:00:00+08:00', deviceId: '52', dailyInputT: 0.010, operatingStatusCode: 2 },
+    { capturedAt: '2026-11-01T08:00:00+08:00', deviceId: '52', dailyInputKg: 4, operatingStatusCode: 2 },
+    { capturedAt: '2026-11-01T09:00:00+08:00', deviceId: '52', dailyInputKg: 6, operatingStatusCode: 2 },
+    { capturedAt: '2026-11-01T12:00:00+08:00', deviceId: '52', dailyInputKg: 10, operatingStatusCode: 2 },
     { capturedAt: '2026-11-01T12:00:00+08:00', deviceId: '52', wasteKg: 0, energyKwh: 1.5, dailyAggregate: true, clientRegion: 'non-hk' },
   ], {
     groupBy: 'hour',
@@ -539,7 +539,7 @@ test('hourly telemetry uses each device site formula without a vendor daily aggr
     {
       capturedAt: '2026-11-01T09:00:00+08:00',
       deviceId: 'cic',
-      dailyInputT: 0.002,
+      dailyInputKg: 2,
       operatingStatusCode: 2,
       clientRegion: 'non-hk',
       ghgFormula: { monthlyDistanceKm: 140 },
@@ -547,7 +547,7 @@ test('hourly telemetry uses each device site formula without a vendor daily aggr
     {
       capturedAt: '2026-11-01T10:00:00+08:00',
       deviceId: 'cic',
-      dailyInputT: 0.004,
+      dailyInputKg: 4,
       operatingStatusCode: 2,
       clientRegion: 'non-hk',
       ghgFormula: { monthlyDistanceKm: 140 },
@@ -555,7 +555,7 @@ test('hourly telemetry uses each device site formula without a vendor daily aggr
     {
       capturedAt: '2026-11-01T10:00:00+08:00',
       deviceId: 'hsitp',
-      dailyInputT: 0.003,
+      dailyInputKg: 3,
       operatingStatusCode: 2,
       clientRegion: 'hk',
       ghgFormula: { monthlyDistanceKm: 24, solar: true },
@@ -580,9 +580,9 @@ test('hourly telemetry uses each device site formula without a vendor daily aggr
 
 test('converts cumulative daily input into hourly increments without duplicating a day', () => {
   const result = aggregateTelemetrySnapshots([
-    { capturedAt: '2026-10-01T02:10:00.000Z', deviceId: 'device-a', dailyInputT: 0.010, operatingStatusCode: 1 },
-    { capturedAt: '2026-10-01T03:10:00.000Z', deviceId: 'device-a', dailyInputT: 0.015, operatingStatusCode: 2 },
-    { capturedAt: '2026-10-01T04:10:00.000Z', deviceId: 'device-a', dailyInputT: 0.018, operatingStatusCode: 2 },
+    { capturedAt: '2026-10-01T02:10:00.000Z', deviceId: 'device-a', dailyInputKg: 10, operatingStatusCode: 1 },
+    { capturedAt: '2026-10-01T03:10:00.000Z', deviceId: 'device-a', dailyInputKg: 15, operatingStatusCode: 2 },
+    { capturedAt: '2026-10-01T04:10:00.000Z', deviceId: 'device-a', dailyInputKg: 18, operatingStatusCode: 2 },
   ], {
     groupBy: 'hour',
     start: '2026-10-01',

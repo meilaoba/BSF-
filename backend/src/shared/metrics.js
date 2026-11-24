@@ -257,9 +257,9 @@ function normalizeSnapshotRow(row, formula = {}) {
     cabinTempC: finiteNumber(row.cabinTempC ?? row.cabin_temp_c),
     humidityPct: humidityPercent(row.humidityPct ?? row.humidity_pct, formula),
     operatingStatusCode: finiteNumber(row.operatingStatusCode ?? row.operating_status_code),
-    dailyInputT: finiteNumber(row.dailyInputT ?? row.daily_input_t),
-    monthlyInputT: finiteNumber(row.monthlyInputT ?? row.monthly_input_t),
-    yearlyInputT: finiteNumber(row.yearlyInputT ?? row.yearly_input_t),
+    dailyInputKg: finiteNumber(row.dailyInputKg ?? row.daily_input_kg ?? row.dailyInputT ?? row.daily_input_t),
+    monthlyInputKg: finiteNumber(row.monthlyInputKg ?? row.monthly_input_kg ?? row.monthlyInputT ?? row.monthly_input_t),
+    yearlyInputKg: finiteNumber(row.yearlyInputKg ?? row.yearly_input_kg ?? row.yearlyInputT ?? row.yearly_input_t),
     wasteKg: finiteNumber(row.wasteKg),
     energyKwh: finiteNumber(row.energyKwh),
     runTimeHours: finiteNumber(row.runTimeHours),
@@ -332,7 +332,7 @@ export function aggregateTelemetrySnapshots(rows, {
       dateKey,
       monthKey,
       last: row,
-      maxDailyInputT: null,
+      maxDailyInputKg: null,
       hasStandby: false,
       isOperatingDay: false,
       operatingStatusCode: null,
@@ -343,7 +343,7 @@ export function aggregateTelemetrySnapshots(rows, {
       siteRegion: null,
     };
     day.last = row;
-    day.maxDailyInputT = maxKnown(day.maxDailyInputT, row.dailyInputT);
+    day.maxDailyInputKg = maxKnown(day.maxDailyInputKg, row.dailyInputKg);
     day.directWasteKg = maxKnown(day.directWasteKg, row.wasteKg);
     if (row.energyKwh !== null) day.energyKwh = row.energyKwh;
     day.dailyAggregate = day.dailyAggregate || row.dailyAggregate;
@@ -363,17 +363,17 @@ export function aggregateTelemetrySnapshots(rows, {
     const month = deviceMonths.get(`${row.deviceId}|${monthKey}`) || {
       deviceId: row.deviceId,
       monthKey,
-      maxMonthlyInputT: null,
+      maxMonthlyInputKg: null,
     };
-    month.maxMonthlyInputT = maxKnown(month.maxMonthlyInputT, row.monthlyInputT);
+    month.maxMonthlyInputKg = maxKnown(month.maxMonthlyInputKg, row.monthlyInputKg);
     deviceMonths.set(`${row.deviceId}|${monthKey}`, month);
 
     const year = deviceYears.get(`${row.deviceId}|${yearKey}`) || {
       deviceId: row.deviceId,
       yearKey,
-      maxYearlyInputT: null,
+      maxYearlyInputKg: null,
     };
-    year.maxYearlyInputT = maxKnown(year.maxYearlyInputT, row.yearlyInputT);
+    year.maxYearlyInputKg = maxKnown(year.maxYearlyInputKg, row.yearlyInputKg);
     deviceYears.set(`${row.deviceId}|${yearKey}`, year);
 
     const bucket = bucketKeyForDate(row.capturedAt, groupBy);
@@ -408,7 +408,7 @@ export function aggregateTelemetrySnapshots(rows, {
     if (day.dateKey > currentDateKey) continue;
     day.formula = mergeFormulaConfig(formula, day.siteFormula);
     day.region = day.siteRegion || region;
-    const dailyInputWasteKg = tonsToKg(day.maxDailyInputT);
+    const dailyInputWasteKg = day.maxDailyInputKg;
     const wasteKg = wasteSource === 'daily-input'
       ? dailyInputWasteKg
       : wasteSource === 'daily-stats'
@@ -444,7 +444,7 @@ export function aggregateTelemetrySnapshots(rows, {
     const hourlyInputs = new Map();
     const daysWithInputSamples = new Set();
     for (const { bucket, deviceId, row } of hourlySamples.values()) {
-      if (row.dailyInputT !== null) daysWithInputSamples.add(`${deviceId}|${hongKongDateKey(row.capturedAt)}`);
+      if (row.dailyInputKg !== null) daysWithInputSamples.add(`${deviceId}|${hongKongDateKey(row.capturedAt)}`);
       const list = hourlyInputs.get(deviceId) || [];
       list.push({ bucket, deviceId, row });
       hourlyInputs.set(deviceId, list);
@@ -459,7 +459,7 @@ export function aggregateTelemetrySnapshots(rows, {
           previous = 0;
           previousDay = day;
         }
-        const current = tonsToKg(item.row.dailyInputT);
+        const current = item.row.dailyInputKg;
         if (current === null) continue;
         const increment = current >= previous ? current - previous : current;
         addToMap(foodByBucket, item.bucket, increment);
