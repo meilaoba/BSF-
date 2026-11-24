@@ -113,6 +113,38 @@ test('reports show missing or partial vendor daily data without telemetry estima
   );
 });
 
+test('Generate Preview bypasses an empty cached report and requests fresh vendor data', async () => {
+  let requestCount = 0;
+  sandbox.currentPage = 'other';
+  sandbox.window.BSF_API = {
+    getReports: async function(){
+      requestCount += 1;
+      return {
+        summary:{ wasteKg:0, ghgKg:null, energyKwh:1.5, pointCount:30 },
+        items:[],
+        dataSources:{ dailyStats:{ status:'vendor' } }
+      };
+    }
+  };
+  vm.runInContext(`
+    reportFilters = { client:'', device:'365701012616B60D', period:'monthly', month:10, year:2026 };
+    reportApiData = {
+      summary:{ wasteKg:null, ghgKg:null, energyKwh:null, pointCount:0 },
+      items:[],
+      dataSources:{ dailyStats:{ status:'empty' } }
+    };
+    reportApiKey = reportRequestKey();
+  `, sandbox);
+
+  await vm.runInContext('loadReportFoodWaste({ force:true })', sandbox);
+
+  assert.equal(requestCount, 1);
+  assert.equal(vm.runInContext('reportApiData.summary.energyKwh', sandbox), 1.5);
+  assert.equal(vm.runInContext('reportApiData.dataSources.dailyStats.status', sandbox), 'vendor');
+  sandbox.currentPage = 'reports';
+  delete sandbox.window.BSF_API;
+});
+
 test('client-scoped reports hide the energy metric while master admin keeps it', () => {
   assert.equal(vm.runInContext('reportShowsEnergy()', sandbox), true);
   sandbox.clientScoped = true;

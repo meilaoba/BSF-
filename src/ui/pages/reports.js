@@ -267,7 +267,8 @@ function renderReportFoodWasteChart(){
   chart.innerHTML = buildReportFoodWasteSvg(normalizedReportFoodWasteRows(true));
 }
 
-async function loadReportFoodWaste(){
+async function loadReportFoodWaste(options){
+  const force = options === true || Boolean(options && options.force);
   if(!window.BSF_API || !window.BSF_API_CONFIG || !window.BSF_API_CONFIG.enabled){
     reportApiData = null;
     reportApiKey = '';
@@ -277,7 +278,7 @@ async function loadReportFoodWaste(){
     return null;
   }
   const key = reportRequestKey();
-  if(reportApiKey === key && reportApiData) return reportApiData;
+  if(!force && reportApiKey === key && reportApiData) return reportApiData;
   if(reportApiRequestKey === key && reportApiRequestPromise) return reportApiRequestPromise;
   reportApiRequestKey = key;
   reportApiRequestPromise = (async function(){
@@ -386,7 +387,7 @@ function renderReports(container, options){
 async function generateReportPreview(){
   const container = document.getElementById('page-content');
   showReportExportToast('Generating report preview...');
-  await loadReportFoodWaste();
+  await loadReportFoodWaste({ force:true });
   if(currentPage !== 'reports' || !container) return;
   const loaded = reportApiData && reportApiKey === reportRequestKey();
   const preview = container.querySelector('#report-preview');
