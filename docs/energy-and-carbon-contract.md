@@ -81,3 +81,13 @@ GHG Reduced = 回收厨余(kg) × 1.5 - 机器碳排
 | HSITP | `-0.4030622466 kg CO₂e` | `3.4030622466 kg CO₂e` |
 
 真实厨余 `0` 按表格公式产生负减排值；字段缺失或公式配置不完整时返回 `null`。
+
+## 设备级配置
+
+`CR-50S / 365701012616B60D` 使用 HSITP 机器级覆盖：
+
+- `region = non-hk`
+- `monthlyDistanceKm = 24`
+- `solar = true`
+
+该覆盖保存在 `machines.metadata.ghgFormula`，不依赖 Client 绑定。

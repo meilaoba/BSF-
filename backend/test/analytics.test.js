@@ -219,6 +219,22 @@ test('site carbon formula v2 marks CIC non-solar and HSITP solar', () => {
   assert.match(sql, /COALESCE\(metadata->'ghgFormula', '\{\}'::jsonb\)/);
 });
 
+test('CR-50S uses the HSITP machine-level carbon formula', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sql = fs.readFileSync(
+    path.join(root, 'db/migrations/016_configure_cr50s_ghg_formula.sql'),
+    'utf8'
+  );
+  assert.match(sql, /vendor_device_id = '50'/);
+  assert.match(sql, /serial = '365701012616B60D'/);
+  assert.match(sql, /region = 'non-hk'/);
+  assert.match(sql, /"monthlyDistanceKm":24,"solar":true/);
+  assert.match(sql, /COALESCE\(metadata->'ghgFormula'/);
+  assert.match(sql, /INSERT INTO machines/);
+  assert.match(sql, /NULL,/);
+  assert.match(sql, /NOT EXISTS/);
+});
+
 test('environment temperature migration stores HKO samples and daily values', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const sql = fs.readFileSync(path.join(root, 'db/migrations/010_environment_temperature.sql'), 'utf8');
