@@ -1,5 +1,5 @@
 import { query, withTransaction } from '../db.js';
-import { canonicalDailyInputKg, vendorDailyFeedWeightKg } from '../shared/vendor-weight.js';
+import { canonicalDailyInputT, vendorDailyFeedWeightKg } from '../shared/vendor-weight.js';
 
 function finiteNumber(value) {
   if (value === undefined || value === null || value === '') return null;
@@ -56,7 +56,7 @@ export async function recordVendorTelemetrySamples(devices, {
       const telemetry = safeObject(device.telemetry);
       const input = safeObject(device.input);
       const output = safeObject(device.output);
-      const dailyInputKg = canonicalDailyInputKg({ telemetry, input });
+      const dailyInputT = canonicalDailyInputT({ input });
       if (!Object.keys(telemetry).length && !Object.keys(input).length && !Object.keys(output).length) continue;
       const recordedAt = sourceDate(device.recordedAt ?? telemetry.timestamp ?? telemetry.recordedAt ?? telemetry.updateTime);
 
@@ -105,7 +105,7 @@ export async function recordVendorTelemetrySamples(devices, {
           finiteNumber(telemetry.RealTimeWeight ?? telemetry.realTimeWeight),
           finiteNumber(telemetry.OperatingStatus ?? telemetry.operatingStatus),
           finiteNumber(device.onlineCode),
-          dailyInputKg,
+          dailyInputT,
           finiteNumber(input.weeklyInput),
           finiteNumber(input.monthlyInput),
           finiteNumber(input.yearlyInput),
@@ -196,10 +196,10 @@ export async function loadVendorTelemetrySamples({
         realTimeWeightKg: row.real_time_weight_kg,
         operatingStatusCode: row.operating_status_code,
         onlineCode: row.device_online_code,
-        dailyInputKg: row.daily_input_t,
-        weeklyInputKg: row.weekly_input_t,
-        monthlyInputKg: row.monthly_input_t,
-        yearlyInputKg: row.yearly_input_t,
+        dailyInputT: row.daily_input_t,
+        weeklyInputT: row.weekly_input_t,
+        monthlyInputT: row.monthly_input_t,
+        yearlyInputT: row.yearly_input_t,
         dailyOutputT: row.daily_output_t,
         dailyFeedWeightKg: vendorDailyFeedWeightKg(row.telemetry),
         weeklyOutputT: row.weekly_output_t,
@@ -230,10 +230,10 @@ export function mapVendorTelemetryHistoryRow(row) {
     real_time_weight_kg: row.real_time_weight_kg,
     daily_feed_weight_kg: vendorDailyFeedWeightKg(row.telemetry),
     operating_status_code: row.operating_status_code,
-    daily_input_kg: row.daily_input_t,
-    weekly_input_kg: row.weekly_input_t,
-    monthly_input_kg: row.monthly_input_t,
-    yearly_input_kg: row.yearly_input_t,
+    daily_input_t: row.daily_input_t,
+    weekly_input_t: row.weekly_input_t,
+    monthly_input_t: row.monthly_input_t,
+    yearly_input_t: row.yearly_input_t,
     daily_output_t: row.daily_output_t,
     weekly_output_t: row.weekly_output_t,
     monthly_output_t: row.monthly_output_t,
@@ -470,9 +470,9 @@ export async function loadVendorTelemetrySummaries({
       ? `${row.bucket_key}:00+08:00`
       : `${row.bucket_key}T12:00:00+08:00`,
     deviceId: row.vendor_device_id,
-    dailyInputKg: row.daily_input_t,
-    monthlyInputKg: row.monthly_input_t,
-    yearlyInputKg: row.yearly_input_t,
+    dailyInputT: row.daily_input_t,
+    monthlyInputT: row.monthly_input_t,
+    yearlyInputT: row.yearly_input_t,
     deviceStatusCode: row.device_online_code,
     operatingStatusCode: row.device_online_code,
     cabinTempC: row.cabin_temp_c,

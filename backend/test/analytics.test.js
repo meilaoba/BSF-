@@ -183,6 +183,18 @@ test('analytics migration preserves source units and prevents duplicate captures
   assert.match(sql, /vendor_device_telemetry_device_time_idx/);
 });
 
+test('vendor input unit correction migration annotates counters as tonnes', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sql = fs.readFileSync(
+    path.join(root, 'db/migrations/019_vendor_input_units_tonnes.sql'),
+    'utf8'
+  );
+  assert.match(sql, /daily_input_t IS[\s\S]+tonnes/);
+  assert.match(sql, /weekly_input_t IS[\s\S]+tonnes/);
+  assert.match(sql, /monthly_input_t IS[\s\S]+tonnes/);
+  assert.match(sql, /yearly_input_t IS[\s\S]+tonnes/);
+});
+
 test('vendor telemetry migration preserves deviceOnline status at collection time', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const sql = fs.readFileSync(
@@ -412,7 +424,7 @@ test('canonical telemetry history maps to the existing device-data response cont
   assert.equal(row.device_key, '52');
   assert.equal(row.device_state, 2);
   assert.equal(row.cabin_temp_c, '28.5');
-  assert.equal(row.daily_input_kg, '0.004');
+  assert.equal(row.daily_input_t, '0.004');
   assert.equal(row.daily_feed_weight_kg, 50);
   assert.deepEqual(row.telemetry, { CabinTemp: 28.5, DailyFeedWeight: 50 });
   assert.equal(row.source, 'vendor_device_telemetry');
@@ -492,7 +504,7 @@ test('Food Waste In and Waste Collected cannot fall back to each other', () => {
   const row = {
     capturedAt: '2026-11-01T12:00:00+08:00',
     deviceId: '52',
-    dailyInputKg: 5,
+    dailyInputT: 0.005,
     wasteKg: 99,
   };
   const common = {
@@ -572,7 +584,7 @@ test('report food trend uses daily input independently from vendor daily waste',
   const telemetryRows = [{
     capturedAt: '2026-11-07T12:00:00+08:00',
     deviceId: '50',
-    dailyInputKg: 3,
+    dailyInputT: 0.003,
     operatingStatusCode: 1,
   }];
   const dailySnapshots = [{

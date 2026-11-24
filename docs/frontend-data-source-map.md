@@ -73,7 +73,7 @@
 | Start / End Date | 用户输入 | 前端传入 `/api/v1/graphs` |
 | Period Filter | 用户输入 | Daily / Monthly / Yearly |
 | `N data points loaded` | BSF 计算 | 聚合后非空食品重量点数量 |
-| Food Waste In | 厂家汇总 | `input.dailyInput`（kg）的日增量/日最大值/月或年累计 |
+| Food Waste In | 厂家汇总 | `input.dailyInput`（厂家吨值 × 1000）的日增量/日最大值/月或年累计 |
 | Container Temp | 厂家汇总 | `CabinTemp` 的时/日/月平均 |
 | Container Humidity | 厂家汇总 | `Humidity` 的时/日/月平均 |
 | Energy Consumed | BSF 计算 | 当天设备状态为 Running/Standby 时使用每日能耗，当前默认 1.5 kWh；Offline 为 0 |
@@ -125,7 +125,7 @@
 | Est. Fertilizer | BSF 计算 | 厂家日报厨余量 × `fertilizerRatio` |
 | Avg Container Temp | 厂家汇总 | 遥测 `CabinTemp` 平均值 |
 | Avg Humidity | 厂家汇总 | 遥测 `Humidity` 平均值 |
-| Food Waste In 图表 | 厂家汇总 | 遥测 `input.dailyInput`，不依赖厂家日报是否存在 |
+| Food Waste In 图表 | 厂家汇总 | 遥测 `input.dailyInput` 吨值转换为 kg，不依赖厂家日报是否存在 |
 | `No vendor daily report` | API 状态 | 本地和厂家日报都没有所选周期的数据 |
 | `Some vendor daily reports are unavailable` | API 状态 | 部分设备日报请求失败 |
 | Export Excel | 厂家文件 | 后端代理厂家 `/export/table`，日期结束日自动转换为排他日期 |
@@ -221,7 +221,7 @@
 
 | 字段 | 原始单位 | 前端显示 | 换算 |
 | --- | --- | --- | --- |
-| `input.dailyInput`、`weeklyInput`、`monthlyInput`、`yearlyInput` | kg | kg | 不换算 |
+| `input.dailyInput`、`weeklyInput`、`monthlyInput`、`yearlyInput` | 吨 | kg | × 1000 |
 | `TotalAddMaterial` | 吨 | kg | × 1000 |
 | `TotalDischarge` / `OtalUnloadingWeight` | 吨 | kg | × 1000 |
 | `DailyFeedWeight` | kg | kg | 不换算 |
