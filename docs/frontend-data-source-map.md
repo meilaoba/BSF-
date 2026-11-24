@@ -77,7 +77,7 @@
 | Container Temp | 厂家汇总 | `CabinTemp` 的时/日/月平均 |
 | Container Humidity | 厂家汇总 | `Humidity` 的时/日/月平均 |
 | Energy Consumed | BSF 计算 | 当天设备状态为 Running/Standby 时使用每日能耗，当前默认 1.5 kWh；Offline 为 0 |
-| GHG Reduced | BSF 计算 | 厨余量 × 1.5 − 电力碳排 − 运输碳排 |
+| GHG Reduced | BSF 计算 | 厨余量 × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
 | Avg 值 | BSF 计算 | 前端对所有非空图点求平均 |
 | `No data for selected period` | 状态文本 | 当前选择范围聚合后无值 |
 
@@ -120,7 +120,7 @@
 | --- | --- | --- |
 | Client / Machine / Period | 用户输入 + 本地映射 | 页面筛选条件 |
 | Waste Collected | 本地数据库 + 厂家字段 | `vendor_daily_stats.kitchen_waste_kg`；由厂家日报 `kitchenWaste` 同步并长期保存 |
-| GHG Reduced | BSF 计算 | 厨余量 × 1.5 − 电力碳排 − 运输碳排 |
+| GHG Reduced | BSF 计算 | 厨余量 × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
 | Energy Consumed | BSF 计算 | 厂家 `deviceOnline` 聚合后的运行/待机日 × 每日能耗 |
 | Est. Fertilizer | BSF 计算 | 厂家日报厨余量 × `fertilizerRatio` |
 | Avg Container Temp | 厂家汇总 | 遥测 `CabinTemp` 平均值 |

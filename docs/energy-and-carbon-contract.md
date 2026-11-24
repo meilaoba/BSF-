@@ -92,3 +92,14 @@ GHG Reduced = 回收厨余(kg) × 1.5 - 机器碳排
 - `solar = true`
 
 该覆盖保存在 `machines.metadata.ghgFormula`，不依赖 Client 绑定。
+
+## 型号默认公式
+
+为了避免厂家设备尚未同步成本地 Machine 时 GHG 显示 `—`，后端按设备型号提供 Excel 默认公式。数据库中的 Client 或 Machine 配置仍优先于型号默认值。
+
+| 型号 | 区域 | 月行驶里程 | 太阳能 |
+| --- | --- | ---: | --- |
+| CR-50S / 50KG | non-hk | 24 km | true |
+| CR-30S / 30KG | non-hk | 140 km | false |
+
+其他型号不会自动套用这两组公式。

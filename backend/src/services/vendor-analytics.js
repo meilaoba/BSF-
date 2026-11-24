@@ -1,4 +1,5 @@
 import { query, withTransaction } from '../db.js';
+import { defaultGhgSettingsForDevice } from '../shared/ghg-defaults.js';
 import { canonicalDailyInputT, vendorDailyFeedWeightKg } from '../shared/vendor-weight.js';
 
 function finiteNumber(value) {
@@ -383,29 +384,55 @@ export async function resolveVendorDeviceIds({ clientId, machineId, vendorAccoun
 export async function loadVendorDeviceReportSettings({ deviceIds = null } = {}) {
   if (Array.isArray(deviceIds) && !deviceIds.length) return new Map();
   const params = [];
-  let deviceClause = '';
+  let vendorDeviceClause = '';
+  let machineDeviceClause = '';
   if (Array.isArray(deviceIds)) {
     params.push(deviceIds.map(String));
-    deviceClause = 'AND m.vendor_device_id = ANY($1::text[])';
+    vendorDeviceClause = 'WHERE vendor_device_id = ANY($1::text[])';
+    machineDeviceClause = 'AND vendor_device_id = ANY($1::text[])';
   }
   const { rows } = await query(
-    `SELECT m.vendor_device_id,
-            COALESCE(m.region, c.region) AS client_region,
+    `WITH device_ids AS (
+       SELECT vendor_device_id
+         FROM vendor_devices
+         ${vendorDeviceClause}
+       UNION
+       SELECT vendor_device_id
+         FROM machines
+        WHERE vendor_device_id IS NOT NULL
+        ${machineDeviceClause}
+     )
+     SELECT d.vendor_device_id,
+            vd.device_name,
+            vd.template_name,
+            vd.serial_number,
+            m.name AS machine_name,
+            m.region AS machine_region,
+            c.region AS client_region,
             c.metadata->'ghgFormula' AS client_formula,
             m.metadata->'ghgFormula' AS machine_formula
-       FROM machines m
+       FROM device_ids d
+       LEFT JOIN vendor_devices vd ON vd.vendor_device_id = d.vendor_device_id
+       LEFT JOIN machines m ON m.vendor_device_id = d.vendor_device_id
        LEFT JOIN clients c ON c.id = m.client_id
-      WHERE m.vendor_device_id IS NOT NULL
-        ${deviceClause}`,
+      WHERE d.vendor_device_id IS NOT NULL`,
     params
   );
-  return new Map(rows.map((row) => [String(row.vendor_device_id), {
-    clientRegion: row.client_region,
-    ghgFormula: {
-      ...(row.client_formula || {}),
-      ...(row.machine_formula || {}),
-    },
-  }]));
+  return new Map(rows.map((row) => {
+    const defaults = defaultGhgSettingsForDevice({
+      deviceName: row.device_name || row.machine_name,
+      templateName: row.template_name,
+      serialNumber: row.serial_number,
+    }) || {};
+    return [String(row.vendor_device_id), {
+      clientRegion: row.machine_region || row.client_region || defaults.region || null,
+      ghgFormula: {
+        ...(defaults.ghgFormula || {}),
+        ...(row.client_formula || {}),
+        ...(row.machine_formula || {}),
+      },
+    }];
+  }));
 }
 
 export async function loadVendorTelemetrySummaries({
@@ -452,38 +479,51 @@ export async function loadVendorTelemetrySummaries({
        max(t.device_online_code) AS device_online_code,
        avg(t.cabin_temp_c) AS cabin_temp_c,
        avg(t.humidity_pct) AS humidity_pct,
+       max(t.vendor_device_name) AS vendor_device_name,
+       vd.template_name,
+       vd.serial_number,
        COALESCE(m.region, c.region) AS site_region,
        c.metadata->'ghgFormula' AS client_formula,
        m.metadata->'ghgFormula' AS machine_formula,
        count(*)::bigint AS sample_count
      FROM deduped t
+     LEFT JOIN vendor_devices vd ON vd.vendor_device_id = t.vendor_device_id
      LEFT JOIN machines m ON m.vendor_device_id = t.vendor_device_id
      LEFT JOIN clients c ON c.id = m.client_id
-     GROUP BY bucket_key, t.vendor_device_id, COALESCE(m.region, c.region),
+     GROUP BY bucket_key, t.vendor_device_id, vd.template_name, vd.serial_number,
+              COALESCE(m.region, c.region),
               m.metadata->'ghgFormula', c.metadata->'ghgFormula'
      ORDER BY bucket_key ASC, t.vendor_device_id ASC`,
     params
   );
 
-  return rows.map((row) => ({
-    capturedAt: row.bucket_key.includes(' ')
-      ? `${row.bucket_key}:00+08:00`
-      : `${row.bucket_key}T12:00:00+08:00`,
-    deviceId: row.vendor_device_id,
-    dailyInputT: row.daily_input_t,
-    monthlyInputT: row.monthly_input_t,
-    yearlyInputT: row.yearly_input_t,
-    deviceStatusCode: row.device_online_code,
-    operatingStatusCode: row.device_online_code,
-    cabinTempC: row.cabin_temp_c,
-    humidityPct: row.humidity_pct,
-    clientRegion: row.site_region,
-    ghgFormula: {
-      ...(row.client_formula || {}),
-      ...(row.machine_formula || {}),
-    },
-    sampleCount: row.sample_count,
-  }));
+  return rows.map((row) => {
+    const defaults = defaultGhgSettingsForDevice({
+      deviceName: row.vendor_device_name,
+      templateName: row.template_name,
+      serialNumber: row.serial_number,
+    }) || {};
+    return {
+      capturedAt: row.bucket_key.includes(' ')
+        ? `${row.bucket_key}:00+08:00`
+        : `${row.bucket_key}T12:00:00+08:00`,
+      deviceId: row.vendor_device_id,
+      dailyInputT: row.daily_input_t,
+      monthlyInputT: row.monthly_input_t,
+      yearlyInputT: row.yearly_input_t,
+      deviceStatusCode: row.device_online_code,
+      operatingStatusCode: row.device_online_code,
+      cabinTempC: row.cabin_temp_c,
+      humidityPct: row.humidity_pct,
+      clientRegion: row.site_region || defaults.region || null,
+      ghgFormula: {
+        ...(defaults.ghgFormula || {}),
+        ...(row.client_formula || {}),
+        ...(row.machine_formula || {}),
+      },
+      sampleCount: row.sample_count,
+    };
+  });
 }
 
 export async function resolveReportRegion({ clientId } = {}) {

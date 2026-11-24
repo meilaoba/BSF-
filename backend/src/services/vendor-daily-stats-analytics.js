@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { query, withTransaction } from '../db.js';
 import { fetchAllVendorDailyStats } from '../providers/vendor-daily-stats.js';
+import { defaultGhgSettingsForDevice } from '../shared/ghg-defaults.js';
 import { hongKongDateKey } from '../shared/metrics.js';
 
 function finiteNumber(value) {
@@ -32,6 +33,17 @@ function todayText(now) {
 
 function withinRange(dateKey, start, end, today) {
   return dateKey >= start && dateKey <= end && dateKey <= today;
+}
+
+function effectiveReportSettings(settings = {}, device = {}) {
+  const defaults = defaultGhgSettingsForDevice(device) || {};
+  return {
+    clientRegion: settings.clientRegion || defaults.region || null,
+    ghgFormula: {
+      ...(defaults.ghgFormula || {}),
+      ...(settings.ghgFormula || {}),
+    },
+  };
 }
 
 export function dailyStatSnapshot(record, deviceId, settings = {}) {
@@ -230,6 +242,7 @@ export async function loadStoredVendorDailyStats({
         ORDER BY vendor_device_id ASC, stat_date ASC, last_fetched_at DESC, id DESC
      )
      SELECT vendor_device_id,
+            vendor_device_name,
             to_char(stat_date, 'YYYY-MM-DD') AS stat_date,
             kitchen_waste_raw,
             kitchen_waste_kg,
@@ -241,10 +254,13 @@ export async function loadStoredVendorDailyStats({
     params
   );
 
-  return rows.map((row) => storedDailyStatSnapshot(
-    row,
-    settingsByDevice.get(String(row.vendor_device_id)) || {}
-  ));
+  return rows.map((row) => {
+    const settings = effectiveReportSettings(
+      settingsByDevice.get(String(row.vendor_device_id)) || {},
+      { deviceName: row.vendor_device_name }
+    );
+    return storedDailyStatSnapshot(row, settings);
+  });
 }
 
 export async function claimVendorDailyStatsSync(
@@ -413,7 +429,10 @@ export async function loadVendorDailyStatSnapshots({
         );
       }
     }
-    const settings = settingsByDevice.get(String(device.id)) || {};
+    const settings = effectiveReportSettings(
+      settingsByDevice.get(String(device.id)) || {},
+      device
+    );
     for (const record of records) {
       if (!withinRange(record.statDate, start, end, today)) continue;
       snapshots.push(dailyStatSnapshot(record, device.id, settings));
