@@ -313,7 +313,7 @@ export async function loadLatestVendorTelemetrySnapshots({
 } = {}) {
   if (!vendorAccountId && !includeAllAccounts) return new Map();
   const params = [];
-  const where = ['(cabin_temp_c IS NOT NULL OR humidity_pct IS NOT NULL OR real_time_weight_kg IS NOT NULL)'];
+  const where = [];
   if (!includeAllAccounts && !Array.isArray(deviceIds)) {
     params.push(String(vendorAccountId));
     where.push(`vendor_account_id = $${params.length}`);
@@ -323,13 +323,14 @@ export async function loadLatestVendorTelemetrySnapshots({
     params.push(deviceIds);
     where.push(`vendor_device_id = ANY($${params.length}::text[])`);
   }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const { rows } = await query(
     `SELECT DISTINCT ON (vendor_device_id)
             vendor_device_id, vendor_device_name, captured_at, source_recorded_at,
             cabin_temp_c, humidity_pct, real_time_weight_kg, operating_status_code, device_online_code,
             telemetry, input_data, output_data
        FROM vendor_device_telemetry
-      WHERE ${where.join(' AND ')}
+      ${whereSql}
       ORDER BY vendor_device_id ASC, captured_at DESC`,
     params
   );
@@ -341,6 +342,7 @@ export async function loadLatestVendorTelemetrySnapshots({
     telemetry: row.telemetry || {},
     input: row.input_data || {},
     output: row.output_data || {},
+    statusCapturedAt: row.captured_at,
     normalized: {
       cabinTempC: row.cabin_temp_c,
       humidityPct: row.humidity_pct,
@@ -447,9 +449,7 @@ export async function loadVendorTelemetrySummaries({
        max(t.daily_input_t) AS daily_input_t,
        max(t.monthly_input_t) AS monthly_input_t,
        max(t.yearly_input_t) AS yearly_input_t,
-       bool_or(t.operating_status_code IN (1, 2)) AS had_operation,
-       bool_or(t.operating_status_code = 1) AS had_standby,
-       bool_or(t.operating_status_code = 2) AS had_running,
+       max(t.device_online_code) AS device_online_code,
        avg(t.cabin_temp_c) AS cabin_temp_c,
        avg(t.humidity_pct) AS humidity_pct,
        COALESCE(m.region, c.region) AS site_region,
@@ -473,7 +473,8 @@ export async function loadVendorTelemetrySummaries({
     dailyInputT: row.daily_input_t,
     monthlyInputT: row.monthly_input_t,
     yearlyInputT: row.yearly_input_t,
-    operatingStatusCode: row.had_operation ? (row.had_running ? 2 : 1) : 0,
+    deviceStatusCode: row.device_online_code,
+    operatingStatusCode: row.device_online_code,
     cabinTempC: row.cabin_temp_c,
     humidityPct: row.humidity_pct,
     clientRegion: row.site_region,

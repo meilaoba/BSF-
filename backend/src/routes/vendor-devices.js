@@ -37,6 +37,7 @@ export function mergeLatestVendorTelemetry(devices, latestByDevice) {
       onlineCode: latest.normalized?.onlineCode ?? device.onlineCode,
       recordedAt: device.recordedAt || latest.recordedAt || latest.capturedAt,
       latestTelemetryAt: latest.capturedAt,
+      statusCapturedAt: latest.statusCapturedAt || latest.capturedAt,
     };
   });
 }

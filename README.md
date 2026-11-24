@@ -63,8 +63,13 @@ backend/          BSF 后端、数据库迁移和通知队列
 - 设备清单来自 `/api/v1/machines` 与 `/api/v1/vendor-devices`。
 - `Machines`、`Locations`、`Graphs`、`Raw Data` 与 `/api/v1/device-data`
   读取 `vendor_device_telemetry` 的厂家采样数据。
-- `Reports` 的厨余处理量、用电和运行时间读取厂家日报；仅温度和湿度使用
-  同一遥测库补充。
+- `Reports` 的厨余处理量读取厂家日报；能耗、运行状态、温度和湿度使用
+  统一遥测口径补充。厂家日报 `powerConsume` 仅保留为审计字段。
+- Graphs 和 Reports 统一按设备当天 Running / Standby / Offline 状态计算能耗。
+- Machines 与 Raw Data 的最新状态统一使用 `vendor_device_telemetry` 的最新
+  采集行，并保留该状态对应的采集时间。
+- 能耗、设备状态和 GHG 的完整口径见
+  [`docs/energy-and-carbon-contract.md`](docs/energy-and-carbon-contract.md)。
 - `/api/v1/vendor-devices/history` 只提供厂家历史温湿度曲线。
 - Master Admin 每 3 分钟、Client Admin / User 每 10 分钟读取一次最新记录。
 - 轮询结果追加到按角色和账号隔离的本地历史缓存，不覆盖旧记录。

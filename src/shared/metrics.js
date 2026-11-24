@@ -182,6 +182,19 @@ export function energyForStandbyDays(standbyDays, formula = {}) {
   return days === null || days < 0 ? null : days * formulaNumber(formula, 'standbyEnergyKwh');
 }
 
+/**
+ * Canonical daily energy consumption used by both Graphs and Reports.
+ * Running and standby days consume the configured daily energy; offline days
+ * consume none. A device-day without a recognized operating status remains
+ * unknown instead of being treated as a real zero.
+ */
+export function resolveDailyEnergyKwh(operatingStatusCode, formula = {}) {
+  const status = finiteNumber(operatingStatusCode);
+  if (status === 0) return 0;
+  if (status !== 1 && status !== 2) return null;
+  return formulaNumber(formula, 'standbyEnergyKwh');
+}
+
 export function averageDailyDistanceKm(formula = {}) {
   const monthlyDistance = finiteNumber(formula.monthlyDistanceKm);
   if (monthlyDistance === null || monthlyDistance < 0) return null;
@@ -322,6 +335,7 @@ export function aggregateTelemetrySnapshots(rows, {
       maxDailyInputT: null,
       hasStandby: false,
       isOperatingDay: false,
+      operatingStatusCode: null,
       directWasteKg: null,
       energyKwh: null,
       dailyAggregate: false,
@@ -335,6 +349,13 @@ export function aggregateTelemetrySnapshots(rows, {
     day.dailyAggregate = day.dailyAggregate || row.dailyAggregate;
     day.hasStandby = day.hasStandby || row.operatingStatusCode === 1;
     day.isOperatingDay = day.isOperatingDay || row.operatingStatusCode === 1 || row.operatingStatusCode === 2;
+    if (row.operatingStatusCode === 2 || (
+      row.operatingStatusCode === 1 && day.operatingStatusCode !== 2
+    ) || (
+      row.operatingStatusCode === 0 && day.operatingStatusCode === null
+    )) {
+      day.operatingStatusCode = row.operatingStatusCode;
+    }
     day.siteFormula = mergeFormulaConfig(day.siteFormula || {}, row.siteFormula);
     day.siteRegion = day.siteRegion || row.siteRegion;
     deviceDays.set(dayKey, day);
@@ -393,13 +414,11 @@ export function aggregateTelemetrySnapshots(rows, {
       : wasteSource === 'daily-stats'
         ? day.directWasteKg
         : (day.directWasteKg !== null ? day.directWasteKg : dailyInputWasteKg);
-    if (wasteKg === null) continue;
-    const energyKwh = day.dailyAggregate
-      ? (day.energyKwh ?? 0)
-      : (day.energyKwh !== null
-        ? day.energyKwh
-        : (day.isOperatingDay ? formulaNumber(day.formula, 'dailyElectricityKwh') : 0));
-    const ghgKg = ghgReducedKg(wasteKg, energyKwh, day.region, 1, day.formula);
+    const energyKwh = resolveDailyEnergyKwh(day.operatingStatusCode, day.formula);
+    if (wasteKg === null && energyKwh === null) continue;
+    const ghgKg = wasteKg === null
+      ? null
+      : ghgReducedKg(wasteKg, energyKwh, day.region, 1, day.formula);
     dailyResults.set(`${day.deviceId}|${day.dateKey}`, {
       deviceId: day.deviceId,
       dateKey: day.dateKey,
@@ -470,11 +489,8 @@ export function aggregateTelemetrySnapshots(rows, {
   const hourlyEnergyByDeviceBucket = new Map();
   for (const day of deviceDays.values()) {
     if (groupBy !== 'hour') continue;
-    const energy = day.dailyAggregate
-      ? (day.energyKwh ?? 0)
-      : (day.energyKwh !== null
-        ? day.energyKwh
-        : (day.isOperatingDay ? formulaNumber(day.formula, 'dailyElectricityKwh') : 0));
+    const energy = resolveDailyEnergyKwh(day.operatingStatusCode, day.formula);
+    if (energy === null) continue;
     if (energy === 0 && !day.dailyAggregate) continue;
     const bucket = day.dailyAggregate
       ? `${day.dateKey} 12:00`
@@ -530,13 +546,19 @@ export function aggregateTelemetrySnapshots(rows, {
   });
 
   const dailyValues = Array.from(dailyResults.values());
-  const wasteKg = dailyValues.length
-    ? dailyValues.reduce((sum, day) => sum + day.wasteKg, 0)
+  const wasteValues = dailyValues
+    .map((day) => day.wasteKg)
+    .filter((value) => value !== null);
+  const wasteKg = wasteValues.length
+    ? wasteValues.reduce((sum, value) => sum + value, 0)
     : null;
   const standbyDeviceDays = Array.from(deviceDays.values()).filter((day) => day.hasStandby).length;
   const operatingDeviceDays = Array.from(deviceDays.values()).filter((day) => day.isOperatingDay).length;
-  const energyKwh = dailyValues.length
-    ? dailyValues.reduce((sum, day) => sum + day.energyKwh, 0)
+  const energyValues = dailyValues
+    .map((day) => day.energyKwh)
+    .filter((value) => value !== null);
+  const energyKwh = energyValues.length
+    ? energyValues.reduce((sum, value) => sum + value, 0)
     : null;
   const observedDeviceDays = deviceDays.size;
   const ghgValues = dailyValues

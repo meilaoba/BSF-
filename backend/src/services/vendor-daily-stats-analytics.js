@@ -21,9 +21,11 @@ export function dailyStatSnapshot(record, deviceId, settings = {}) {
     capturedAt: `${record.statDate}T12:00:00+08:00`,
     deviceId: String(deviceId),
     wasteKg,
-    energyKwh,
+    // Vendor powerConsume is retained for audit only. Graphs and Reports use
+    // the canonical operating-status energy resolver so both surfaces agree.
+    energyKwh: null,
+    vendorPowerConsumeKwh: energyKwh,
     runTimeHours,
-    operatingStatusCode: (runTimeHours > 0 || energyKwh !== 0) ? 2 : 0,
     dailyAggregate: true,
     clientRegion: settings.clientRegion ?? null,
     ghgFormula: settings.ghgFormula ?? null,

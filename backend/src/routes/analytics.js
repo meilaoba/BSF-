@@ -239,13 +239,21 @@ export function reportTemperatureHumidityRows(sampleRows, dailySnapshots) {
       }
       const hasTemperature = row.cabinTempC !== null && row.cabinTempC !== undefined && row.cabinTempC !== '';
       const hasHumidity = row.humidityPct !== null && row.humidityPct !== undefined && row.humidityPct !== '';
-      return hasTemperature || hasHumidity;
+      const hasOperatingStatus = row.operatingStatusCode !== null
+        && row.operatingStatusCode !== undefined
+        && row.operatingStatusCode !== '';
+      return hasTemperature || hasHumidity || hasOperatingStatus;
     })
     .map((row) => ({
       capturedAt: row.capturedAt,
       deviceId: row.deviceId,
       cabinTempC: row.cabinTempC,
       humidityPct: row.humidityPct,
+      ...(row.operatingStatusCode === null
+        || row.operatingStatusCode === undefined
+        || row.operatingStatusCode === ''
+        ? {}
+        : { operatingStatusCode: row.operatingStatusCode }),
     }));
 }
 
@@ -294,7 +302,7 @@ async function loadReportAnalytics(req, context, range) {
     rows: [...dailyResult.snapshots, ...supplementalRows],
     dataSources: {
       dailyStats: { status },
-      telemetry: { status: supplementalRows.length ? 'temperature-humidity' : 'unavailable' },
+      telemetry: { status: supplementalRows.length ? 'status-temperature-humidity' : 'unavailable' },
       reportCredential: { status: collector ? 'collector' : 'session' },
     },
   };

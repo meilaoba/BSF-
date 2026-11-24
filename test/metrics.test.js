@@ -16,6 +16,7 @@ import {
   machineCarbonKg,
   periodRange,
   regionalEnergyFactor,
+  resolveDailyEnergyKwh,
   transportCarbonKg,
 } from '../src/shared/metrics.js';
 
@@ -49,6 +50,10 @@ test('applies the confirmed GHG, fertilizer and standby energy formulas', () => 
   assert.equal(regionalEnergyFactor('港島'), 0.71);
   assert.equal(regionalEnergyFactor('non-hk'), 0.37);
   assert.equal(energyForStandbyDays(3), 4.5);
+  assert.equal(resolveDailyEnergyKwh(0), 0);
+  assert.equal(resolveDailyEnergyKwh(1), 1.5);
+  assert.equal(resolveDailyEnergyKwh(2), 1.5);
+  assert.equal(resolveDailyEnergyKwh(null), null);
   assert.equal(fertilizerKg(125), 15);
   assert.equal(electricityCarbonKg(2, 'non-hk'), 0.74);
   assert.equal(transportCarbonKg(null), null);
@@ -305,7 +310,7 @@ test('CIC standby days use the 140 km site transport deduction', () => {
   close(result.summary.ghgKg, -2.8826071232876715);
 });
 
-test('daily aggregate rows use vendor waste and measured power instead of estimates', () => {
+test('daily aggregate rows use vendor waste while status controls energy', () => {
   const result = aggregateTelemetrySnapshots([
     {
       capturedAt: '2026-10-16T12:00:00+08:00',
@@ -331,7 +336,19 @@ test('daily aggregate rows use vendor waste and measured power instead of estima
   close(result.summary.ghgKg, 5 * 1.5 - 1.5 * 0.37 - transport);
 });
 
-test('daily aggregate zero power suppresses legacy standby estimates for the same day', () => {
+test('carbon workbook values are reproduced for CIC and HSITP', () => {
+  const cicTransport = ((140 * 12) / 365 / 100) * 8.3 * 2.32;
+  const hsitpTransport = ((24 * 12) / 365 / 100) * 8.3 * 2.32;
+
+  close(1.5 * 0.37, 0.555);
+  close(cicTransport, 0.8863035616438355);
+  close(1.5 * 0.37 + cicTransport, 1.4413035616438354);
+  close(-1.5 * 0.37 + hsitpTransport, -0.4030622465753424);
+  close(ghgReducedKg(2, 1.5, 'non-hk', 1, { monthlyDistanceKm: 140 }), 1.5586964383561646);
+  close(ghgReducedKg(2, 1.5, 'non-hk', 1, { monthlyDistanceKm: 24, solar: true }), 3.4030622465753426);
+});
+
+test('daily aggregate vendor power does not override operating-status energy', () => {
   const result = aggregateTelemetrySnapshots([
     {
       capturedAt: '2026-10-28T12:00:00+08:00',
@@ -355,7 +372,53 @@ test('daily aggregate zero power suppresses legacy standby estimates for the sam
     summaryMode: 'daily',
     now: new Date('2026-10-29T00:00:00.000Z')
   });
-  assert.equal(result.summary.energyKwh, 0);
+  assert.equal(result.summary.energyKwh, 1.5);
+});
+
+test('Graphs and Reports resolve the same energy from matching operating status', () => {
+  const common = {
+    groupBy: 'day',
+    start: '2026-11-07',
+    end: '2026-11-07',
+    now: new Date('2026-11-08T00:00:00.000Z'),
+    formula: CIC_FORMULA,
+  };
+  const graph = aggregateTelemetrySnapshots([{
+    capturedAt: '2026-11-07T12:00:00+08:00',
+    deviceId: 'cic',
+    dailyInputT: 0.002,
+    operatingStatusCode: 1,
+    clientRegion: 'non-hk',
+    ghgFormula: CIC_FORMULA,
+  }], {
+    ...common,
+    wasteSource: 'daily-input',
+  });
+  const report = aggregateTelemetrySnapshots([
+    {
+      capturedAt: '2026-11-07T12:00:00+08:00',
+      deviceId: 'cic',
+      wasteKg: 2,
+      energyKwh: 9,
+      dailyAggregate: true,
+      clientRegion: 'non-hk',
+      ghgFormula: CIC_FORMULA,
+    },
+    {
+      capturedAt: '2026-11-07T12:00:00+08:00',
+      deviceId: 'cic',
+      operatingStatusCode: 1,
+    },
+  ], {
+    ...common,
+    wasteSource: 'daily-stats',
+  });
+
+  assert.equal(graph.summary.wasteKg, 2);
+  assert.equal(report.summary.wasteKg, 2);
+  assert.equal(graph.summary.energyKwh, 1.5);
+  assert.equal(report.summary.energyKwh, 1.5);
+  close(graph.summary.ghgKg, report.summary.ghgKg);
 });
 
 test('daily aggregate zero is plotted once at noon without copying GHG forward', () => {
@@ -414,7 +477,7 @@ test('hourly telemetry summaries keep hourly temperature points in the daily vie
   assert.equal(result.energyItems[12].value, 1.5);
 });
 
-test('report daily totals keep vendor metrics while telemetry supplies temperature and humidity', () => {
+test('report daily totals keep vendor waste while telemetry supplies status and environment data', () => {
   const result = aggregateTelemetrySnapshots([
     {
       capturedAt: '2026-11-01T12:00:00+08:00',
@@ -430,6 +493,7 @@ test('report daily totals keep vendor metrics while telemetry supplies temperatu
       deviceId: '52',
       cabinTempC: 29,
       humidityPct: 0.5,
+      operatingStatusCode: 2,
     },
   ], {
     groupBy: 'day',

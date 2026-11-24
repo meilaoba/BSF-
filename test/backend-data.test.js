@@ -101,6 +101,7 @@ test('maps vendor API values onto an explicitly linked machine without auto-assi
   assert.equal(snapshot.devices[0].operatingStatus, 'Standby');
   assert.equal(snapshot.devices[0].fermentState, 'Running');
   assert.equal(snapshot.devices[0].status, 'standby');
+    assert.equal(snapshot.devices[0].statusCapturedAt, '');
   assert.equal(snapshot.devices[0].network, 'Vendor API');
   assert.equal(snapshot.rows.length, 1);
 });
@@ -126,9 +127,11 @@ test('maps confirmed deviceOnline codes and humidity display scale', () => {
     serialNumber: 'SERIAL-201',
     deviceName: 'Running Unit',
     onlineCode: 2,
+    statusCapturedAt: '2026-11-24T07:30:00.000Z',
     telemetry: { CabinTemp: 40, Humidity: 0.2, RealTimeWeight: 12, OperatingStatus: 2 }
   }], []);
   assert.equal(snapshot.devices[0].status, 'running');
+  assert.equal(snapshot.devices[0].statusCapturedAt, '2026-11-24T07:30:00.000Z');
   assert.equal(snapshot.devices[0].humidity, 20);
   sandbox.window.BSF_RUNTIME_CONFIG = {};
 });

@@ -29,6 +29,7 @@ const {
   mapVendorTelemetryHistoryRow,
   vendorAccountIdForSession,
 } = await import('../src/services/vendor-analytics.js');
+const { dailyStatSnapshot } = await import('../src/services/vendor-daily-stats-analytics.js');
 const { aggregateTelemetrySnapshots } = await import('../src/shared/metrics.js');
 
 test.after(async () => closePool());
@@ -269,6 +270,24 @@ test('latest complete saved telemetry fills only fields missing from a partial v
   assert.equal(merged.latestTelemetryAt, '2026-10-29T00:00:00.000Z');
 });
 
+test('latest saved device status wins over vendor realtime status and includes its timestamp', () => {
+  const merged = mergeLatestVendorTelemetry([{
+    id: '52',
+    onlineCode: 1,
+    telemetry: { CabinTemp: 40 },
+  }], new Map([['52', {
+    capturedAt: '2026-11-24T07:30:00.000Z',
+    statusCapturedAt: '2026-11-24T07:30:00.000Z',
+    telemetry: {},
+    input: {},
+    output: {},
+    normalized: { onlineCode: 0, operatingStatusCode: 0 },
+  }]]))[0];
+
+  assert.equal(merged.onlineCode, 0);
+  assert.equal(merged.statusCapturedAt, '2026-11-24T07:30:00.000Z');
+});
+
 test('vendor device responses expose the local mirror sync time', () => {
   const devices = [
     { id: '52', deviceName: 'CR-30S_QX2026124' },
@@ -380,7 +399,7 @@ test('canonical telemetry history maps to the existing device-data response cont
   assert.equal(row.source, 'vendor_device_telemetry');
 });
 
-test('graphs read telemetry while reports use daily metrics and only supplemental temperature/humidity', () => {
+test('graphs read telemetry while reports use daily waste with supplemental status and environment data', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const source = fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8');
   assert.match(source, /const sourceGroupBy = groupBy === 'hour' \? 'hour' : 'day';/);
@@ -401,6 +420,48 @@ test('graphs read telemetry while reports use daily metrics and only supplementa
     source.indexOf('async function loadReportAnalytics')
   );
   assert.doesNotMatch(graphLoader, /loadVendorDailyStatSnapshots/);
+});
+
+test('latest device status snapshot is not filtered by temperature, humidity or weight', () => {
+  const service = fs.readFileSync(
+    path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), 'src/services/vendor-analytics.js'),
+    'utf8'
+  );
+  const latest = service.slice(
+    service.indexOf('export async function loadLatestVendorTelemetrySnapshots'),
+    service.indexOf('export async function resolveVendorDeviceIds')
+  );
+  assert.doesNotMatch(latest, /cabin_temp_c IS NOT NULL OR humidity_pct IS NOT NULL/);
+  assert.match(latest, /statusCapturedAt: row\.captured_at/);
+});
+
+test('telemetry daily summaries use the canonical device status for energy', () => {
+  const service = fs.readFileSync(
+    path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), 'src/services/vendor-analytics.js'),
+    'utf8'
+  );
+  const summaries = service.slice(
+    service.indexOf('export async function loadVendorTelemetrySummaries'),
+    service.indexOf('export async function resolveReportRegion')
+  );
+  assert.match(summaries, /max\(t\.device_online_code\) AS device_online_code/);
+  assert.match(summaries, /operatingStatusCode: row\.device_online_code/);
+  assert.doesNotMatch(summaries, /bool_or\(t\.operating_status_code/);
+});
+
+test('vendor daily power is retained for audit while business energy uses operating status', () => {
+  const snapshot = dailyStatSnapshot({
+    statDate: '2026-11-07',
+    kitchenWaste: 2,
+    powerConsume: 9,
+    runTime: 1,
+  }, '52', {
+    clientRegion: 'non-hk',
+    ghgFormula: { monthlyDistanceKm: 140 },
+  });
+  assert.equal(snapshot.energyKwh, null);
+  assert.equal(snapshot.vendorPowerConsumeKwh, 9);
+  assert.equal(snapshot.operatingStatusCode, undefined);
 });
 
 test('Food Waste In and Waste Collected cannot fall back to each other', () => {
@@ -443,13 +504,14 @@ test('reports use the server collector credential so tenant roles share vendor d
   assert.match(reportLoader, /reportCredential: \{ status: collector \? 'collector' : 'session' \}/);
 });
 
-test('report temperature/humidity supplements only reported device days and cannot replace daily metrics', () => {
+test('report supplements only reported device days and cannot replace daily waste', () => {
   const rows = reportTemperatureHumidityRows([
     {
       capturedAt: '2026-11-01T12:00:00+08:00',
       deviceId: '52',
       cabinTempC: 28,
       humidityPct: 41,
+      operatingStatusCode: 1,
       wasteKg: 99,
       energyKwh: 99,
     },
@@ -458,6 +520,7 @@ test('report temperature/humidity supplements only reported device days and cann
       deviceId: '52',
       cabinTempC: 30,
       humidityPct: 45,
+      operatingStatusCode: 2,
       wasteKg: 88,
       energyKwh: 88,
     },
@@ -470,6 +533,7 @@ test('report temperature/humidity supplements only reported device days and cann
     deviceId: '52',
     cabinTempC: 28,
     humidityPct: 41,
+    operatingStatusCode: 1,
   }]);
 });
 
