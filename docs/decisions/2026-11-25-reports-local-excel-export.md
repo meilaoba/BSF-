@@ -11,13 +11,24 @@
    - `Weight`：Recorded Time、Device、Weight(kg)
    - `Temp`：Recorded Time、Device、Temp(°C)
    - `Humidity`：Recorded Time、Device、Hum(%)
-3. 文件在浏览器本地下载，不经过厂家导出接口。
+3. 文件在浏览器本地生成 `.xlsx`，不经过厂家导出接口。
 4. 导出保留当前页面可见的指标、单位和日期维度。
 5. Alerts 的报警文件导出暂不包含在本次回退范围内。
+
+## 折线图
+
+每个工作表右侧包含一张 Excel 原生折线图：
+
+- 图表随工作表数据变化，可在 Excel 中编辑
+- 横轴为记录时间
+- 纵轴为对应指标
+- 多设备时按设备分成不同数据系列
+- 缺失值使用间隙显示，不补 0
 
 ## 影响
 
 - `src/ui/pages/reports.js`
+- `src/ui/report-xlsx.js`
 - `test/reports-export.test.js`
 - `docs/frontend-data-source-map.md`
 

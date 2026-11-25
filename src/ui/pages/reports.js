@@ -512,67 +512,13 @@ function exportReportCsv(){
   showReportExportToast('CSV 导出已开始');
 }
 
-function reportExcelXmlEscape(value){
-  return bsfEscapeHtml(bsfSpreadsheetSafeText(value))
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function reportExcelCell(value, numeric){
-  if(numeric){
-    const text = value === null || value === undefined ? '' : String(value).trim();
-    const number = Number(text);
-    if(text !== '' && Number.isFinite(number)){
-      return '<Cell><Data ss:Type="Number">' + number + '</Data></Cell>';
-    }
-  }
-  if(value === '' || value === null || value === undefined || value === '—') return '<Cell/>';
-  return '<Cell><Data ss:Type="String">' + reportExcelXmlEscape(value) + '</Data></Cell>';
-}
-
-function reportExcelSheet(name, title, valueKey, rows){
-  const body = rows.map(function(row){
-    return '<Row>' +
-      reportExcelCell(row.recordedAt, false) +
-      reportExcelCell(row.device, false) +
-      reportExcelCell(row[valueKey], true) +
-      '</Row>';
-  }).join('');
-  return '<Worksheet ss:Name="' + reportExcelXmlEscape(name) + '">' +
-    '<Table>' +
-    '<Column ss:Width="170"/><Column ss:Width="180"/><Column ss:Width="110"/>' +
-    '<Row>' +
-    reportExcelCell('Recorded Time', false) +
-    reportExcelCell('Device', false) +
-    reportExcelCell(title, false) +
-    '</Row>' +
-    body +
-    '</Table>' +
-    '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">' +
-    '<FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane>' +
-    '<ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios>' +
-    '</WorksheetOptions>' +
-    '</Worksheet>';
-}
-
-function reportExcelXml(rows){
-  return '<?xml version="1.0" encoding="UTF-8"?>' +
-    '<?mso-application progid="Excel.Sheet"?>' +
-    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
-    'xmlns:o="urn:schemas-microsoft-com:office:office" ' +
-    'xmlns:x="urn:schemas-microsoft-com:office:excel" ' +
-    'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
-    '<Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10"/></Style></Styles>' +
-    reportExcelSheet('Weight', 'Weight(kg)', 'weight', rows) +
-    reportExcelSheet('Temp', 'Temp(°C)', 'temperature', rows) +
-    reportExcelSheet('Humidity', 'Hum(%)', 'humidity', rows) +
-    '</Workbook>';
-}
-
 function exportReportExcel(){
-  const rows = reportRowsForPeriod();
-  const html = reportExcelXml(rows);
-  downloadReportFile('bsf-report-' + new Date().toISOString().slice(0,10) + '.xls', 'application/vnd.ms-excel;charset=utf-8', '\uFEFF' + html);
+  if(!window.BSF_REPORT_XLSX || typeof window.BSF_REPORT_XLSX.build !== 'function'){
+    showReportExportToast('Excel generator is unavailable', 'error');
+    return;
+  }
+  const blob = window.BSF_REPORT_XLSX.build(reportRowsForPeriod());
+  downloadReportBlob('bsf-report-' + new Date().toISOString().slice(0,10) + '.xlsx', blob);
   showReportExportToast('Excel export started');
 }
 async function exportReportPdf(){

@@ -8,6 +8,7 @@ import * as metrics from '../src/shared/metrics.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = fs.readFileSync(path.join(root, 'src/ui/pages/reports.js'), 'utf8');
+const xlsxSource = fs.readFileSync(path.join(root, 'src/ui/report-xlsx.js'), 'utf8');
 let lastDownload = null;
 const sandbox = {
   console,
@@ -38,9 +39,12 @@ const sandbox = {
       this.type = options && options.type;
     }
   },
+  TextEncoder,
   clientScoped:false,
 };
+sandbox.window.bsfSpreadsheetSafeText = sandbox.bsfSpreadsheetSafeText;
 vm.createContext(sandbox);
+vm.runInContext(xlsxSource, sandbox, { filename:'report-xlsx.js' });
 vm.runInContext(source, sandbox, { filename:'reports.js' });
 
 test('report cards and CSV/Excel/PDF model share the API summary values', () => {
@@ -75,11 +79,9 @@ test('report preview exposes PDF and Excel exports without a CSV button', () => 
   assert.match(source, /onclick="exportReportExcel\(\)"/);
   assert.doesNotMatch(source, /onclick="exportReportCsv\(\)"/);
   assert.doesNotMatch(source, /downloadDeviceExport/);
-  assert.match(source, /bsf-report-.*\.xls/);
+  assert.match(source, /bsf-report-.*\.xlsx/);
   assert.match(source, /reportRowsForPeriod\(\)/);
-  assert.match(source, /reportExcelSheet\('Weight'/);
-  assert.match(source, /reportExcelSheet\('Temp'/);
-  assert.match(source, /reportExcelSheet\('Humidity'/);
+  assert.match(source, /BSF_REPORT_XLSX\.build/);
 });
 
 test('report Excel export creates independent Weight, Temp and Humidity sheets', () => {
@@ -97,29 +99,39 @@ test('report Excel export creates independent Weight, Temp and Humidity sheets',
     exportReportExcel();
   `, sandbox);
 
-  assert.equal(lastDownload.type, 'application/vnd.ms-excel;charset=utf-8');
-  const xml = String(lastDownload.parts[0]);
-  assert.match(xml, /<Worksheet ss:Name="Weight">/);
-  assert.match(xml, /<Worksheet ss:Name="Temp">/);
-  assert.match(xml, /<Worksheet ss:Name="Humidity">/);
-  assert.match(xml, /ss:Type="Number">12</);
-  assert.match(xml, /ss:Type="Number">41</);
-  assert.match(xml, /ss:Type="Number">53</);
+  assert.equal(lastDownload.type, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  const files = sandbox.window.BSF_REPORT_XLSX.workbookFiles([{
+    recordedAt:'2026-10-01 10:00:00',
+    device:'device-a',
+    weight:12,
+    temperature:41,
+    humidity:53,
+  }]);
+  assert.match(files.get('xl/charts/chart1.xml'), /<c:lineChart>/);
+  assert.match(files.get('xl/charts/chart2.xml'), /<c:lineChart>/);
+  assert.match(files.get('xl/charts/chart3.xml'), /<c:lineChart>/);
+  assert.match(files.get('xl/worksheets/sheet1.xml'), /Weight\(kg\)/);
+  assert.match(files.get('xl/worksheets/sheet2.xml'), /Temp\(°C\)/);
+  assert.match(files.get('xl/worksheets/sheet3.xml'), /Hum\(%\)/);
+  const zipText = Buffer.from(new Uint8Array(lastDownload.parts[0])).toString('utf8');
+  assert.match(zipText, /xl\/charts\/chart1\.xml/);
+  assert.match(zipText, /<c:lineChart>/);
   delete sandbox.window.BSF_DEVICE_HISTORY_ROWS;
   sandbox.scopedDevices = function(){ return []; };
   sandbox.devices = [];
 });
 
 test('report Excel export leaves missing measurements blank', () => {
-  const xml = sandbox.reportExcelXml([{
+  const files = sandbox.window.BSF_REPORT_XLSX.workbookFiles([{
     recordedAt: '2026-10-01 10:00:00',
     device: 'device-a',
     weight: '—',
     temperature: '',
     humidity: null,
   }]);
-  assert.doesNotMatch(xml, /ss:Type="Number">0</);
-  assert.match(xml, /<Cell\/>/);
+  assert.match(files.get('xl/worksheets/sheet1.xml'), /<c r="C2"\/>/);
+  assert.match(files.get('xl/worksheets/sheet2.xml'), /<c r="C2"\/>/);
+  assert.match(files.get('xl/worksheets/sheet3.xml'), /<c r="C2"\/>/);
 });
 
 test('PDF library is loaded only when PDF export is requested', () => {
