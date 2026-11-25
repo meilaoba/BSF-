@@ -596,8 +596,12 @@ async function exportReportExcel(){
   showReportExportToast('Loading complete report data...');
   try {
     const rows = await reportRowsForExcelExport();
+    const range = reportPeriodRange();
     const blob = window.BSF_REPORT_XLSX.build(rows, {
-      chartTitle:reportExcelChartTitle()
+      chartTitle:reportExcelChartTitle(),
+      chartPeriod:reportFilters.period,
+      periodStart:range.start,
+      periodEnd:range.end
     });
     downloadReportBlob('bsf-report-' + new Date().toISOString().slice(0,10) + '.xlsx', blob);
     showReportExportToast('Excel export started');

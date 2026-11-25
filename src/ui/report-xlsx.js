@@ -72,55 +72,139 @@
     });
   }
 
-  function chartTimeLabel(value){
-    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?/);
-    if(!match) return String(value || '');
-    const hour = match[4] === undefined ? '0' : String(Number(match[4]));
-    const minute = match[5] === undefined ? '00' : match[5];
-    return String(Number(match[3])) + '/' + String(Number(match[2])) + '/' + match[1] + ' ' + hour + ':' + minute;
+  function recordedDateKey(value){
+    const match = String(value || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(!match) return '';
+    return match[1] + '-' + String(Number(match[2])).padStart(2, '0') + '-' + String(Number(match[3])).padStart(2, '0');
   }
 
-  function seriesGroups(rows){
-    const groups = [];
-    rows.forEach(function(row, index){
-      const rowNumber = index + 2;
-      const current = groups[groups.length - 1];
-      if(current && current.device === row.device){
-        current.end = rowNumber;
-      } else {
-        groups.push({ device:row.device, start:rowNumber, end:rowNumber });
-      }
+  function periodCategories(options, rows){
+    if(options.chartPeriod === 'yearly'){
+      return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    }
+    const startText = String(options.periodStart || '');
+    const endText = String(options.periodEnd || '');
+    const startMatch = startText.match(/^(\d{4})-(\d{2})-\d{2}$/);
+    if(startMatch){
+      const year = Number(startMatch[1]);
+      const month = Number(startMatch[2]);
+      const lastDay = endText.slice(0, 7) === startText.slice(0, 7)
+        ? Number(endText.slice(8, 10))
+        : new Date(Date.UTC(year, month, 0)).getUTCDate();
+      return Array.from({ length:lastDay }, function(_, index){ return String(index + 1); });
+    }
+    const keys = Array.from(new Set(rows.map(function(row){
+      return recordedDateKey(row.recordedAt);
+    }).filter(Boolean))).sort();
+    if(!keys.length) return [];
+    const first = keys[0];
+    const last = keys[keys.length - 1];
+    const year = Number(first.slice(0, 4));
+    const month = Number(first.slice(5, 7));
+    const lastDay = last.slice(0, 7) === first.slice(0, 7)
+      ? Number(last.slice(8, 10))
+      : new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return Array.from({ length:lastDay }, function(_, index){ return String(index + 1); });
+  }
+
+  function chartDataFor(rows, key, options){
+    const yearly = options.chartPeriod === 'yearly';
+    const categories = periodCategories(options, rows);
+    const positions = new Map(categories.map(function(label, index){ return [label, index]; }));
+    const deviceBuckets = new Map();
+    rows.forEach(function(row){
+      const value = finite(row[key]);
+      const dateKey = recordedDateKey(row.recordedAt);
+      if(value === null || !dateKey) return;
+      const category = yearly ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(dateKey.slice(5, 7)) - 1] : String(Number(dateKey.slice(8, 10)));
+      const position = positions.get(category);
+      if(position === undefined) return;
+      const device = String(row.device || '—');
+      const buckets = deviceBuckets.get(device) || new Map();
+      const bucket = buckets.get(position) || { sum:0, count:0, max:null };
+      bucket.sum += value;
+      bucket.count += 1;
+      bucket.max = bucket.max === null ? value : Math.max(bucket.max, value);
+      buckets.set(position, bucket);
+      deviceBuckets.set(device, buckets);
     });
-    return groups;
+    return {
+      categories:categories,
+      series:Array.from(deviceBuckets.entries()).sort(function(left, right){
+        return left[0].localeCompare(right[0]);
+      }).map(function(entry){
+        const buckets = entry[1];
+        return {
+          name:entry[0],
+          values:categories.map(function(_, index){
+            const bucket = buckets.get(index);
+            if(!bucket) return null;
+            return key === 'weight' ? bucket.max : bucket.sum / bucket.count;
+          }),
+        };
+      }),
+    };
   }
 
-  function worksheetXml(name, title, key, rows, index){
+  function columnLetterToIndex(value){
+    let index = 0;
+    String(value || '').toUpperCase().split('').forEach(function(letter){
+      index = index * 26 + letter.charCodeAt(0) - 64;
+    });
+    return Math.max(4, index);
+  }
+
+  function chartHelperXml(chartData){
+    const series = chartData.series;
+    const lastColumn = column(6 + Math.max(0, series.length - 1));
+    const rows = ['<row r="1">' + inlineCell('F1', 'Chart Day', 1) +
+      series.map(function(item, index){ return inlineCell(column(6 + index) + '1', item.name, 1); }).join('') +
+      '</row>'];
+    chartData.categories.forEach(function(label, index){
+      const rowNumber = index + 2;
+      rows.push('<row r="' + rowNumber + '">' + inlineCell('F' + rowNumber, label) +
+        series.map(function(item, seriesIndex){
+          return numberCell(column(6 + seriesIndex) + rowNumber, item.values[index]);
+        }).join('') + '</row>');
+    });
+    return {
+      rows:rows.join(''),
+      categoryRange:'$F$2:$F$' + Math.max(2, chartData.categories.length + 1),
+      seriesRanges:series.map(function(_, index){
+        const letter = column(6 + index);
+        return '$' + letter + '$2:$' + letter + '$' + Math.max(2, chartData.categories.length + 1);
+      }),
+      lastColumn:lastColumn,
+    };
+  }
+
+  function worksheetXml(name, title, key, rows, index, chartData){
     const sheetRows = rows.map(function(row, rowIndex){
       const rowNumber = rowIndex + 2;
       return '<row r="' + rowNumber + '">' +
         inlineCell('A' + rowNumber, row.recordedAt) +
         inlineCell('B' + rowNumber, row.device) +
         numberCell('C' + rowNumber, row[key]) +
-        inlineCell('D' + rowNumber, chartTimeLabel(row.recordedAt)) +
         '</row>';
     }).join('');
     const header = '<row r="1">' +
       inlineCell('A1', 'Recorded Time', 1) +
       inlineCell('B1', 'Device', 1) +
       inlineCell('C1', title, 1) +
-      inlineCell('D1', 'Chart Time', 1) +
       '</row>';
+    const helper = chartHelperXml(chartData);
+    const lastRow = Math.max(rows.length + 1, chartData.categories.length + 1);
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
       'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-      '<dimension ref="A1:D' + Math.max(1, rows.length + 1) + '"/>' +
+      '<dimension ref="A1:' + helper.lastColumn + lastRow + '"/>' +
       '<sheetViews><sheetView workbookViewId="0"/></sheetViews>' +
       '<sheetFormatPr defaultRowHeight="15"/>' +
       '<cols><col min="1" max="1" width="22" customWidth="1"/>' +
       '<col min="2" max="2" width="24" customWidth="1"/>' +
       '<col min="3" max="3" width="14" customWidth="1"/>' +
-      '<col min="4" max="4" width="20" customWidth="1" hidden="1"/></cols>' +
-      '<sheetData>' + header + sheetRows + '</sheetData>' +
+      '<col min="4" max="' + columnLetterToIndex(helper.lastColumn) + '" width="14" customWidth="1" hidden="1"/></cols>' +
+      '<sheetData>' + header + sheetRows + helper.rows + '</sheetData>' +
       '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>' +
       '<drawing r:id="rId1"/>' +
       '</worksheet>';
@@ -141,35 +225,28 @@
       '<a:srgbClr val="D9D9D9"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>';
   }
 
-  function chartSeriesXml(sheetName, groups, spec){
+  function chartSeriesXml(sheetName, series, ranges, spec){
     const colors = ['4472C4', '70AD47', 'ED7D31', 'A5A5A5', '5B9BD5', 'FFC000'];
-    const singleSeries = groups.length === 1;
-    return groups.map(function(group, index){
-      const ref = "'" + sheetName.replace(/'/g, "''") + "'!";
+    const ref = "'" + sheetName.replace(/'/g, "''") + "'!";
+    return series.map(function(item, index){
       const color = colors[index % colors.length];
-      const seriesTitle = singleSeries
-        ? '<c:tx><c:v>' + xmlEscape(spec.seriesName) + '</c:v></c:tx>'
-        : '<c:tx><c:strRef><c:f>' + ref + '$B$' + group.start + '</c:f></c:strRef></c:tx>';
       return '<c:ser><c:idx val="' + index + '"/><c:order val="' + index + '"/>' +
-        seriesTitle +
+        '<c:tx><c:v>' + xmlEscape(series.length === 1 ? spec.seriesName : item.name) + '</c:v></c:tx>' +
         '<c:spPr><a:ln w="25400" cap="rnd"><a:solidFill><a:srgbClr val="' + color + '"/></a:solidFill>' +
         '<a:round/></a:ln></c:spPr>' +
         '<c:marker><c:symbol val="none"/></c:marker>' +
-        '<c:cat><c:strRef><c:f>' + ref + '$D$' + group.start + ':$D$' + group.end + '</c:f></c:strRef></c:cat>' +
-        '<c:val><c:numRef><c:f>' + ref + '$C$' + group.start + ':$C$' + group.end + '</c:f></c:numRef></c:val>' +
+        '<c:cat><c:strRef><c:f>' + ref + ranges.categoryRange + '</c:f></c:strRef></c:cat>' +
+        '<c:val><c:numRef><c:f>' + ref + ranges.seriesRanges[index] + '</c:f></c:numRef></c:val>' +
         '<c:smooth val="0"/></c:ser>';
     }).join('');
   }
 
-  function chartXml(sheetName, title, groups, index, spec, options){
+  function chartXml(sheetName, title, chartData, index, spec, options){
     const catAxisId = 1000 + index * 10;
     const valAxisId = catAxisId + 1;
-    const pointCount = groups.reduce(function(maximum, group){
-      return Math.max(maximum, group.end - group.start + 1);
-    }, 0);
-    const labelSkip = Math.max(1, Math.ceil(pointCount / 30));
-    const labelRotation = pointCount > 12 ? '-2700000' : '0';
+    const labelRotation = chartData.categories.length > 12 ? '-2700000' : '0';
     const chartTitle = options.chartTitle || title;
+    const ranges = chartHelperXml(chartData);
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ' +
       'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
@@ -177,7 +254,7 @@
       '<c:lang val="en-US"/><c:roundedCorners val="0"/><c:chart>' +
       chartTitleXml(chartTitle) +
       '<c:plotArea><c:layout/><c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>' +
-      chartSeriesXml(sheetName, groups, spec) +
+      chartSeriesXml(sheetName, chartData.series, ranges, spec) +
       '<c:marker val="0"/><c:axId val="' + catAxisId + '"/><c:axId val="' + valAxisId + '"/></c:lineChart>' +
       '<c:catAx><c:axId val="' + catAxisId + '"/><c:scaling><c:orientation val="minMax"/></c:scaling>' +
       '<c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/>' +
@@ -185,8 +262,8 @@
       axisLineXml() +
       '<c:txPr><a:bodyPr rot="' + labelRotation + '"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900"/></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>' +
       '<c:crossAx val="' + valAxisId + '"/><c:crosses val="autoZero"/><c:auto val="1"/>' +
-      '<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:tickLblSkip val="' + labelSkip + '"/>' +
-      '<c:tickMarkSkip val="' + labelSkip + '"/><c:noMultiLvlLbl val="0"/></c:catAx>' +
+      '<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:tickLblSkip val="1"/>' +
+      '<c:tickMarkSkip val="1"/><c:noMultiLvlLbl val="0"/></c:catAx>' +
       '<c:valAx><c:axId val="' + valAxisId + '"/><c:scaling><c:orientation val="minMax"/></c:scaling>' +
       '<c:delete val="0"/><c:axPos val="l"/>' + majorGridlinesXml() +
       '<c:numFmt formatCode="' + spec.valueFormat + '" sourceLinked="0"/><c:majorTickMark val="none"/>' +
@@ -276,8 +353,8 @@
     files.set('xl/styles.xml', stylesXml());
     specs.forEach(function(spec, index){
       const number = index + 1;
-      const groups = seriesGroups(sorted);
-      files.set('xl/worksheets/sheet' + number + '.xml', worksheetXml(spec.name, spec.title, spec.key, sorted, index));
+      const chartData = chartDataFor(sorted, spec.key, buildOptions);
+      files.set('xl/worksheets/sheet' + number + '.xml', worksheetXml(spec.name, spec.title, spec.key, sorted, index, chartData));
       files.set('xl/worksheets/_rels/sheet' + number + '.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing' + number + '.xml"/>' +
@@ -287,7 +364,7 @@
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart' + number + '.xml"/>' +
         '</Relationships>');
-      files.set('xl/charts/chart' + number + '.xml', chartXml(spec.name, spec.title, groups, index, spec, buildOptions));
+      files.set('xl/charts/chart' + number + '.xml', chartXml(spec.name, spec.title, chartData, index, spec, buildOptions));
     });
     return files;
   }

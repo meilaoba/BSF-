@@ -83,6 +83,8 @@ test('report preview exposes PDF and Excel exports without a CSV button', () => 
   assert.match(source, /reportRowsForPeriod\(\)/);
   assert.match(source, /BSF_REPORT_XLSX\.build/);
   assert.match(source, /chartTitle:reportExcelChartTitle\(\)/);
+  assert.match(source, /chartPeriod:reportFilters\.period/);
+  assert.match(source, /periodStart:range\.start/);
 });
 
 test('report Excel export creates independent Weight, Temp and Humidity sheets', async () => {
@@ -107,7 +109,12 @@ test('report Excel export creates independent Weight, Temp and Humidity sheets',
     weight:12,
     temperature:41,
     humidity:53,
-  }], { chartTitle:'Sep' });
+  }], {
+    chartTitle:'Sep',
+    chartPeriod:'monthly',
+    periodStart:'2026-10-01',
+    periodEnd:'2026-10-31',
+  });
   assert.match(files.get('xl/charts/chart1.xml'), /<c:lineChart>/);
   assert.match(files.get('xl/charts/chart2.xml'), /<c:lineChart>/);
   assert.match(files.get('xl/charts/chart3.xml'), /<c:lineChart>/);
@@ -123,7 +130,9 @@ test('report Excel export creates independent Weight, Temp and Humidity sheets',
   assert.match(files.get('xl/worksheets/sheet1.xml'), /Weight\(kg\)/);
   assert.match(files.get('xl/worksheets/sheet2.xml'), /Temp\(°C\)/);
   assert.match(files.get('xl/worksheets/sheet3.xml'), /Hum\(%\)/);
-  assert.match(files.get('xl/worksheets/sheet1.xml'), /<c r="D2" t="inlineStr"><is><t xml:space="preserve">1\/10\/2026 10:00<\/t><\/is><\/c>/);
+  assert.match(files.get('xl/worksheets/sheet1.xml'), /<c r="F2" t="inlineStr"><is><t xml:space="preserve">1<\/t><\/is><\/c>/);
+  assert.match(files.get('xl/worksheets/sheet1.xml'), /<c r="F32" t="inlineStr"><is><t xml:space="preserve">31<\/t><\/is><\/c>/);
+  assert.match(files.get('xl/worksheets/sheet1.xml'), /<col min="4" max="7"[^>]*hidden="1"\/>/);
   const zipText = Buffer.from(new Uint8Array(lastDownload.parts[0])).toString('utf8');
   assert.match(zipText, /xl\/charts\/chart1\.xml/);
   assert.match(zipText, /<c:lineChart>/);
@@ -145,7 +154,7 @@ test('report Excel export leaves missing measurements blank', () => {
   assert.match(files.get('xl/worksheets/sheet3.xml'), /<c r="C2"\/>/);
 });
 
-test('dense report charts limit date labels and keep the clean line style', () => {
+test('monthly report charts plot one aggregate per day and keep missing days blank', () => {
   const rows = Array.from({ length:65 }, function(_, index){
     return {
       recordedAt:'2026-09-' + String(Math.floor(index / 3) + 1).padStart(2, '0') + ' 0' + (index % 3) + ':00:00',
@@ -155,12 +164,47 @@ test('dense report charts limit date labels and keep the clean line style', () =
       humidity:50,
     };
   });
-  const files = sandbox.window.BSF_REPORT_XLSX.workbookFiles(rows, { chartTitle:'Sep' });
+  rows.push({
+    recordedAt:'2026-09-01 09:00:00',
+    device:'device-a',
+    weight:9.99,
+    temperature:100,
+    humidity:70,
+  });
+  const files = sandbox.window.BSF_REPORT_XLSX.workbookFiles(rows, {
+    chartTitle:'Sep',
+    chartPeriod:'monthly',
+    periodStart:'2026-09-01',
+    periodEnd:'2026-09-30',
+  });
   const chart = files.get('xl/charts/chart1.xml');
-  assert.match(chart, /<c:tickLblSkip val="3"\/>/);
-  assert.match(chart, /<c:tickMarkSkip val="3"\/>/);
+  const sheet = files.get('xl/worksheets/sheet1.xml');
+  assert.match(chart, /<c:tickLblSkip val="1"\/>/);
+  assert.match(chart, /<c:tickMarkSkip val="1"\/>/);
   assert.match(chart, /<a:bodyPr rot="-2700000"\/>/);
   assert.match(chart, /<c:numFmt formatCode="0.00" sourceLinked="0"\/>/);
+  assert.match(sheet, /<c r="G2"><v>9.99<\/v><\/c>/);
+  assert.match(sheet, /<c r="F31" t="inlineStr"><is><t xml:space="preserve">30<\/t><\/is><\/c>/);
+  assert.doesNotMatch(sheet, /<c r="F32"/);
+  assert.match(files.get('xl/charts/chart2.xml'), /<c:val><c:numRef><c:f>'Temp'!\$G\$2:\$G\$31<\/c:f><\/c:numRef><\/c:val>/);
+});
+
+test('yearly report chart groups samples by calendar month', () => {
+  const files = sandbox.window.BSF_REPORT_XLSX.workbookFiles([
+    { recordedAt:'2026-01-15 10:00:00', device:'device-a', weight:5, temperature:20, humidity:30 },
+    { recordedAt:'2026-01-16 10:00:00', device:'device-a', weight:9, temperature:40, humidity:50 },
+    { recordedAt:'2026-12-31 10:00:00', device:'device-a', weight:7, temperature:30, humidity:40 },
+  ], {
+    chartTitle:'2026',
+    chartPeriod:'yearly',
+    periodStart:'2026-01-01',
+    periodEnd:'2026-12-31',
+  });
+  const sheet = files.get('xl/worksheets/sheet1.xml');
+  assert.match(sheet, /<c r="F2" t="inlineStr"><is><t xml:space="preserve">Jan<\/t><\/is><\/c>/);
+  assert.match(sheet, /<c r="G2"><v>9<\/v><\/c>/);
+  assert.match(sheet, /<c r="F13" t="inlineStr"><is><t xml:space="preserve">Dec<\/t><\/is><\/c>/);
+  assert.match(sheet, /<c r="G13"><v>7<\/v><\/c>/);
 });
 
 test('report Excel export loads every raw-data page instead of the cached rows', async () => {
