@@ -48,9 +48,13 @@ test('machines page omits unavailable signal strength from device status', () =>
   assert.doesNotMatch(source, /machineNetworkStatus/);
 });
 
-test('machines metrics use one monthly graph request for daily and monthly cards', () => {
-  assert.match(source, /getGraphs\(Object\.assign\(\{ period:'monthly' \}, identity\)\)/);
-  assert.doesNotMatch(source, /getGraphs\(Object\.assign\(\{ period:'daily'/);
+test('machines metrics use the monthly report weight summary', () => {
+  assert.match(source, /getReports\(Object\.assign\(\{/);
+  assert.match(source, /wasteKg:monthlySummary\.wasteInTotalKg/);
+  assert.match(source, /dailyWasteKg:monthlySummary\.wasteInAverageKg/);
+  assert.match(source, /ghgKg:monthlySummary\.ghgKg/);
+  assert.match(source, /fertilizerKg:monthlySummary\.fertilizerKg/);
+  assert.doesNotMatch(source, /getGraphs\(/);
 });
 
 test('machine filters accept the backend id used by user scope', () => {

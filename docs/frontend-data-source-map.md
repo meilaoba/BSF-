@@ -39,10 +39,10 @@
 | Device ID | 厂家字段 + 本地映射 | 厂家 `deviceSerialNum`，有本地机器时使用本地显示 ID |
 | Device Name | 厂家字段 + 本地数据库 | 优先本地 `machines.name`，否则厂家 `deviceName` |
 | Network | 静态/品牌文本 | 当前显示为 `Vendor API` |
-| This Month Waste | 厂家汇总 | `input.dailyInput` 按天取最大值，单位 kg |
-| Daily Waste | 厂家汇总 | 当天 `input.dailyInput`，单位 kg |
-| This Month GHG Reduced | BSF 计算 | 厨余减排 − 电力碳排 − 运输碳排 |
-| Est. Fertilizer This Month | BSF 计算 | 厨余量 × `fertilizerRatio` |
+| This Month Waste | BSF 计算 | Reports 的 `weightInTotalKg`；去重 weight 平均 × 当月天数 |
+| Daily Waste | BSF 计算 | Reports 的 `weightInAverageKg`；当月去重 weight 平均值 |
+| This Month GHG Reduced | BSF 计算 | Reports 由 weight 推导的 Waste-in × 1.5 − 电力碳排 − 运输碳排 |
+| Est. Fertilizer This Month | BSF 计算 | Reports 由 weight 推导的 Waste-in × `fertilizerRatio` |
 | Container Temp | 厂家字段 | `CabinTemp` |
 | Container Humidity | 厂家字段 | `Humidity`；若为 0–1 小数，前端按 100 换算为百分比 |
 | Avg Env Temp | 外部服务 | 香港天文台环境温度 |
