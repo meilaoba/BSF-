@@ -76,7 +76,7 @@
 | Food Waste In | 厂家汇总 | `input.dailyInput`（厂家吨值 × 1000）的日增量/日最大值/月或年累计 |
 | Container Temp | 厂家汇总 | `CabinTemp` 的时/日/月平均 |
 | Container Humidity | 厂家汇总 | `Humidity` 的时/日/月平均 |
-| Energy Consumed | BSF 计算 | 当天设备状态为 Running/Standby 时使用每日能耗，当前默认 1.5 kWh；Offline 为 0 |
+| Energy Consumed | BSF 计算 | 只计算 Running/Standby；Offline 日期不显示，也不计入汇总 |
 | GHG Reduced | BSF 计算 | 由 Weight 推导的 Waste-in × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
 | Avg 值 | BSF 计算 | 前端对所有非空图点求平均 |
 | `No data for selected period` | 状态文本 | 当前选择范围聚合后无值 |

@@ -443,9 +443,9 @@ test('offline daily aggregate zero does not produce GHG', () => {
   });
 
   assert.equal(result.items[12].date, '2026-10-31 12:00');
-  assert.equal(result.items[12].value, 0);
-  assert.equal(result.energyItems[12].value, 0);
-  assert.equal(result.summary.pointCount, 1);
+  assert.equal(result.items[12].value, null);
+  assert.equal(result.energyItems[12].value, null);
+  assert.equal(result.summary.pointCount, 0);
   assert.equal(result.ghgItems[12].value, null);
   assert.equal(result.summary.ghgKg, null);
   assert.deepEqual(

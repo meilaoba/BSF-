@@ -304,7 +304,7 @@ export function aggregateTelemetrySnapshots(rows, {
   }
   const nowDate = asDate(now) || new Date();
   const data = Array.from(unique.values())
-    .filter((row) => row.capturedAt <= nowDate)
+    .filter((row) => row.capturedAt <= nowDate && row.operatingStatusCode !== 0)
     .sort((a, b) => a.capturedAt - b.capturedAt);
   const keys = bucketKeys(groupBy, start, end);
   const currentBucket = bucketKeyForDate(now, groupBy);

@@ -7,7 +7,7 @@
 | 业务能力 | 权威来源 | 说明 |
 | --- | --- | --- |
 | 最新设备状态 | `vendor_device_telemetry.device_online_code` | 每台设备取 `captured_at` 最新的一条，包含离线且指标为空的记录 |
-| Graphs / Reports 能耗 | 每台设备每天的统一运行状态 | Running 和 Standby 使用每日能耗，Offline 为 0，无状态为未知 |
+| Graphs / Reports 能耗 | 每台设备每天的统一运行状态 | Running 和 Standby 使用每日能耗；Offline 不显示且不参与汇总，无状态为未知 |
 | Reports 厨余处理量 | 厂家日报 `kitchenWaste` | 保留原有日报来源 |
 | Reports Food Waste In 趋势 | `input.dailyInput` | 厂家日报为空时仍使用遥测趋势 |
 | 厂家日报 `powerConsume` | 厂家日报接口 | 只保留为审计字段，不再作为业务展示能耗 |
@@ -21,7 +21,7 @@
 | --- | ---: |
 | Running `2` | `standbyEnergyKwh`，默认 `1.5 kWh/日` |
 | Standby `1` | `standbyEnergyKwh`，默认 `1.5 kWh/日` |
-| Offline `0` | `0 kWh` |
+| Offline `0` | 不进入平均、能耗、GHG 和肥料计算，图表保持空白 |
 | 没有可用状态 | `null`，界面显示 `—` |
 
 厂家日报返回的 `powerConsume` 不再覆盖上述结果。
