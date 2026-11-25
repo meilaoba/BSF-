@@ -14,6 +14,7 @@ const {
   analyticsDeviceLookup,
   analyticsScopeForUser,
   aggregateReportWeightItems,
+  aggregateWeightGraph,
   dateRangeForRequest,
   matchVendorDeviceId,
   rawSampleRange,
@@ -174,6 +175,53 @@ test('report GHG uses weight-derived Waste-in and fixed machine carbon', () => {
   assert.equal(reportGhgFromWeight(26, 1.5, 1.5), 37.5);
   assert.equal(reportGhgFromWeight(26, null, 1.5), null);
   assert.equal(reportGhgFromWeight(0, 1.5, 1.5), -1.5);
+});
+
+test('data analytics uses hourly weight averages and excludes offline samples', () => {
+  const rows = [
+    {
+      capturedAt:'2026-11-25T10:00:00+08:00',
+      deviceId:'device-a',
+      deviceStatusCode:2,
+      weightAverageKg:10,
+      weightSumKg:10,
+      weightSampleCount:1,
+      clientRegion:'non-hk',
+      ghgFormula:{ monthlyDistanceKm:140 },
+    },
+    {
+      capturedAt:'2026-11-25T11:00:00+08:00',
+      deviceId:'device-a',
+      deviceStatusCode:2,
+      weightAverageKg:12,
+      weightSumKg:12,
+      weightSampleCount:1,
+      clientRegion:'non-hk',
+      ghgFormula:{ monthlyDistanceKm:140 },
+    },
+    {
+      capturedAt:'2026-11-25T12:00:00+08:00',
+      deviceId:'device-a',
+      deviceStatusCode:0,
+      weightAverageKg:99,
+      weightSumKg:99,
+      weightSampleCount:1,
+      clientRegion:'non-hk',
+      ghgFormula:{ monthlyDistanceKm:140 },
+    },
+  ];
+  const result = aggregateWeightGraph(rows, {
+    period:'daily',
+    start:'2026-11-25',
+    end:'2026-11-25',
+    now:new Date('2026-11-26T00:00:00+08:00'),
+    formula:{ monthlyDistanceKm:140, wasteReductionFactor:1.5 },
+  });
+  assert.equal(result.items[10].value, 10);
+  assert.equal(result.items[11].value, 12);
+  assert.equal(result.items[12].value, null);
+  assert.equal(result.ghgItems[12].value !== null, true);
+  assert.equal(result.ghgItems[10].value, null);
 });
 
 test('master admin may request a client or machine scope', () => {
@@ -544,6 +592,9 @@ test('graphs read telemetry while reports use daily waste plus telemetry status,
   assert.match(source, /const sourceGroupBy = groupBy === 'hour' \? 'hour' : 'day';/);
   assert.match(source, /groupBy: sampleGroupBy/);
   assert.match(source, /loadGraphAnalytics\(context, range, sourceGroupBy\)/);
+  assert.match(source, /aggregateWeightGraph\(analytics\.rows/);
+  assert.match(source, /items:weightGraph\.items/);
+  assert.match(source, /ghgItems:weightGraph\.ghgItems/);
   assert.match(source, /loadReportAnalytics\(req, context, range\)/);
   assert.match(source, /wasteSource: 'daily-input'/);
   assert.match(source, /wasteSource: 'daily-stats'/);

@@ -87,7 +87,7 @@ function reportMetricModel(){
   return {
     wasteInAverageKg:reportMetricNumber(summary.wasteInAverageKg),
     wasteInTotalKg:reportMetricNumber(summary.wasteInTotalKg),
-    wasteKg:reportMetricNumber(summary.wasteKg),
+    wasteKg:reportMetricNumber(summary.wasteInTotalKg),
     ghgKg:reportMetricNumber(summary.ghgKg),
     energyKwh:reportMetricNumber(summary.energyKwh),
     fertilizerKg:reportMetricNumber(summary.fertilizerKg),

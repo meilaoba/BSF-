@@ -18,6 +18,8 @@ Waste-in 口径为 `RealTimeWeight`：本月唯一 weight 记录先整体求平�
 - 缺失日保持空白，不补零，也不跨缺失日连接折线。
 - Reports 的 Excel Weight 日聚合同样使用当天平均值。
 - Reports 在 Weight 折线图下方显示 Temperature 和 Humidity 平均折线图。
+- Reports 的 Waste Collected 卡片同样使用 Weight 推导的 Total Waste-in，不再读取
+  `kitchenWaste` 或 `input.dailyInput`。
 - 负值 weight 按缺失读数处理；0 kg 是有效读数，参与平均值并绘制。
 - Offline 日不作为有效计算日：Weight、Temperature、Humidity、GHG 和 Fertilizer
   均不使用 Offline 数据，也不计入 Total Waste-in 的有效天数。

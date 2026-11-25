@@ -9,7 +9,7 @@
 | 最新设备状态 | `vendor_device_telemetry.device_online_code` | 每台设备取 `captured_at` 最新的一条，包含离线且指标为空的记录 |
 | Graphs / Reports 能耗 | 每台设备每天的统一运行状态 | Running 和 Standby 使用每日能耗；Offline 不显示且不参与汇总，无状态为未知 |
 | Reports 厨余处理量 | 厂家日报 `kitchenWaste` | 保留原有日报来源 |
-| Reports Food Waste In 趋势 | `input.dailyInput` | 厂家日报为空时仍使用遥测趋势 |
+| Graphs / Reports 图表 | `RealTimeWeight` | 使用在线 Running/Standby 的 Weight 平均值；`input.dailyInput` 不再参与页面图表 |
 | 厂家日报 `powerConsume` | 厂家日报接口 | 只保留为审计字段，不再作为业务展示能耗 |
 | GHG | `docs` 中的碳排公式和站点配置 | 使用厨余减排、电力碳排和运输碳排 |
 

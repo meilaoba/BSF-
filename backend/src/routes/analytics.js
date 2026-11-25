@@ -5,9 +5,15 @@ import { optionalInt, optionalString } from '../lib/validate.js';
 import { config } from '../config.js';
 import {
   aggregateTelemetrySnapshots,
+  bucketKeys,
   fertilizerKg,
   hongKongDateKey,
+  hongKongHourKey,
+  hongKongMonthKey,
+  machineCarbonKg,
+  mergeFormulaConfig,
   periodRange,
+  resolveDailyEnergyKwh,
 } from '../shared/metrics.js';
 import {
   loadVendorTelemetrySamples,
@@ -355,6 +361,117 @@ export function reportGhgFromWeight(wasteTotalKg, fixedCarbonKg, wasteReductionF
   return waste * factor - fixedCarbon;
 }
 
+export function aggregateWeightGraph(rows, {
+  period,
+  start,
+  end,
+  now = new Date(),
+  formula = {},
+} = {}) {
+  const onlineRows = (Array.isArray(rows) ? rows : []).filter((row) => (
+    row
+    && (Number(row.deviceStatusCode) === 1 || Number(row.deviceStatusCode) === 2)
+    && Number.isFinite(Number(row.weightAverageKg))
+  ));
+  const productRows = onlineRows.filter((row) => Number(row.weightAverageKg) >= 0);
+  const reportWeight = aggregateReportWeightItems(productRows, { period, start, end, now });
+
+  let weightItems = reportWeight.items;
+  if (period === 'daily') {
+    const keys = bucketKeys('hour', start, end);
+    const buckets = new Map();
+    for (const row of productRows) {
+      const key = hongKongHourKey(row.capturedAt);
+      if (!keys.includes(key)) continue;
+      const sum = Number(row.weightSumKg);
+      const count = Number(row.weightSampleCount);
+      const bucket = buckets.get(key) || { sum:0, count:0 };
+      bucket.sum += Number.isFinite(sum) ? sum : Number(row.weightAverageKg);
+      bucket.count += Number.isFinite(count) && count > 0 ? count : 1;
+      buckets.set(key, bucket);
+    }
+    weightItems = keys.map((key) => {
+      const bucket = buckets.get(key);
+      return {
+        date:key,
+        label:key.slice(11, 16),
+        value:bucket && bucket.count ? bucket.sum / bucket.count : null,
+      };
+    });
+  }
+
+  const deviceDays = new Map();
+  for (const row of onlineRows) {
+    const dateKey = hongKongDateKey(row.capturedAt);
+    const key = `${row.deviceId}|${dateKey}`;
+    const day = deviceDays.get(key) || {
+      dateKey,
+      statusCode:null,
+      weightSumKg:0,
+      weightSamples:0,
+      region:row.clientRegion || 'non-hk',
+      formula:mergeFormulaConfig(formula, row.ghgFormula),
+    };
+    const statusCode = Number(row.deviceStatusCode);
+    if (statusCode === 2 || (statusCode === 1 && day.statusCode !== 2)) day.statusCode = statusCode;
+    const weight = Number(row.weightAverageKg);
+    if (weight >= 0) {
+      const sum = Number(row.weightSumKg);
+      const count = Number(row.weightSampleCount);
+      day.weightSumKg += Number.isFinite(sum) ? sum : weight;
+      day.weightSamples += Number.isFinite(count) && count > 0 ? count : 1;
+    }
+    deviceDays.set(key, day);
+  }
+
+  const dayGhg = new Map();
+  for (const day of deviceDays.values()) {
+    if (!day.weightSamples) continue;
+    const weightKg = day.weightSumKg / day.weightSamples;
+    const energyKwh = resolveDailyEnergyKwh(day.statusCode, day.formula);
+    const fixedCarbonKg = energyKwh === null
+      ? null
+      : machineCarbonKg(energyKwh, day.region, 1, day.formula);
+    const wasteFactor = Number(day.formula && day.formula.wasteReductionFactor);
+    const ghgKg = fixedCarbonKg === null || !Number.isFinite(wasteFactor)
+      ? null
+      : weightKg * wasteFactor - fixedCarbonKg;
+    const current = dayGhg.get(day.dateKey) || { ghgKg:0, valid:true };
+    if (ghgKg === null) current.valid = false;
+    else current.ghgKg += ghgKg;
+    dayGhg.set(day.dateKey, current);
+  }
+
+  const graphGroupBy = period === 'daily' ? 'hour' : period === 'yearly' ? 'month' : 'day';
+  const ghgKeys = bucketKeys(graphGroupBy, start, end);
+  const monthGhg = new Map();
+  const ghgByKey = new Map();
+  for (const [dateKey, value] of dayGhg.entries()) {
+    if (!value.valid) continue;
+    const ghgKg = value.ghgKg;
+    if (period === 'yearly') {
+      const monthKey = dateKey.slice(0, 7);
+      monthGhg.set(monthKey, (monthGhg.get(monthKey) || 0) + ghgKg);
+    } else if (period === 'daily') {
+      ghgByKey.set(`${dateKey} 12:00`, ghgKg);
+    } else {
+      ghgByKey.set(dateKey, ghgKg);
+    }
+  }
+  const ghgItems = ghgKeys.map((key) => ({
+    date:key,
+    label:key,
+    value:period === 'yearly'
+      ? (monthGhg.has(key) ? monthGhg.get(key) : null)
+      : (ghgByKey.has(key) ? ghgByKey.get(key) : null),
+  }));
+  return {
+    items:weightItems,
+    ghgItems,
+    summary:reportWeight.summary,
+  };
+}
+
 async function loadReportAnalytics(req, context, range) {
   const settingsByDevice = await loadVendorDeviceReportSettings({
     deviceIds: context.deviceIds,
@@ -633,12 +750,30 @@ export function registerAnalyticsRoutes(router) {
       formula: config.formula,
       wasteSource: 'daily-input',
     });
+    const weightGraph = aggregateWeightGraph(analytics.rows, {
+      period,
+      start: range.start,
+      end: range.end,
+      formula: config.formula,
+    });
     sendOk(res, {
       period,
       groupBy,
       range,
-      ...result,
-      empty: result.summary.pointCount === 0,
+      items:weightGraph.items,
+      ghgItems:weightGraph.ghgItems,
+      energyItems:result.energyItems,
+      tempItems:result.tempItems,
+      humidityItems:result.humidityItems,
+      summary:{
+        ...result.summary,
+        wasteKg:weightGraph.summary.averageKg,
+        wasteInAverageKg:weightGraph.summary.averageKg,
+        wasteInTotalKg:weightGraph.summary.totalKg,
+        pointCount:weightGraph.items.filter((item) => item.value !== null).length,
+      },
+      empty:weightGraph.items.every((item) => item.value === null),
+      weightSource:'daily-average',
       dataSources: analytics.dataSources,
     }, undefined, ANALYTICS_CACHE_HEADERS);
   });
@@ -700,6 +835,7 @@ export function registerAnalyticsRoutes(router) {
       humidityItems: summaryResult.humidityItems,
       summary: {
         ...summaryResult.summary,
+        wasteKg:wasteInTotalKg,
         wasteInAverageKg,
         wasteInTotalKg,
         ghgKg,

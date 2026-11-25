@@ -65,7 +65,7 @@ test('report cards and CSV/Excel/PDF model share the API summary values', () => 
   assert.deepEqual(JSON.parse(JSON.stringify(model.metrics)), {
     wasteInAverageKg:'0.9',
     wasteInTotalKg:'26.0',
-    wasteKg:'20.0',
+    wasteKg:'26.0',
     ghgKg:'18.4',
     energyKwh:'3.0',
     fertilizerKg:'2.4',
