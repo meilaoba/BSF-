@@ -19,6 +19,15 @@ function reportPeriodTitle(){
   return reportFilters.period === 'yearly' ? 'Yearly' : 'Monthly';
 }
 
+function reportExcelChartTitle(){
+  if(reportFilters.period === 'yearly'){
+    return String(Number(reportFilters.year) || new Date().getFullYear());
+  }
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const month = Math.min(12, Math.max(1, Number(reportFilters.month) || 1));
+  return monthNames[month - 1];
+}
+
 function reportPad(value){
   return String(value).padStart(2, '0');
 }
@@ -587,7 +596,9 @@ async function exportReportExcel(){
   showReportExportToast('Loading complete report data...');
   try {
     const rows = await reportRowsForExcelExport();
-    const blob = window.BSF_REPORT_XLSX.build(rows);
+    const blob = window.BSF_REPORT_XLSX.build(rows, {
+      chartTitle:reportExcelChartTitle()
+    });
     downloadReportBlob('bsf-report-' + new Date().toISOString().slice(0,10) + '.xlsx', blob);
     showReportExportToast('Excel export started');
   } catch(error) {

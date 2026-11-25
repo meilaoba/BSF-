@@ -82,6 +82,7 @@ test('report preview exposes PDF and Excel exports without a CSV button', () => 
   assert.match(source, /bsf-report-.*\.xlsx/);
   assert.match(source, /reportRowsForPeriod\(\)/);
   assert.match(source, /BSF_REPORT_XLSX\.build/);
+  assert.match(source, /chartTitle:reportExcelChartTitle\(\)/);
 });
 
 test('report Excel export creates independent Weight, Temp and Humidity sheets', async () => {
@@ -106,13 +107,23 @@ test('report Excel export creates independent Weight, Temp and Humidity sheets',
     weight:12,
     temperature:41,
     humidity:53,
-  }]);
+  }], { chartTitle:'Sep' });
   assert.match(files.get('xl/charts/chart1.xml'), /<c:lineChart>/);
   assert.match(files.get('xl/charts/chart2.xml'), /<c:lineChart>/);
   assert.match(files.get('xl/charts/chart3.xml'), /<c:lineChart>/);
+  assert.match(files.get('xl/charts/chart1.xml'), /<a:t>Sep<\/a:t>/);
+  assert.match(files.get('xl/charts/chart1.xml'), /<c:marker val="0"\/>/);
+  assert.match(files.get('xl/charts/chart1.xml'), /<c:symbol val="none"\/>/);
+  assert.doesNotMatch(files.get('xl/charts/chart1.xml'), /<c:symbol val="circle"\/>/);
+  assert.match(files.get('xl/charts/chart1.xml'), /<c:legendPos val="b"\/>/);
+  assert.match(files.get('xl/charts/chart1.xml'), /<a:srgbClr val="D9D9D9"\/>/);
+  assert.match(files.get('xl/charts/chart1.xml'), /<c:tickLblSkip val="1"\/>/);
+  assert.match(files.get('xl/charts/chart1.xml'), /<a:defRPr sz="900"\/>/);
+  assert.match(files.get('xl/charts/chart1.xml'), /<c:v>weight<\/c:v>/);
   assert.match(files.get('xl/worksheets/sheet1.xml'), /Weight\(kg\)/);
   assert.match(files.get('xl/worksheets/sheet2.xml'), /Temp\(°C\)/);
   assert.match(files.get('xl/worksheets/sheet3.xml'), /Hum\(%\)/);
+  assert.match(files.get('xl/worksheets/sheet1.xml'), /<c r="D2" t="inlineStr"><is><t xml:space="preserve">1\/10\/2026 10:00<\/t><\/is><\/c>/);
   const zipText = Buffer.from(new Uint8Array(lastDownload.parts[0])).toString('utf8');
   assert.match(zipText, /xl\/charts\/chart1\.xml/);
   assert.match(zipText, /<c:lineChart>/);
@@ -132,6 +143,24 @@ test('report Excel export leaves missing measurements blank', () => {
   assert.match(files.get('xl/worksheets/sheet1.xml'), /<c r="C2"\/>/);
   assert.match(files.get('xl/worksheets/sheet2.xml'), /<c r="C2"\/>/);
   assert.match(files.get('xl/worksheets/sheet3.xml'), /<c r="C2"\/>/);
+});
+
+test('dense report charts limit date labels and keep the clean line style', () => {
+  const rows = Array.from({ length:65 }, function(_, index){
+    return {
+      recordedAt:'2026-09-' + String(Math.floor(index / 3) + 1).padStart(2, '0') + ' 0' + (index % 3) + ':00:00',
+      device:'device-a',
+      weight:index / 100,
+      temperature:40,
+      humidity:50,
+    };
+  });
+  const files = sandbox.window.BSF_REPORT_XLSX.workbookFiles(rows, { chartTitle:'Sep' });
+  const chart = files.get('xl/charts/chart1.xml');
+  assert.match(chart, /<c:tickLblSkip val="3"\/>/);
+  assert.match(chart, /<c:tickMarkSkip val="3"\/>/);
+  assert.match(chart, /<a:bodyPr rot="-2700000"\/>/);
+  assert.match(chart, /<c:numFmt formatCode="0.00" sourceLinked="0"\/>/);
 });
 
 test('report Excel export loads every raw-data page instead of the cached rows', async () => {

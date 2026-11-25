@@ -72,6 +72,14 @@
     });
   }
 
+  function chartTimeLabel(value){
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?/);
+    if(!match) return String(value || '');
+    const hour = match[4] === undefined ? '0' : String(Number(match[4]));
+    const minute = match[5] === undefined ? '00' : match[5];
+    return String(Number(match[3])) + '/' + String(Number(match[2])) + '/' + match[1] + ' ' + hour + ':' + minute;
+  }
+
   function seriesGroups(rows){
     const groups = [];
     rows.forEach(function(row, index){
@@ -93,22 +101,25 @@
         inlineCell('A' + rowNumber, row.recordedAt) +
         inlineCell('B' + rowNumber, row.device) +
         numberCell('C' + rowNumber, row[key]) +
+        inlineCell('D' + rowNumber, chartTimeLabel(row.recordedAt)) +
         '</row>';
     }).join('');
     const header = '<row r="1">' +
       inlineCell('A1', 'Recorded Time', 1) +
       inlineCell('B1', 'Device', 1) +
       inlineCell('C1', title, 1) +
+      inlineCell('D1', 'Chart Time', 1) +
       '</row>';
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
       'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-      '<dimension ref="A1:C' + Math.max(1, rows.length + 1) + '"/>' +
+      '<dimension ref="A1:D' + Math.max(1, rows.length + 1) + '"/>' +
       '<sheetViews><sheetView workbookViewId="0"/></sheetViews>' +
       '<sheetFormatPr defaultRowHeight="15"/>' +
       '<cols><col min="1" max="1" width="22" customWidth="1"/>' +
       '<col min="2" max="2" width="24" customWidth="1"/>' +
-      '<col min="3" max="3" width="14" customWidth="1"/></cols>' +
+      '<col min="3" max="3" width="14" customWidth="1"/>' +
+      '<col min="4" max="4" width="20" customWidth="1" hidden="1"/></cols>' +
       '<sheetData>' + header + sheetRows + '</sheetData>' +
       '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>' +
       '<drawing r:id="rId1"/>' +
@@ -117,52 +128,75 @@
 
   function chartTitleXml(title){
     return '<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r>' +
-      '<a:rPr lang="en-US" sz="1400" b="1"/><a:t>' + xmlEscape(title) + '</a:t>' +
+      '<a:rPr lang="en-US" sz="1200" b="1"/><a:t>' + xmlEscape(title) + '</a:t>' +
       '</a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>';
   }
 
-  function chartSeriesXml(sheetName, groups, seriesIndex, axisIds){
-    const colors = ['2F5597', '2A9D8F', 'E76F51', '8E6BBE', 'E9C46A', '5C7AEA'];
+  function axisLineXml(){
+    return '<c:spPr><a:ln w="9525"><a:solidFill><a:srgbClr val="A6A6A6"/></a:solidFill></a:ln></c:spPr>';
+  }
+
+  function majorGridlinesXml(){
+    return '<c:majorGridlines><c:spPr><a:ln w="9525"><a:solidFill>' +
+      '<a:srgbClr val="D9D9D9"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>';
+  }
+
+  function chartSeriesXml(sheetName, groups, spec){
+    const colors = ['4472C4', '70AD47', 'ED7D31', 'A5A5A5', '5B9BD5', 'FFC000'];
+    const singleSeries = groups.length === 1;
     return groups.map(function(group, index){
       const ref = "'" + sheetName.replace(/'/g, "''") + "'!";
       const color = colors[index % colors.length];
+      const seriesTitle = singleSeries
+        ? '<c:tx><c:v>' + xmlEscape(spec.seriesName) + '</c:v></c:tx>'
+        : '<c:tx><c:strRef><c:f>' + ref + '$B$' + group.start + '</c:f></c:strRef></c:tx>';
       return '<c:ser><c:idx val="' + index + '"/><c:order val="' + index + '"/>' +
-        '<c:tx><c:strRef><c:f>' + ref + '$B$' + group.start + '</c:f></c:strRef></c:tx>' +
-        '<c:spPr><a:ln w="19050"><a:solidFill><a:srgbClr val="' + color + '"/></a:solidFill></a:ln></c:spPr>' +
-        '<c:marker><c:symbol val="circle"/><c:size val="3"/></c:marker>' +
-        '<c:cat><c:strRef><c:f>' + ref + '$A$' + group.start + ':$A$' + group.end + '</c:f></c:strRef></c:cat>' +
+        seriesTitle +
+        '<c:spPr><a:ln w="25400" cap="rnd"><a:solidFill><a:srgbClr val="' + color + '"/></a:solidFill>' +
+        '<a:round/></a:ln></c:spPr>' +
+        '<c:marker><c:symbol val="none"/></c:marker>' +
+        '<c:cat><c:strRef><c:f>' + ref + '$D$' + group.start + ':$D$' + group.end + '</c:f></c:strRef></c:cat>' +
         '<c:val><c:numRef><c:f>' + ref + '$C$' + group.start + ':$C$' + group.end + '</c:f></c:numRef></c:val>' +
         '<c:smooth val="0"/></c:ser>';
     }).join('');
   }
 
-  function chartXml(sheetName, title, groups, index){
+  function chartXml(sheetName, title, groups, index, spec, options){
     const catAxisId = 1000 + index * 10;
     const valAxisId = catAxisId + 1;
+    const pointCount = groups.reduce(function(maximum, group){
+      return Math.max(maximum, group.end - group.start + 1);
+    }, 0);
+    const labelSkip = Math.max(1, Math.ceil(pointCount / 30));
+    const labelRotation = pointCount > 12 ? '-2700000' : '0';
+    const chartTitle = options.chartTitle || title;
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ' +
       'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
       'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
       '<c:lang val="en-US"/><c:roundedCorners val="0"/><c:chart>' +
-      chartTitleXml(title) +
+      chartTitleXml(chartTitle) +
       '<c:plotArea><c:layout/><c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>' +
-      chartSeriesXml(sheetName, groups, index, [catAxisId, valAxisId]) +
-      '<c:marker val="1"/><c:axId val="' + catAxisId + '"/><c:axId val="' + valAxisId + '"/></c:lineChart>' +
+      chartSeriesXml(sheetName, groups, spec) +
+      '<c:marker val="0"/><c:axId val="' + catAxisId + '"/><c:axId val="' + valAxisId + '"/></c:lineChart>' +
       '<c:catAx><c:axId val="' + catAxisId + '"/><c:scaling><c:orientation val="minMax"/></c:scaling>' +
       '<c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/>' +
       '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>' +
-      '<c:spPr><a:ln><a:noFill/></a:ln></c:spPr>' +
-      '<c:txPr><a:bodyPr rot="-2700000"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="800"/></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>' +
+      axisLineXml() +
+      '<c:txPr><a:bodyPr rot="' + labelRotation + '"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900"/></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>' +
       '<c:crossAx val="' + valAxisId + '"/><c:crosses val="autoZero"/><c:auto val="1"/>' +
-      '<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>' +
+      '<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:tickLblSkip val="' + labelSkip + '"/>' +
+      '<c:tickMarkSkip val="' + labelSkip + '"/><c:noMultiLvlLbl val="0"/></c:catAx>' +
       '<c:valAx><c:axId val="' + valAxisId + '"/><c:scaling><c:orientation val="minMax"/></c:scaling>' +
-      '<c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>' +
-      '<c:numFmt formatCode="0.0" sourceLinked="0"/><c:majorTickMark val="none"/>' +
+      '<c:delete val="0"/><c:axPos val="l"/>' + majorGridlinesXml() +
+      '<c:numFmt formatCode="' + spec.valueFormat + '" sourceLinked="0"/><c:majorTickMark val="none"/>' +
       '<c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>' +
-      '<c:spPr><a:ln><a:noFill/></a:ln></c:spPr>' +
-      '<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="800"/></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>' +
+      axisLineXml() +
+      '<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900"/></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>' +
       '<c:crossAx val="' + catAxisId + '"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>' +
-      '</c:plotArea><c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>' +
+      '</c:plotArea><c:legend><c:legendPos val="b"/><c:overlay val="0"/>' +
+      '<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900"/></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>' +
+      '</c:legend>' +
       '<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>';
   }
 
@@ -171,7 +205,7 @@
       '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ' +
       'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
       '<xdr:oneCellAnchor><xdr:from><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff>' +
-      '<xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="7200000" cy="3600000"/>' +
+      '<xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="9000000" cy="4000000"/>' +
       '<xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="' + (index + 2) + '" name="Chart ' + index + '"/>' +
       '<xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>' +
       '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">' +
@@ -196,13 +230,14 @@
       '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
   }
 
-  function workbookFiles(rows){
+  function workbookFiles(rows, options){
     const sorted = sortRows(rows);
     const specs = [
-      { name:'Weight', title:'Weight(kg)', key:'weight' },
-      { name:'Temp', title:'Temp(°C)', key:'temperature' },
-      { name:'Humidity', title:'Hum(%)', key:'humidity' },
+      { name:'Weight', title:'Weight(kg)', key:'weight', seriesName:'weight', valueFormat:'0.00' },
+      { name:'Temp', title:'Temp(°C)', key:'temperature', seriesName:'temp', valueFormat:'0.0' },
+      { name:'Humidity', title:'Hum(%)', key:'humidity', seriesName:'humidity', valueFormat:'0.0' },
     ];
+    const buildOptions = options && typeof options === 'object' ? options : {};
     const files = new Map();
     const sheetOverrides = specs.map(function(_, index){
       return '<Override PartName="/xl/worksheets/sheet' + (index + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
@@ -252,7 +287,7 @@
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart' + number + '.xml"/>' +
         '</Relationships>');
-      files.set('xl/charts/chart' + number + '.xml', chartXml(spec.name, spec.title, groups, index));
+      files.set('xl/charts/chart' + number + '.xml', chartXml(spec.name, spec.title, groups, index, spec, buildOptions));
     });
     return files;
   }
@@ -337,8 +372,8 @@
     return output;
   }
 
-  function build(rows){
-    return new Blob([zipFiles(workbookFiles(rows))], {
+  function build(rows, options){
+    return new Blob([zipFiles(workbookFiles(rows, options))], {
       type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });
   }
