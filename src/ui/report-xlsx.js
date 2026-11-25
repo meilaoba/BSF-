@@ -287,7 +287,7 @@
       '</c:plotArea><c:legend><c:legendPos val="b"/><c:overlay val="0"/>' +
       '<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900"/></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>' +
       '</c:legend>' +
-      '<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>';
+      '<c:plotVisOnly val="0"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>';
   }
 
   function drawingXml(index){

@@ -120,6 +120,7 @@ test('report Excel export creates independent Weight, Temp and Humidity sheets',
   assert.match(files.get('xl/charts/chart3.xml'), /<c:lineChart>/);
   assert.match(files.get('xl/charts/chart1.xml'), /<a:t>Sep<\/a:t>/);
   assert.match(files.get('xl/charts/chart1.xml'), /<c:marker val="0"\/>/);
+  assert.match(files.get('xl/charts/chart1.xml'), /<c:plotVisOnly val="0"\/>/);
   assert.match(files.get('xl/charts/chart1.xml'), /<c:symbol val="none"\/>/);
   assert.doesNotMatch(files.get('xl/charts/chart1.xml'), /<c:symbol val="circle"\/>/);
   assert.match(files.get('xl/charts/chart1.xml'), /<c:legendPos val="b"\/>/);
