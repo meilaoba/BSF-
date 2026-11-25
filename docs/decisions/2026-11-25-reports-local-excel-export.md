@@ -7,7 +7,10 @@
 ## 决策
 
 1. Reports 的 `Export Excel` 不再调用 `/api/v1/exports/device-data`。
-2. Excel 使用页面当前 `reportExportModel()` 中的 Reports 汇总值和 Food Waste In 数据生成。
+2. Excel 使用当前 Reports 周期内的原始样本行生成三个独立工作表：
+   - `Weight`：Recorded Time、Device、Weight(kg)
+   - `Temp`：Recorded Time、Device、Temp(°C)
+   - `Humidity`：Recorded Time、Device、Hum(%)
 3. 文件在浏览器本地下载，不经过厂家导出接口。
 4. 导出保留当前页面可见的指标、单位和日期维度。
 5. Alerts 的报警文件导出暂不包含在本次回退范围内。

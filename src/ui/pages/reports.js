@@ -512,12 +512,66 @@ function exportReportCsv(){
   showReportExportToast('CSV 导出已开始');
 }
 
+function reportExcelXmlEscape(value){
+  return bsfEscapeHtml(bsfSpreadsheetSafeText(value))
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function reportExcelCell(value, numeric){
+  if(numeric){
+    const text = value === null || value === undefined ? '' : String(value).trim();
+    const number = Number(text);
+    if(text !== '' && Number.isFinite(number)){
+      return '<Cell><Data ss:Type="Number">' + number + '</Data></Cell>';
+    }
+  }
+  if(value === '' || value === null || value === undefined || value === '—') return '<Cell/>';
+  return '<Cell><Data ss:Type="String">' + reportExcelXmlEscape(value) + '</Data></Cell>';
+}
+
+function reportExcelSheet(name, title, valueKey, rows){
+  const body = rows.map(function(row){
+    return '<Row>' +
+      reportExcelCell(row.recordedAt, false) +
+      reportExcelCell(row.device, false) +
+      reportExcelCell(row[valueKey], true) +
+      '</Row>';
+  }).join('');
+  return '<Worksheet ss:Name="' + reportExcelXmlEscape(name) + '">' +
+    '<Table>' +
+    '<Column ss:Width="170"/><Column ss:Width="180"/><Column ss:Width="110"/>' +
+    '<Row>' +
+    reportExcelCell('Recorded Time', false) +
+    reportExcelCell('Device', false) +
+    reportExcelCell(title, false) +
+    '</Row>' +
+    body +
+    '</Table>' +
+    '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">' +
+    '<FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane>' +
+    '<ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios>' +
+    '</WorksheetOptions>' +
+    '</Worksheet>';
+}
+
+function reportExcelXml(rows){
+  return '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<?mso-application progid="Excel.Sheet"?>' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
+    'xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+    'xmlns:x="urn:schemas-microsoft-com:office:excel" ' +
+    'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+    '<Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10"/></Style></Styles>' +
+    reportExcelSheet('Weight', 'Weight(kg)', 'weight', rows) +
+    reportExcelSheet('Temp', 'Temp(°C)', 'temperature', rows) +
+    reportExcelSheet('Humidity', 'Hum(%)', 'humidity', rows) +
+    '</Workbook>';
+}
+
 function exportReportExcel(){
-  const model = reportExportModel();
-  const rows = [['Metric','Value','Unit'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO₂e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%']];
-  const tableRows = rows.map(function(row){ return '<tr>' + row.map(excelCell).join('') + '</tr>'; }).join('');
-  const foodRows = model.foodWaste.map(function(row){ return '<tr>' + excelCell(row.label) + excelCell(row.value) + excelCell('KG') + '</tr>'; }).join('');
-  const html = '<html><head><meta charset="UTF-8"></head><body><h2>' + bsfEscapeHtml(model.title) + '</h2><p>' + bsfEscapeHtml(model.period) + ' · ' + bsfEscapeHtml(model.client) + ' · ' + bsfEscapeHtml(model.device) + '</p><table border="1">' + tableRows + '</table><h3>' + bsfEscapeHtml(model.chartTitle) + '</h3><table border="1"><tr><td>Period</td><td>Value</td><td>Unit</td></tr>' + foodRows + '</table></body></html>';
+  const rows = reportRowsForPeriod();
+  const html = reportExcelXml(rows);
   downloadReportFile('bsf-report-' + new Date().toISOString().slice(0,10) + '.xls', 'application/vnd.ms-excel;charset=utf-8', '\uFEFF' + html);
   showReportExportToast('Excel export started');
 }

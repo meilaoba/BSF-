@@ -76,25 +76,50 @@ test('report preview exposes PDF and Excel exports without a CSV button', () => 
   assert.doesNotMatch(source, /onclick="exportReportCsv\(\)"/);
   assert.doesNotMatch(source, /downloadDeviceExport/);
   assert.match(source, /bsf-report-.*\.xls/);
-  assert.match(source, /reportExportModel\(\)/);
+  assert.match(source, /reportRowsForPeriod\(\)/);
+  assert.match(source, /reportExcelSheet\('Weight'/);
+  assert.match(source, /reportExcelSheet\('Temp'/);
+  assert.match(source, /reportExcelSheet\('Humidity'/);
 });
 
-test('report Excel export is generated locally from the displayed report model', () => {
+test('report Excel export creates independent Weight, Temp and Humidity sheets', () => {
+  sandbox.window.BSF_DEVICE_HISTORY_ROWS = [{
+    recordedAt: '2026-10-01 10:00:00',
+    device: 'device-a',
+    weight: 12,
+    temperature: 41,
+    humidity: 53,
+  }];
+  sandbox.scopedDevices = function(){ return [{ id:'device-a', client:'Client A' }]; };
+  sandbox.devices = [{ id:'device-a', client:'Client A' }];
   vm.runInContext(`
     reportFilters = { client:'Client A', device:'', period:'monthly', month:10, year:2026 };
-    reportFoodWasteData = [{ date:'2026-10-01', value:12.5 }];
-    reportApiData = {
-      summary:{ wasteKg:20, ghgKg:18.4, energyKwh:3, fertilizerKg:2.4, avgTempC:41.2, avgHumidityPct:53.5, pointCount:1 },
-      items:reportFoodWasteData
-    };
-    reportApiKey = reportRequestKey();
     exportReportExcel();
   `, sandbox);
 
   assert.equal(lastDownload.type, 'application/vnd.ms-excel;charset=utf-8');
-  assert.match(String(lastDownload.parts[0]), /Waste Collected/);
-  assert.match(String(lastDownload.parts[0]), /18\.4/);
-  assert.match(String(lastDownload.parts[0]), /2026-10-01/);
+  const xml = String(lastDownload.parts[0]);
+  assert.match(xml, /<Worksheet ss:Name="Weight">/);
+  assert.match(xml, /<Worksheet ss:Name="Temp">/);
+  assert.match(xml, /<Worksheet ss:Name="Humidity">/);
+  assert.match(xml, /ss:Type="Number">12</);
+  assert.match(xml, /ss:Type="Number">41</);
+  assert.match(xml, /ss:Type="Number">53</);
+  delete sandbox.window.BSF_DEVICE_HISTORY_ROWS;
+  sandbox.scopedDevices = function(){ return []; };
+  sandbox.devices = [];
+});
+
+test('report Excel export leaves missing measurements blank', () => {
+  const xml = sandbox.reportExcelXml([{
+    recordedAt: '2026-10-01 10:00:00',
+    device: 'device-a',
+    weight: '—',
+    temperature: '',
+    humidity: null,
+  }]);
+  assert.doesNotMatch(xml, /ss:Type="Number">0</);
+  assert.match(xml, /<Cell\/>/);
 });
 
 test('PDF library is loaded only when PDF export is requested', () => {
