@@ -70,7 +70,7 @@ test('graph range uses explicit start and end dates for every period', () => {
   );
 });
 
-test('monthly report weights use each day average plus the same-day min and max', () => {
+test('monthly report weights use each day average', () => {
   const result = aggregateReportWeightItems([
     {
       capturedAt:'2026-11-01T12:00:00+08:00',
@@ -87,7 +87,12 @@ test('monthly report weights use each day average plus the same-day min and max'
       deviceId:'device-a',
       weightAverageKg:3,
     },
-  ], { period:'monthly', start:'2026-11-01', end:'2026-11-30' });
+  ], {
+    period:'monthly',
+    start:'2026-11-01',
+    end:'2026-11-30',
+    now:new Date('2026-12-01T00:00:00+08:00'),
+  });
 
   assert.equal(result.items.length, 30);
   assert.deepEqual(result.items[0], {
@@ -98,11 +103,34 @@ test('monthly report weights use each day average plus the same-day min and max'
   });
   assert.equal(result.items[1].value, null);
   assert.equal(result.items[2].value, 3);
+  assert.equal(result.items[29].value, null);
   assert.equal(result.items[29].label, '30');
   assert.equal(result.summary.sampleCount, 3);
   assert.equal(result.summary.calendarDays, 30);
   assert.ok(Math.abs(result.summary.averageKg - (13 / 3)) < 1e-9);
   assert.ok(Math.abs(result.summary.totalKg - 130) < 1e-9);
+});
+
+test('report weights keep zero as valid and exclude negative source values', () => {
+  const result = aggregateReportWeightItems([{
+    capturedAt:'2026-11-01T12:00:00+08:00',
+    deviceId:'device-a',
+    weightAverageKg:0,
+    weightSumKg:0,
+    weightSampleCount:1,
+  }], {
+    period:'monthly',
+    start:'2026-11-01',
+    end:'2026-11-30',
+    now:new Date('2026-12-01T00:00:00+08:00'),
+  });
+  assert.equal(result.items[0].value, 0);
+  const service = fs.readFileSync(
+    path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), 'src/services/vendor-analytics.js'),
+    'utf8'
+  );
+  assert.match(service, /FILTER \(WHERE t\.real_time_weight_kg >= 0\)/);
+  assert.doesNotMatch(service, /FILTER \(WHERE t\.real_time_weight_kg > 0\)/);
 });
 
 test('yearly report weights average unique samples within each month', () => {

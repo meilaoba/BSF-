@@ -303,11 +303,13 @@ test('report charts render weight, temperature and humidity average lines', () =
     reportApiKey = reportRequestKey();
   `, sandbox);
   const rows = vm.runInContext('normalizedReportWeightRows(true)', sandbox);
+  const tempRows = vm.runInContext('normalizedReportMetricRows(reportApiData.tempItems, true)', sandbox);
   const svg = vm.runInContext('buildReportFoodWasteSvg(normalizedReportWeightRows(true))', sandbox);
   const tempSvg = vm.runInContext('buildReportTemperatureSvg(normalizedReportMetricRows(reportApiData.tempItems, true))', sandbox);
   const humiditySvg = vm.runInContext('buildReportHumiditySvg(normalizedReportMetricRows(reportApiData.humidityItems, true))', sandbox);
   assert.equal(rows.length, 4);
   assert.equal(rows[0].value, 4);
+  assert.equal(tempRows[0].xLabel, '1');
   assert.doesNotMatch(svg, /report-weight-range/);
   assert.match(svg, /class="report-average-line"/);
   assert.match(svg, /class="report-average-point"/);
@@ -317,6 +319,7 @@ test('report charts render weight, temperature and humidity average lines', () =
   assert.match(humiditySvg, /#0ea5e9/);
   assert.match(source, /id="report-temperature-chart"/);
   assert.match(source, /id="report-humidity-chart"/);
+  assert.doesNotMatch(source, /card\([^\n]*Waste-in/);
 });
 
 test('reports show missing or partial vendor daily data without telemetry estimates', () => {

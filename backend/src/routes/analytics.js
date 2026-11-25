@@ -279,7 +279,7 @@ function reportDateKeys(period, start, end) {
  * Daily report chart values. Each device-day contributes one arithmetic mean;
  * the visible daily value is their sum across devices.
  */
-export function aggregateReportWeightItems(rows, { period, start, end } = {}) {
+export function aggregateReportWeightItems(rows, { period, start, end, now = new Date() } = {}) {
   const categories = reportDateKeys(period, start, end);
   const byKey = new Map(categories.map((item) => [item.key, item]));
   const buckets = new Map();
@@ -305,16 +305,20 @@ export function aggregateReportWeightItems(rows, { period, start, end } = {}) {
     totalSamples += effectiveCount;
   }
 
+  const todayKey = hongKongDateKey(now);
   const items = categories.map((item) => {
     const bucket = buckets.get(item.key);
     const average = bucket && bucket.sampleCount
       ? bucket.weightSum / bucket.sampleCount
       : null;
+    const available = period === 'yearly'
+      ? item.key <= todayKey.slice(0, 7)
+      : item.date <= todayKey;
     return {
       date:item.date,
       label:item.label,
-      value:average,
-      averageKg:average,
+      value:available ? average : null,
+      averageKg:available ? average : null,
     };
   });
   const calendarDays = period === 'yearly'

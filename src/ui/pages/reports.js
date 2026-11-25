@@ -292,9 +292,18 @@ function normalizedReportWeightRows(includeMissing){
 
 function normalizedReportMetricRows(items, includeMissing){
   return (Array.isArray(items) ? items : []).map(function(row){
+    const rawLabel = String(row && (row.date || row.label) || '');
+    const monthlyMatch = rawLabel.match(/^\d{4}-\d{2}-(\d{2})/);
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const yearlyMatch = rawLabel.match(/^\d{4}-(\d{2})$/);
+    const xLabel = reportFilters.period === 'monthly' && monthlyMatch
+      ? String(Number(monthlyMatch[1]))
+      : reportFilters.period === 'yearly' && yearlyMatch
+        ? monthNames[Number(yearlyMatch[1]) - 1]
+        : row && row.label || '';
     return {
       label:row && (row.date || row.label) || '',
-      xLabel:row && row.label || '',
+      xLabel:xLabel,
       value:reportFoodWasteValue(row)
     };
   }).filter(function(row){
@@ -529,8 +538,6 @@ function renderReports(container, options){
   const temperatureChartTitle = reportTemperatureChartTitle();
   const humidityChartTitle = reportHumidityChartTitle();
   const wasteValue = reportMetricDisplay(metrics.wasteKg);
-  const wasteInAverageValue = reportMetricDisplay(metrics.wasteInAverageKg);
-  const wasteInTotalValue = reportMetricDisplay(metrics.wasteInTotalKg);
   const ghgValue = reportMetricDisplay(metrics.ghgKg);
   const energyValue = reportMetricDisplay(metrics.energyKwh);
   const fertilizerValue = reportMetricDisplay(metrics.fertilizerKg);
@@ -560,8 +567,6 @@ function renderReports(container, options){
       </div>
       ${vendorDataStatusMarkup}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px;">
-        ${card(reportFilters.period === 'monthly' ? 'Daily Waste-in' : 'Average Daily Waste-in', wasteInAverageValue, 'kg', '#10b981')}
-        ${card(reportFilters.period === 'monthly' ? 'Monthly Total Waste-in' : 'Annual Total Waste-in', wasteInTotalValue, 'kg', '#22c55e')}
         ${card('Waste Collected', wasteValue, 'kg', '#3b82f6')}
         ${card('GHG Reduced', ghgValue, 'kg CO₂e', '#10b981')}
         ${energyCard}
