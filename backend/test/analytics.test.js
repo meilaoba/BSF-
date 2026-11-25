@@ -13,9 +13,11 @@ const { config } = await import('../src/config.js');
 const {
   analyticsDeviceLookup,
   analyticsScopeForUser,
+  aggregateReportWeightItems,
   dateRangeForRequest,
   matchVendorDeviceId,
   rawSampleRange,
+  reportGhgFromWeight,
   reportTelemetrySupplementRows,
 } = await import('../src/routes/analytics.js');
 const {
@@ -66,6 +68,70 @@ test('graph range uses explicit start and end dates for every period', () => {
     ), 'daily', new Date('2026-10-30T00:00:00Z')),
     (error) => error.code === 'VALIDATION_ERROR'
   );
+});
+
+test('monthly report weights use each day average plus the same-day min and max', () => {
+  const result = aggregateReportWeightItems([
+    {
+      capturedAt:'2026-11-01T12:00:00+08:00',
+      deviceId:'device-a',
+      weightAverageKg:4,
+    },
+    {
+      capturedAt:'2026-11-01T12:00:00+08:00',
+      deviceId:'device-b',
+      weightAverageKg:6,
+    },
+    {
+      capturedAt:'2026-11-03T12:00:00+08:00',
+      deviceId:'device-a',
+      weightAverageKg:3,
+    },
+  ], { period:'monthly', start:'2026-11-01', end:'2026-11-30' });
+
+  assert.equal(result.items.length, 30);
+  assert.deepEqual(result.items[0], {
+    date:'2026-11-01',
+    label:'1',
+    value:5,
+    averageKg:5,
+  });
+  assert.equal(result.items[1].value, null);
+  assert.equal(result.items[2].value, 3);
+  assert.equal(result.items[29].label, '30');
+  assert.equal(result.summary.sampleCount, 3);
+  assert.equal(result.summary.calendarDays, 30);
+  assert.ok(Math.abs(result.summary.averageKg - (13 / 3)) < 1e-9);
+  assert.ok(Math.abs(result.summary.totalKg - 130) < 1e-9);
+});
+
+test('yearly report weights average unique samples within each month', () => {
+  const result = aggregateReportWeightItems([
+    {
+      capturedAt:'2026-01-01T12:00:00+08:00',
+      deviceId:'device-a',
+      weightAverageKg:4,
+    },
+    {
+      capturedAt:'2026-01-02T12:00:00+08:00',
+      deviceId:'device-a',
+      weightAverageKg:7,
+    },
+  ], { period:'yearly', start:'2026-01-01', end:'2026-12-31' });
+
+  assert.equal(result.items.length, 12);
+  assert.equal(result.items[0].label, 'Jan');
+  assert.ok(Math.abs(result.items[0].value - 5.5) < 1e-9);
+  assert.equal(result.items[1].value, null);
+  assert.equal(result.summary.sampleCount, 2);
+  assert.equal(result.summary.calendarDays, 365);
+  assert.ok(Math.abs(result.summary.totalKg - 2007.5) < 1e-9);
+});
+
+test('report GHG uses weight-derived Waste-in and fixed machine carbon', () => {
+  assert.equal(reportGhgFromWeight(26, 1.5, 1.5), 37.5);
+  assert.equal(reportGhgFromWeight(26, null, 1.5), null);
+  assert.equal(reportGhgFromWeight(0, 1.5, 1.5), -1.5);
 });
 
 test('master admin may request a client or machine scope', () => {
@@ -451,6 +517,11 @@ test('graphs read telemetry while reports use daily waste plus telemetry status,
   assert.match(source, /persist: true/);
   assert.match(source, /items: foodWasteResult\.items/);
   assert.match(source, /wasteSource: 'daily-input'/);
+  assert.match(source, /weightItems: weightResult\.items/);
+  assert.match(source, /weightSummary: weightResult\.summary/);
+  assert.match(source, /wasteInAverageKg/);
+  assert.match(source, /wasteInTotalKg/);
+  assert.match(source, /reportGhgFromWeight/);
   const graphLoader = source.slice(
     source.indexOf('async function loadGraphAnalytics'),
     source.indexOf('async function loadReportAnalytics')

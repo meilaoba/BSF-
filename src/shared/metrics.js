@@ -416,9 +416,12 @@ export function aggregateTelemetrySnapshots(rows, {
         : (day.directWasteKg !== null ? day.directWasteKg : dailyInputWasteKg);
     const energyKwh = resolveDailyEnergyKwh(day.operatingStatusCode, day.formula);
     if (wasteKg === null && energyKwh === null) continue;
-    const ghgKg = wasteKg === null
+    const fixedCarbonKg = energyKwh === null
       ? null
-      : ghgReducedKg(wasteKg, energyKwh, day.region, 1, day.formula);
+      : machineCarbonKg(energyKwh, day.region, 1, day.formula);
+    const ghgKg = wasteKg === null || fixedCarbonKg === null
+      ? null
+      : wasteKg * formulaNumber(day.formula, 'wasteReductionFactor') - fixedCarbonKg;
     dailyResults.set(`${day.deviceId}|${day.dateKey}`, {
       deviceId: day.deviceId,
       dateKey: day.dateKey,
@@ -426,6 +429,7 @@ export function aggregateTelemetrySnapshots(rows, {
       wasteKg,
       energyKwh,
       ghgKg,
+      fixedCarbonKg,
       dailyAggregate: day.dailyAggregate,
       formula: day.formula,
       region: day.region,
@@ -567,10 +571,17 @@ export function aggregateTelemetrySnapshots(rows, {
   const ghgKg = ghgValues.length
     ? ghgValues.reduce((sum, value) => sum + value, 0)
     : null;
+  const fixedCarbonValues = dailyValues
+    .map((day) => day.fixedCarbonKg)
+    .filter((value) => value !== null);
+  const fixedCarbonKg = fixedCarbonValues.length
+    ? fixedCarbonValues.reduce((sum, value) => sum + value, 0)
+    : null;
   const summary = {
     wasteKg,
     wasteSource,
     ghgKg,
+    fixedCarbonKg,
     energyKwh,
     fertilizerKg: fertilizerKg(wasteKg, formula),
     avgTempC: tempCount ? tempSum / tempCount : null,

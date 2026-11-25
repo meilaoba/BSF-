@@ -5,6 +5,7 @@ import { optionalInt, optionalString } from '../lib/validate.js';
 import { config } from '../config.js';
 import {
   aggregateTelemetrySnapshots,
+  fertilizerKg,
   hongKongDateKey,
   periodRange,
 } from '../shared/metrics.js';
@@ -251,6 +252,97 @@ export function reportTelemetrySupplementRows(sampleRows) {
         ? {}
         : { operatingStatusCode: row.operatingStatusCode }),
     }));
+}
+
+const REPORT_MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function reportDateKeys(period, start, end) {
+  if (period === 'yearly') {
+    return REPORT_MONTH_LABELS.map((label, index) => ({
+      key: `${String(start).slice(0, 4)}-${String(index + 1).padStart(2, '0')}`,
+      label,
+      date: `${String(start).slice(0, 4)}-${String(index + 1).padStart(2, '0')}`,
+    }));
+  }
+  const keys = [];
+  const cursor = new Date(`${start}T00:00:00Z`);
+  const last = new Date(`${end}T00:00:00Z`);
+  while (Number.isFinite(cursor.getTime()) && cursor <= last) {
+    const key = cursor.toISOString().slice(0, 10);
+    keys.push({ key, label:String(cursor.getUTCDate()), date:key });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return keys;
+}
+
+/**
+ * Daily report chart values. Each device-day contributes one arithmetic mean;
+ * the visible daily value is their sum across devices.
+ */
+export function aggregateReportWeightItems(rows, { period, start, end } = {}) {
+  const categories = reportDateKeys(period, start, end);
+  const byKey = new Map(categories.map((item) => [item.key, item]));
+  const buckets = new Map();
+  let totalWeightKg = 0;
+  let totalSamples = 0;
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const average = Number(row?.weightAverageKg);
+    if (!Number.isFinite(average)) continue;
+    const weightSum = Number(row?.weightSumKg);
+    const sampleCount = Number(row?.weightSampleCount);
+    const effectiveSum = Number.isFinite(weightSum) ? weightSum : average;
+    const effectiveCount = Number.isFinite(sampleCount) && sampleCount > 0 ? sampleCount : 1;
+    const capturedAt = String(row?.capturedAt || '');
+    const dailyKey = capturedAt.slice(0, 10);
+    const key = period === 'yearly' ? dailyKey.slice(0, 7) : dailyKey;
+    if (!byKey.has(key)) continue;
+    const bucket = buckets.get(key) || { weightSum:0, sampleCount:0 };
+    bucket.weightSum += effectiveSum;
+    bucket.sampleCount += effectiveCount;
+    buckets.set(key, bucket);
+    totalWeightKg += effectiveSum;
+    totalSamples += effectiveCount;
+  }
+
+  const items = categories.map((item) => {
+    const bucket = buckets.get(item.key);
+    const average = bucket && bucket.sampleCount
+      ? bucket.weightSum / bucket.sampleCount
+      : null;
+    return {
+      date:item.date,
+      label:item.label,
+      value:average,
+      averageKg:average,
+    };
+  });
+  const calendarDays = period === 'yearly'
+    ? Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1
+    : categories.length;
+  const averageKg = totalSamples ? totalWeightKg / totalSamples : null;
+  return {
+    items,
+    summary: {
+      averageKg,
+      totalKg:averageKg === null ? null : averageKg * calendarDays,
+      sampleCount:totalSamples,
+      calendarDays,
+    },
+  };
+}
+
+export function reportGhgFromWeight(wasteTotalKg, fixedCarbonKg, wasteReductionFactor = 1.5) {
+  if (wasteTotalKg === null || wasteTotalKg === undefined || fixedCarbonKg === null || fixedCarbonKg === undefined) {
+    return null;
+  }
+  const waste = Number(wasteTotalKg);
+  const fixedCarbon = Number(fixedCarbonKg);
+  const factor = Number(wasteReductionFactor);
+  if (!Number.isFinite(waste) || !Number.isFinite(fixedCarbon) || !Number.isFinite(factor)) {
+    return null;
+  }
+  return waste * factor - fixedCarbon;
 }
 
 async function loadReportAnalytics(req, context, range) {
@@ -573,6 +665,15 @@ export function registerAnalyticsRoutes(router) {
       formula: config.formula,
       wasteSource: 'daily-input',
     });
+    const weightResult = aggregateReportWeightItems(analytics.telemetryRows, {
+      period,
+      start:range.start,
+      end:range.end,
+    });
+    const wasteInAverageKg = weightResult.summary.averageKg;
+    const wasteInTotalKg = weightResult.summary.totalKg;
+    const fixedCarbonKg = summaryResult.summary.fixedCarbonKg;
+    const ghgKg = reportGhgFromWeight(wasteInTotalKg, fixedCarbonKg, config.formula.wasteReductionFactor);
     sendOk(res, {
       period,
       range,
@@ -580,11 +681,20 @@ export function registerAnalyticsRoutes(router) {
       title: period === 'yearly' ? 'Yearly Report' : 'Monthly Report',
       items: foodWasteResult.items,
       foodWasteSource: 'daily-input',
+      weightItems: weightResult.items,
+      weightSummary: weightResult.summary,
+      weightSource: 'daily-average',
       ghgItems: summaryResult.ghgItems,
       energyItems: summaryResult.energyItems,
       tempItems: summaryResult.tempItems,
       humidityItems: summaryResult.humidityItems,
-      summary: summaryResult.summary,
+      summary: {
+        ...summaryResult.summary,
+        wasteInAverageKg,
+        wasteInTotalKg,
+        ghgKg,
+        fertilizerKg:fertilizerKg(wasteInTotalKg, config.formula),
+      },
       empty: summaryResult.summary.pointCount === 0,
       dataSources: analytics.dataSources,
     }, undefined, ANALYTICS_CACHE_HEADERS);

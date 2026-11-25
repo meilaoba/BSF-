@@ -139,7 +139,7 @@
           values:categories.map(function(_, index){
             const bucket = buckets.get(index);
             if(!bucket) return null;
-            return key === 'weight' ? bucket.max : bucket.sum / bucket.count;
+            return bucket.sum / bucket.count;
           }),
         };
       }),

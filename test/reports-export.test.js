@@ -55,7 +55,7 @@ test('report cards and CSV/Excel/PDF model share the API summary values', () => 
       { date:'2026-10-02', value:7.5 }
     ];
     reportApiData = {
-      summary:{ wasteKg:20, ghgKg:18.4, energyKwh:3, fertilizerKg:2.4, avgTempC:41.2, avgHumidityPct:53.5, pointCount:2 },
+      summary:{ wasteInAverageKg:0.8667, wasteInTotalKg:26, wasteKg:20, ghgKg:18.4, energyKwh:3, fertilizerKg:2.4, avgTempC:41.2, avgHumidityPct:53.5, pointCount:2 },
       items:reportFoodWasteData
     };
     reportApiKey = reportRequestKey();
@@ -63,6 +63,8 @@ test('report cards and CSV/Excel/PDF model share the API summary values', () => 
   const model = vm.runInContext('reportExportModel()', sandbox);
   assert.equal(model.title, 'Client Monthly Report');
   assert.deepEqual(JSON.parse(JSON.stringify(model.metrics)), {
+    wasteInAverageKg:'0.9',
+    wasteInTotalKg:'26.0',
     wasteKg:'20.0',
     ghgKg:'18.4',
     energyKwh:'3.0',
@@ -71,7 +73,7 @@ test('report cards and CSV/Excel/PDF model share the API summary values', () => 
     avgHumidityPct:'53.5'
   });
   assert.deepEqual(JSON.parse(JSON.stringify(model.foodWaste.map((row) => row.value))), [12.5, 7.5]);
-  assert.equal(model.chartTitle, 'Daily Food Waste In (KG)');
+  assert.equal(model.chartTitle, 'Daily Waste-in (KG)');
 });
 
 test('report preview exposes PDF and Excel exports without a CSV button', () => {
@@ -186,7 +188,7 @@ test('monthly report charts plot one aggregate per day and keep missing days bla
   assert.match(chart, /<c:tickMarkSkip val="1"\/>/);
   assert.match(chart, /<a:bodyPr rot="-2700000"\/>/);
   assert.match(chart, /<c:numFmt formatCode="0.00" sourceLinked="0"\/>/);
-  assert.match(sheet, /<c r="G2"><v>9.99<\/v><\/c>/);
+  assert.match(sheet, /<c r="G2"><v>2.505<\/v><\/c>/);
   assert.match(sheet, /<c r="F31" t="inlineStr"><is><t xml:space="preserve">30<\/t><\/is><\/c>/);
   assert.doesNotMatch(sheet, /<c r="F32"/);
   assert.match(files.get('xl/charts/chart2.xml'), /<c:val><c:numRef><c:f>'Temp'!\$G\$2:\$G\$31<\/c:f><\/c:numRef><\/c:val>/);
@@ -205,7 +207,7 @@ test('yearly report chart groups samples by calendar month', () => {
   });
   const sheet = files.get('xl/worksheets/sheet1.xml');
   assert.match(sheet, /<c r="F2" t="inlineStr"><is><t xml:space="preserve">Jan<\/t><\/is><\/c>/);
-  assert.match(sheet, /<c r="G2"><v>9<\/v><\/c>/);
+  assert.match(sheet, /<c r="G2"><v>7<\/v><\/c>/);
   assert.match(sheet, /<c r="F13" t="inlineStr"><is><t xml:space="preserve">Dec<\/t><\/is><\/c>/);
   assert.match(sheet, /<c r="G13"><v>7<\/v><\/c>/);
 });
@@ -273,6 +275,48 @@ test('missing report days stay missing while a real zero remains exportable', ()
   assert.deepEqual(JSON.parse(JSON.stringify(rows)), [
     { label:'2026-10-28', xLabel:'28', value:0 }
   ]);
+});
+
+test('report charts render weight, temperature and humidity average lines', () => {
+  vm.runInContext(`
+    reportFilters = { client:'Client A', device:'', period:'monthly', month:10, year:2026 };
+    reportApiData = {
+      summary:{ pointCount:2 },
+      items:[],
+      weightItems:[
+        { date:'2026-10-01', label:'1', value:4, averageKg:4 },
+        { date:'2026-10-02', label:'2', value:5, averageKg:5 },
+        { date:'2026-10-03', label:'3', value:null, averageKg:null },
+        { date:'2026-10-04', label:'4', value:6, averageKg:6 }
+      ],
+      tempItems:[
+        { date:'2026-10-01', label:'1', value:38 },
+        { date:'2026-10-02', label:'2', value:null },
+        { date:'2026-10-03', label:'3', value:42 }
+      ],
+      humidityItems:[
+        { date:'2026-10-01', label:'1', value:52 },
+        { date:'2026-10-02', label:'2', value:48 },
+        { date:'2026-10-03', label:'3', value:null }
+      ]
+    };
+    reportApiKey = reportRequestKey();
+  `, sandbox);
+  const rows = vm.runInContext('normalizedReportWeightRows(true)', sandbox);
+  const svg = vm.runInContext('buildReportFoodWasteSvg(normalizedReportWeightRows(true))', sandbox);
+  const tempSvg = vm.runInContext('buildReportTemperatureSvg(normalizedReportMetricRows(reportApiData.tempItems, true))', sandbox);
+  const humiditySvg = vm.runInContext('buildReportHumiditySvg(normalizedReportMetricRows(reportApiData.humidityItems, true))', sandbox);
+  assert.equal(rows.length, 4);
+  assert.equal(rows[0].value, 4);
+  assert.doesNotMatch(svg, /report-weight-range/);
+  assert.match(svg, /class="report-average-line"/);
+  assert.match(svg, /class="report-average-point"/);
+  assert.match(tempSvg, /Average temperature line chart/);
+  assert.match(tempSvg, /#f97316/);
+  assert.match(humiditySvg, /Average humidity line chart/);
+  assert.match(humiditySvg, /#0ea5e9/);
+  assert.match(source, /id="report-temperature-chart"/);
+  assert.match(source, /id="report-humidity-chart"/);
 });
 
 test('reports show missing or partial vendor daily data without telemetry estimates', () => {

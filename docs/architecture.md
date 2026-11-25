@@ -40,8 +40,11 @@
    `input.dailyInput`，不得用厂家日报处理量替代。
 5. Reports 的 Waste Collected 读取厂家日报 `kitchenWaste`；运行状态、能耗、
    温度和湿度从 `vendor_device_telemetry` 补充。厂家日报 `powerConsume`
-   仅保留为审计字段，不再作为业务展示能耗。Reports 的 Food Waste In
-   趋势独立读取 `input.dailyInput`，厂家日报为空时仍可显示遥测趋势。
+   仅保留为审计字段，不再作为业务展示能耗。Reports 的 Waste-in 读取
+   `RealTimeWeight`：周期内唯一 weight 采样先整体求平均，再乘以实际天数得到
+   月总量；GHG 和 Fertilizer 从该 Waste-in 推导。图表只显示平均值折线，
+   月报按天、年报表按月。Graphs 的 Food Waste In 仍独立使用
+   `input.dailyInput`。
 6. `/api/v1/vendor-devices/history` 只提供厂家历史温湿度曲线。
 7. Master Admin 每 3 分钟、Client Admin / User 每 10 分钟读取一次最新记录；
    Client Admin 的可见范围由厂家账号设备池和其 Client 归属共同决定。

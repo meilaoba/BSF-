@@ -28,6 +28,18 @@ function reportExcelChartTitle(){
   return monthNames[month - 1];
 }
 
+function reportWeightChartTitle(){
+  return reportFilters.period === 'monthly' ? 'Daily Waste-in (KG)' : 'Monthly Waste-in (KG)';
+}
+
+function reportTemperatureChartTitle(){
+  return reportFilters.period === 'monthly' ? 'Daily Average Temperature (°C)' : 'Monthly Average Temperature (°C)';
+}
+
+function reportHumidityChartTitle(){
+  return reportFilters.period === 'monthly' ? 'Daily Average Humidity (%)' : 'Monthly Average Humidity (%)';
+}
+
 function reportPad(value){
   return String(value).padStart(2, '0');
 }
@@ -73,6 +85,8 @@ function reportMetricModel(){
   const hasApiData = reportApiData && reportApiKey === reportRequestKey();
   const summary = hasApiData && reportApiData.summary ? reportApiData.summary : {};
   return {
+    wasteInAverageKg:reportMetricNumber(summary.wasteInAverageKg),
+    wasteInTotalKg:reportMetricNumber(summary.wasteInTotalKg),
     wasteKg:reportMetricNumber(summary.wasteKg),
     ghgKg:reportMetricNumber(summary.ghgKg),
     energyKwh:reportMetricNumber(summary.energyKwh),
@@ -260,6 +274,34 @@ function reportFoodWasteDateParts(row){
   return null;
 }
 
+function normalizedReportWeightRows(includeMissing){
+  const hasApiData = reportApiData && reportApiKey === reportRequestKey();
+  const source = hasApiData && Array.isArray(reportApiData.weightItems) ? reportApiData.weightItems : [];
+  if(!source.length) return normalizedReportFoodWasteRows(includeMissing);
+  return source.map(function(row){
+    const value = reportFoodWasteValue({ value:row && row.averageKg !== undefined ? row.averageKg : row && row.value });
+    return {
+      label:row && (row.date || row.label) || '',
+      xLabel:row && row.label || '',
+      value:value
+    };
+  }).filter(function(row){
+    return includeMissing || row.value !== null;
+  });
+}
+
+function normalizedReportMetricRows(items, includeMissing){
+  return (Array.isArray(items) ? items : []).map(function(row){
+    return {
+      label:row && (row.date || row.label) || '',
+      xLabel:row && row.label || '',
+      value:reportFoodWasteValue(row)
+    };
+  }).filter(function(row){
+    return includeMissing || row.value !== null;
+  });
+}
+
 function normalizedReportFoodWasteRows(includeMissing){
   const range = reportPeriodRange();
   const selectedYear = Number(range.start.slice(0, 4));
@@ -300,47 +342,122 @@ function normalizedReportFoodWasteRows(includeMissing){
   return rows;
 }
 
-function buildReportFoodWasteSvg(rows){
+function buildReportLineChartSvg(rows, options){
+  const config = options || {};
+  const unit = config.unit || 'KG';
+  const color = config.color || '#3b82f6';
+  const emptyMessage = config.emptyMessage || 'No data for selected period';
+  const ariaLabel = config.ariaLabel || 'Average line chart';
   const validValues = rows.map(function(row){ return row.value; }).filter(Number.isFinite);
-  if(!validValues.length) return '<div style="height:180px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;">No Food Waste data for selected period</div>';
-  const width = 1000, height = 180, left = 44, right = 20, top = 16, bottom = 30;
+  if(!validValues.length) return '<div style="height:200px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;">' + emptyMessage + '</div>';
+  const width = 1000, height = 200, left = 54, right = 20, top = 24, bottom = 36;
   const plotWidth = width - left - right, plotHeight = height - top - bottom;
-  const maxValue = Math.max.apply(null, validValues.concat([0]));
-  const scale = maxValue || 1;
+  const rawMax = Math.max.apply(null, validValues);
+  const rawMin = Math.min.apply(null, validValues);
+  const padding = Math.max((rawMax - rawMin) * 0.12, rawMax * 0.04, 0.1);
+  const minValue = Math.max(0, rawMin - padding);
+  const maxValue = rawMax + padding;
+  const scale = Math.max(maxValue - minValue, 1);
+  const yFor = function(value){
+    return top + plotHeight - ((value - minValue) / scale) * plotHeight;
+  };
   const step = rows.length > 1 ? plotWidth / (rows.length - 1) : 0;
   const points = rows.map(function(row, index){
     if(!Number.isFinite(row.value)) return null;
     const x = left + step * index;
-    const y = top + plotHeight - (row.value / scale) * plotHeight;
-    return { x:x, y:y, label:row.xLabel || row.label, value:row.value, index:index };
+    return {
+      x:x,
+      y:yFor(row.value),
+      label:row.xLabel || row.label,
+      value:row.value,
+      index:index
+    };
   });
   const segments = [];
-  let current = '';
+  let current = [];
   points.forEach(function(point){
-    if(!point){ current = ''; return; }
-    current += (current ? ' L ' : ' M ') + point.x.toFixed(1) + ' ' + point.y.toFixed(1);
-    const next = points[point.index + 1];
-    if(!next){ segments.push(current); current = ''; }
+    if(!point){
+      if(current.length > 1) segments.push(current);
+      current = [];
+      return;
+    }
+    current.push(point);
   });
-  const path = segments.map(function(segment){ return '<path d="' + segment.trim() + '" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>'; }).join('');
-  const dots = points.filter(Boolean).map(function(point){
-    return '<circle cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) + '" r="3.5" fill="#3b82f6"><title>' + point.label + ': ' + Number(point.value).toFixed(1) + ' KG</title></circle>';
+  if(current.length > 1) segments.push(current);
+  const path = segments.map(function(segment){
+    const commands = segment.map(function(point, index){
+      return (index ? 'L ' : 'M ') + point.x.toFixed(1) + ' ' + point.y.toFixed(1);
+    }).join(' ');
+    return '<path class="report-average-line" d="' + commands + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>';
   }).join('');
-  const labelStep = Math.max(1, Math.ceil(rows.length / 12));
+  const dots = points.filter(Boolean).map(function(point){
+    return '<circle class="report-average-point" cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) +
+      '" r="3.5" fill="' + color + '"><title>' + point.label + ': ' + Number(point.value).toFixed(1) +
+      ' ' + unit + '</title></circle>';
+  }).join('');
+  const labelStep = rows.length > 31 ? Math.max(1, Math.ceil(rows.length / 12)) : 1;
   const labels = rows.map(function(row, index){
     if(index % labelStep !== 0 && index !== rows.length - 1) return '';
     const x = left + (rows.length > 1 ? step * index : 0);
-    return '<text x="' + x.toFixed(1) + '" y="' + (height - 8) + '" text-anchor="middle" fill="#64748b" font-size="11">' + (row.xLabel || row.label) + '</text>';
+    return '<text x="' + x.toFixed(1) + '" y="' + (height - 10) + '" text-anchor="middle" fill="#64748b" font-size="10">' + (row.xLabel || row.label) + '</text>';
   }).join('');
-  const grid = '<line x1="' + left + '" y1="' + (top + plotHeight) + '" x2="' + (left + plotWidth) + '" y2="' + (top + plotHeight) + '" stroke="#334155" stroke-width="1" />' +
-    '<line x1="' + left + '" y1="' + top + '" x2="' + left + '" y2="' + (top + plotHeight) + '" stroke="#334155" stroke-width="1" />';
-  return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:180px;display:block;">' + grid + path + dots + labels + '</svg>';
+  const gridlines = [0, 0.5, 1].map(function(ratio){
+    const value = minValue + scale * ratio;
+    const y = yFor(value);
+    return '<line x1="' + left + '" y1="' + y.toFixed(1) + '" x2="' + (left + plotWidth) + '" y2="' + y.toFixed(1) + '" stroke="#334155" stroke-width="1" />' +
+      '<text x="' + (left - 8) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" fill="#64748b" font-size="10">' + value.toFixed(1) + '</text>';
+  }).join('');
+  const legend = '<g><circle cx="' + (width - 116) + '" cy="10" r="3.5" fill="' + color + '"/>' +
+    '<line x1="' + (width - 116) + '" y1="10" x2="' + (width - 96) + '" y2="10" stroke="' + color + '" stroke-width="2.5"/>' +
+    '<text x="' + (width - 90) + '" y="13" fill="#94a3b8" font-size="10">Average</text></g>';
+  return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" role="img" aria-label="' + ariaLabel + '" style="width:100%;height:200px;display:block;">' +
+    gridlines + path + dots + labels + legend + '</svg>';
+}
+
+function buildReportFoodWasteSvg(rows){
+  return buildReportLineChartSvg(rows, {
+    unit:'KG',
+    color:'#3b82f6',
+    emptyMessage:'No Weight data for selected period',
+    ariaLabel:'Average weight line chart'
+  });
+}
+
+function buildReportTemperatureSvg(rows){
+  return buildReportLineChartSvg(rows, {
+    unit:'°C',
+    color:'#f97316',
+    emptyMessage:'No Temperature data for selected period',
+    ariaLabel:'Average temperature line chart'
+  });
+}
+
+function buildReportHumiditySvg(rows){
+  return buildReportLineChartSvg(rows, {
+    unit:'%',
+    color:'#0ea5e9',
+    emptyMessage:'No Humidity data for selected period',
+    ariaLabel:'Average humidity line chart'
+  });
 }
 
 function renderReportFoodWasteChart(){
   const chart = document.getElementById('report-food-waste-chart');
-  if(!chart) return;
-  chart.innerHTML = buildReportFoodWasteSvg(normalizedReportFoodWasteRows(true));
+  if(chart) chart.innerHTML = buildReportFoodWasteSvg(normalizedReportWeightRows(true));
+  const temperature = document.getElementById('report-temperature-chart');
+  if(temperature){
+    temperature.innerHTML = buildReportTemperatureSvg(normalizedReportMetricRows(
+      reportApiData && reportApiData.tempItems,
+      true
+    ));
+  }
+  const humidity = document.getElementById('report-humidity-chart');
+  if(humidity){
+    humidity.innerHTML = buildReportHumiditySvg(normalizedReportMetricRows(
+      reportApiData && reportApiData.humidityItems,
+      true
+    ));
+  }
 }
 
 async function loadReportFoodWaste(options){
@@ -408,8 +525,12 @@ function renderReports(container, options){
   const reportPeriod = range.start + ' - ' + range.end;
   const reportOptions = reportFilterOptions();
   const title = reportDisplayTitle();
-  const chartTitle = reportFilters.period === 'monthly' ? 'Daily Food Waste In (KG)' : 'Monthly Food Waste In (KG)';
+  const chartTitle = reportWeightChartTitle();
+  const temperatureChartTitle = reportTemperatureChartTitle();
+  const humidityChartTitle = reportHumidityChartTitle();
   const wasteValue = reportMetricDisplay(metrics.wasteKg);
+  const wasteInAverageValue = reportMetricDisplay(metrics.wasteInAverageKg);
+  const wasteInTotalValue = reportMetricDisplay(metrics.wasteInTotalKg);
   const ghgValue = reportMetricDisplay(metrics.ghgKg);
   const energyValue = reportMetricDisplay(metrics.energyKwh);
   const fertilizerValue = reportMetricDisplay(metrics.fertilizerKg);
@@ -439,6 +560,8 @@ function renderReports(container, options){
       </div>
       ${vendorDataStatusMarkup}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px;">
+        ${card(reportFilters.period === 'monthly' ? 'Daily Waste-in' : 'Average Daily Waste-in', wasteInAverageValue, 'kg', '#10b981')}
+        ${card(reportFilters.period === 'monthly' ? 'Monthly Total Waste-in' : 'Annual Total Waste-in', wasteInTotalValue, 'kg', '#22c55e')}
         ${card('Waste Collected', wasteValue, 'kg', '#3b82f6')}
         ${card('GHG Reduced', ghgValue, 'kg CO₂e', '#10b981')}
         ${energyCard}
@@ -449,6 +572,14 @@ function renderReports(container, options){
       <div style="margin-bottom:24px;">
         <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">${chartTitle}</h3>
         <div id="report-food-waste-chart" style="background:#0f172a;border-radius:8px;padding:12px;border:1px solid #334155;"></div>
+      </div>
+      <div style="margin-bottom:24px;">
+        <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">${temperatureChartTitle}</h3>
+        <div id="report-temperature-chart" style="background:#0f172a;border-radius:8px;padding:12px;border:1px solid #334155;"></div>
+      </div>
+      <div style="margin-bottom:24px;">
+        <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">${humidityChartTitle}</h3>
+        <div id="report-humidity-chart" style="background:#0f172a;border-radius:8px;padding:12px;border:1px solid #334155;"></div>
       </div>
       <div style="display:flex;gap:12px;justify-content:center;margin-top:32px;padding-top:24px;border-top:1px solid #334155;">
         <button style="padding:12px 24px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;" onclick="exportReportPdf()">Export PDF</button>
@@ -479,8 +610,8 @@ function reportExportModel(){
   const reportDevice = reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'Select Machine');
   const reportPeriod = range.start + ' - ' + range.end;
   const title = reportDisplayTitle();
-  const chartTitle = reportFilters.period === 'monthly' ? 'Daily Food Waste In (KG)' : 'Monthly Food Waste In (KG)';
-  const foodWaste = normalizedReportFoodWasteRows(false);
+  const chartTitle = reportWeightChartTitle();
+  const foodWaste = normalizedReportWeightRows(false);
   return {
     title:title,
     pdfTitle:title,
@@ -489,6 +620,8 @@ function reportExportModel(){
     client:reportClient,
     device:reportDevice,
     metrics:{
+      wasteInAverageKg:reportMetricDisplay(metrics.wasteInAverageKg),
+      wasteInTotalKg:reportMetricDisplay(metrics.wasteInTotalKg),
       wasteKg:reportMetricDisplay(metrics.wasteKg),
       ghgKg:reportMetricDisplay(metrics.ghgKg),
       energyKwh:reportMetricDisplay(metrics.energyKwh),
@@ -582,7 +715,7 @@ function excelCell(value){
 
 function exportReportCsv(){
   const model = reportExportModel();
-  const rows = [['Report',model.title],['Period',model.period],['Client',model.client],['Machine',model.device],[],['Metric','Value','Unit'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO₂e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%'],[],[model.chartTitle]];
+  const rows = [['Report',model.title],['Period',model.period],['Client',model.client],['Machine',model.device],[],['Metric','Value','Unit'],['Daily Waste-in',model.metrics.wasteInAverageKg,'kg'],['Total Waste-in',model.metrics.wasteInTotalKg,'kg'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO₂e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%'],[],[model.chartTitle]];
   model.foodWaste.forEach(function(row){ rows.push([row.label,row.value]); });
   downloadReportFile('bsf-report-' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv;charset=utf-8', '\uFEFF' + rows.map(function(row){ return row.map(csvCell).join(','); }).join('\r\n'));
   showReportExportToast('CSV 导出已开始');
@@ -614,7 +747,7 @@ async function exportReportPdf(){
   const JsPDF = await loadReportJsPdf();
   const model = reportExportModel();
   const pdfTitle = model.pdfTitle || model.title;
-  const rows = [['Metric','Value','Unit'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO2e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%']];
+  const rows = [['Metric','Value','Unit'],['Daily Waste-in',model.metrics.wasteInAverageKg,'kg'],['Total Waste-in',model.metrics.wasteInTotalKg,'kg'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO2e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%']];
   const foodRows = [['Period','Value','Unit']].concat(model.foodWaste.map(function(row){
     return [row.label, row.value, 'KG'];
   }));

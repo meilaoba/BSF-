@@ -77,7 +77,7 @@
 | Container Temp | 厂家汇总 | `CabinTemp` 的时/日/月平均 |
 | Container Humidity | 厂家汇总 | `Humidity` 的时/日/月平均 |
 | Energy Consumed | BSF 计算 | 当天设备状态为 Running/Standby 时使用每日能耗，当前默认 1.5 kWh；Offline 为 0 |
-| GHG Reduced | BSF 计算 | 厨余量 × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
+| GHG Reduced | BSF 计算 | 由 Weight 推导的 Waste-in × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
 | Avg 值 | BSF 计算 | 前端对所有非空图点求平均 |
 | `No data for selected period` | 状态文本 | 当前选择范围聚合后无值 |
 
@@ -122,10 +122,11 @@
 | Waste Collected | 本地数据库 + 厂家字段 | `vendor_daily_stats.kitchen_waste_kg`；由厂家日报 `kitchenWaste` 同步并长期保存 |
 | GHG Reduced | BSF 计算 | 厨余量 × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
 | Energy Consumed | BSF 计算 | 厂家 `deviceOnline` 聚合后的运行/待机日 × 每日能耗 |
-| Est. Fertilizer | BSF 计算 | 厂家日报厨余量 × `fertilizerRatio` |
+| Est. Fertilizer | BSF 计算 | 由 Weight 推导的 Waste-in × `fertilizerRatio` |
 | Avg Container Temp | 厂家汇总 | 遥测 `CabinTemp` 平均值 |
 | Avg Humidity | 厂家汇总 | 遥测 `Humidity` 平均值 |
-| Food Waste In 图表 | 厂家汇总 | 遥测 `input.dailyInput` 吨值转换为 kg，不依赖厂家日报是否存在 |
+| Waste In | 厂家汇总 | 查询周期内唯一 `RealTimeWeight` 采样整体求平均，再乘当月实际天数 |
+| Daily/Monthly Waste-in 图表 | 厂家汇总 | 月报按天、年报表按月显示 `RealTimeWeight` 平均值折线 |
 | `No vendor daily report` | API 状态 | 本地和厂家日报都没有所选周期的数据 |
 | `Some vendor daily reports are unavailable` | API 状态 | 部分设备日报请求失败 |
 | Export Excel | 本地数据库 + BSF 计算 | 从 BSF Raw Data 分页读取完整周期，在浏览器生成 `.xlsx`；包含 `Weight`、`Temp`、`Humidity` 三个独立工作表及对应原生折线图，不调用厂家导出接口 |
@@ -207,7 +208,7 @@
 ## 重要现状
 
 1. Reports 的 `Waste Collected` 读取 BSF `vendor_daily_stats`；最近 60 天会从厂家日报刷新并回写，更早数据只从本地数据库读取。Metric 为空时 GHG/Fertilizer 也为空。
-2. Reports 的 Food Waste In 图表使用遥测 `input.dailyInput`，与 `Waste Collected` 不是同一指标。
+2. Reports 的 Waste-in、GHG 和 Fertilizer 使用遥测 `RealTimeWeight`，与 `Waste Collected` 的厂家 `kitchenWaste` 不是同一指标。
 3. Graphs 的 Energy Consumed 是 BSF 按设备状态计算的，不是厂家 `powerConsume`。
 4. Graphs/Reports 的 GHG 是 BSF 计算公式，不是厂家 `saveCarbon`。
 5. Raw Data 来自本地采集表，不是前端直接读取厂家 WebSocket。
@@ -254,4 +255,4 @@
 - 数据库同时保存厂家原值；读取时按当前 kg/kWh 因子重新计算，避免因子调整后历史口径不一致。
 - Reports 优先使用本地日报，再合并厂家最近 60 天结果；厂家不可用时不清空已保存数据。
 - 不存在的日报保持缺失，不补零。
-- `RealTimeWeight` 是设备模板点位，只在 Machines/Raw Data 展示，不参与 Food Waste In、GHG 或肥料计算。
+- `RealTimeWeight` 在 Machines/Raw Data 展示原始值；Reports 使用其唯一采样平均值计算 Waste-in、GHG 和 Fertilizer。Graphs 的 Food Waste In 仍使用 `input.dailyInput`。
