@@ -73,7 +73,9 @@ test('report cards and CSV/Excel/PDF model share the API summary values', () => 
     avgTempC:'41.2',
     avgHumidityPct:'53.5'
   });
-  assert.deepEqual(JSON.parse(JSON.stringify(model.foodWaste.map((row) => row.value))), [12.5, 7.5]);
+  assert.deepEqual(JSON.parse(JSON.stringify(
+    model.foodWaste.map((row) => row.value).filter((value) => value !== null)
+  )), [12.5, 7.5]);
   assert.equal(model.chartTitle, 'Daily Waste-in (KG)');
 });
 
@@ -263,6 +265,25 @@ test('PDF library is loaded only when PDF export is requested', () => {
   assert.doesNotMatch(index, /src="\/src\/vendor\/jspdf\.umd\.min\.js"/);
   assert.match(source, /function loadReportJsPdf\(\)/);
   assert.match(source, /const JsPDF = await loadReportJsPdf\(\)/);
+  assert.match(source, /buildReportPdfDocument\(JsPDF, model\)/);
+  assert.match(source, /reportPdfMetricCards\(model\)/);
+});
+
+test('PDF export stops at today and uses the report card layout', () => {
+  const endDate = vm.runInContext(
+    "reportPdfEndDate({ start:'2026-11-01', end:'2026-11-30' }, new Date('2026-11-25T12:00:00+08:00'))",
+    sandbox
+  );
+  assert.equal(endDate, '2026-11-25');
+  const rows = vm.runInContext(`
+    reportFilters.period = 'monthly';
+    reportRowsThroughDate([
+      { label:'2026-11-24', value:1 },
+      { label:'2026-11-25', value:2 },
+      { label:'2026-11-26', value:3 }
+    ], '2026-11-25')
+  `, sandbox);
+  assert.deepEqual(JSON.parse(JSON.stringify(rows.map((row) => row.value))), [1, 2]);
 });
 
 test('missing report days stay missing while a real zero remains exportable', () => {
@@ -281,9 +302,12 @@ test('missing report days stay missing while a real zero remains exportable', ()
     reportApiKey = reportRequestKey();
   `, sandbox);
   const rows = vm.runInContext('reportExportModel().foodWaste', sandbox);
-  assert.deepEqual(JSON.parse(JSON.stringify(rows)), [
-    { label:'2026-10-28', xLabel:'28', value:0 }
-  ]);
+  assert.equal(rows.length, 31);
+  assert.deepEqual(JSON.parse(JSON.stringify(rows.find((row) => row.value !== null))), {
+    label:'2026-10-28',
+    xLabel:'28',
+    value:0
+  });
 });
 
 test('report charts render weight, temperature and humidity average lines', () => {

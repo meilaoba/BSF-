@@ -72,6 +72,23 @@ function reportPeriodRange(){
   return { start:year + '-' + monthText + '-01', end:year + '-' + monthText + '-' + reportPad(lastDay) };
 }
 
+function reportPdfEndDate(range, now = new Date()){
+  const today = window.BSF_METRICS && typeof window.BSF_METRICS.hongKongDateKey === 'function'
+    ? window.BSF_METRICS.hongKongDateKey(now)
+    : now.toISOString().slice(0, 10);
+  if(range.end <= today) return range.end;
+  if(range.start > today) return range.start;
+  return today;
+}
+
+function reportRowsThroughDate(rows, endDate){
+  return (Array.isArray(rows) ? rows : []).filter(function(row){
+    const label = String(row && (row.label || row.date) || '');
+    if(reportFilters.period === 'yearly') return label.slice(0, 7) <= String(endDate).slice(0, 7);
+    return label.slice(0, 10) <= String(endDate).slice(0, 10);
+  });
+}
+
 function reportRequestKey(){
   return [reportFilters.period, reportFilters.year, reportFilters.month, reportFilters.client, reportFilters.device].join('|');
 }
@@ -624,16 +641,27 @@ function reportExportModel(){
   const scopedDevice = scopedDevices()[0] || null;
   const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'Select Customer');
   const reportDevice = reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'Select Machine');
-  const reportPeriod = range.start + ' - ' + range.end;
+  const exportEndDate = reportPdfEndDate(range);
+  const reportPeriod = range.start + ' - ' + exportEndDate;
   const title = reportDisplayTitle();
   const chartTitle = reportWeightChartTitle();
-  const foodWaste = normalizedReportWeightRows(false);
+  const foodWaste = reportRowsThroughDate(normalizedReportWeightRows(true), exportEndDate);
+  const temperature = reportRowsThroughDate(normalizedReportMetricRows(
+    reportApiData && reportApiData.tempItems,
+    true
+  ), exportEndDate);
+  const humidity = reportRowsThroughDate(normalizedReportMetricRows(
+    reportApiData && reportApiData.humidityItems,
+    true
+  ), exportEndDate);
   const energyDisplay = reportEnergyDisplay(metrics);
   return {
     title:title,
     pdfTitle:title,
     chartTitle:chartTitle,
     period:reportPeriod,
+    exportStartDate:range.start,
+    exportEndDate:exportEndDate,
     client:reportClient,
     device:reportDevice,
     metrics:{
@@ -647,7 +675,11 @@ function reportExportModel(){
       avgTempC:reportMetricDisplay(metrics.avgTempC),
       avgHumidityPct:reportMetricDisplay(metrics.avgHumidityPct)
     },
-    foodWaste:foodWaste
+    foodWaste:foodWaste,
+    temperature:temperature,
+    humidity:humidity,
+    temperatureChartTitle:reportTemperatureChartTitle(),
+    humidityChartTitle:reportHumidityChartTitle()
   };
 }
 
@@ -760,80 +792,192 @@ async function exportReportExcel(){
     showReportExportToast(error && error.message ? error.message : 'Report Excel export failed', 'error');
   }
 }
+
+function reportPdfMetricCards(model){
+  return [
+    { label:'Waste Collected', value:model.metrics.wasteKg, unit:'kg', color:[59,130,246] },
+    { label:'GHG Reduced', value:model.metrics.ghgKg, unit:'kg CO2e', color:[16,185,129] },
+    { label:model.metrics.energyLabel, value:model.metrics.energyKwh, unit:'kWh', color:[239,68,68] },
+    { label:'Est. Fertilizer', value:model.metrics.fertilizerKg, unit:'kg', color:[245,158,11] },
+    { label:'Avg Container Temp', value:model.metrics.avgTempC, unit:'°C', color:[249,115,22] },
+    { label:'Avg Humidity', value:model.metrics.avgHumidityPct, unit:'%', color:[14,165,233] }
+  ];
+}
+
+function buildReportPdfDocument(JsPDF, model){
+  const doc = new JsPDF({ orientation:'portrait', unit:'pt', format:'a4', compress:true });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 34;
+  const contentWidth = pageWidth - margin * 2;
+  const pdfText = function(value){
+    return String(value === null || value === undefined ? '' : value)
+      .replace(/CO₂e/g, 'CO2e')
+      .replace(/₂/g, '2')
+      .replace(/²/g, '2');
+  };
+  const paintPage = function(){
+    doc.setFillColor(15,23,42);
+    doc.rect(0,0,pageWidth,pageHeight,'F');
+  };
+  const addPage = function(){
+    doc.addPage();
+    paintPage();
+    return margin;
+  };
+  paintPage();
+
+  doc.setTextColor(248,250,252);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(21);
+  doc.text(pdfText(model.pdfTitle || model.title), pageWidth / 2, 42, { align:'center' });
+  doc.setTextColor(148,163,184);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text(pdfText(model.period + ' · ' + model.client + ' · ' + model.device), pageWidth / 2, 61, { align:'center' });
+  doc.setDrawColor(51,65,85);
+  doc.setLineWidth(0.7);
+  doc.line(margin, 76, pageWidth - margin, 76);
+
+  const cards = reportPdfMetricCards(model);
+  const gap = 10;
+  const cardWidth = (contentWidth - gap * 2) / 3;
+  const cardHeight = 58;
+  cards.forEach(function(card, index){
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    const x = margin + column * (cardWidth + gap);
+    const y = 92 + row * (cardHeight + gap);
+    doc.setFillColor(30,41,59);
+    doc.setDrawColor(51,65,85);
+    doc.setLineWidth(0.6);
+    doc.roundedRect(x, y, cardWidth, cardHeight, 7, 7, 'FD');
+    doc.setTextColor(148,163,184);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7.5);
+    doc.text(doc.splitTextToSize(pdfText(card.label).toUpperCase(), cardWidth - 20), x + 10, y + 15);
+    doc.setTextColor(card.color[0], card.color[1], card.color[2]);
+    doc.setFontSize(18);
+    doc.text(pdfText(card.value), x + 10, y + 39);
+    const valueWidth = doc.getTextWidth(pdfText(card.value));
+    doc.setTextColor(100,116,139);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.text(pdfText(card.unit), x + 13 + valueWidth, y + 39);
+  });
+
+  const drawChart = function(rows, options, preferredY){
+    let y = preferredY;
+    const boxHeight = 190;
+    if(y + boxHeight > pageHeight - margin){
+      y = addPage();
+    }
+    doc.setTextColor(148,163,184);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10);
+    doc.text(pdfText(options.title).toUpperCase(), margin, y + 10);
+    const boxY = y + 20;
+    doc.setFillColor(15,23,42);
+    doc.setDrawColor(51,65,85);
+    doc.setLineWidth(0.6);
+    doc.roundedRect(margin, boxY, contentWidth, boxHeight - 24, 7, 7, 'FD');
+
+    const values = (rows || []).map(function(row){
+      const value = Number(row && row.value);
+      return Number.isFinite(value) ? value : null;
+    });
+    const known = values.filter(function(value){ return value !== null; });
+    if(!known.length){
+      doc.setTextColor(100,116,139);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(9);
+      doc.text('No data for the selected period', pageWidth / 2, boxY + 78, { align:'center' });
+      return boxY + boxHeight - 10;
+    }
+    const plotLeft = margin + 42;
+    const plotRight = margin + contentWidth - 18;
+    const plotTop = boxY + 30;
+    const plotBottom = boxY + boxHeight - 58;
+    const plotWidth = plotRight - plotLeft;
+    const plotHeight = plotBottom - plotTop;
+    const minKnown = Math.min.apply(null, known);
+    const maxKnown = Math.max.apply(null, known);
+    const padding = Math.max((maxKnown - minKnown) * 0.12, maxKnown * 0.04, 0.1);
+    const minValue = Math.max(0, minKnown - padding);
+    const maxValue = maxKnown + padding;
+    const scale = Math.max(maxValue - minValue, 1);
+    const yFor = function(value){
+      return plotBottom - ((value - minValue) / scale) * plotHeight;
+    };
+    const step = values.length > 1 ? plotWidth / (values.length - 1) : 0;
+
+    for(let gridIndex=0; gridIndex<3; gridIndex++){
+      const ratio = gridIndex / 2;
+      const value = minValue + scale * ratio;
+      const gridY = yFor(value);
+      doc.setDrawColor(51,65,85);
+      doc.setLineWidth(0.5);
+      doc.line(plotLeft, gridY, plotRight, gridY);
+      doc.setTextColor(100,116,139);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(6.5);
+      doc.text(value.toFixed(1), plotLeft - 5, gridY + 2, { align:'right' });
+    }
+
+    doc.setDrawColor(options.color[0], options.color[1], options.color[2]);
+    doc.setFillColor(options.color[0], options.color[1], options.color[2]);
+    doc.setLineWidth(1.6);
+    let previous = null;
+    values.forEach(function(value, index){
+      if(value === null){
+        previous = null;
+        return;
+      }
+      const x = plotLeft + step * index;
+      const pointY = yFor(value);
+      if(previous){
+        doc.line(previous.x, previous.y, x, pointY);
+      }
+      doc.circle(x, pointY, 1.4, 'F');
+      previous = { x:x, y:pointY };
+    });
+
+    const labelStep = rows.length > 31 ? Math.max(1, Math.ceil(rows.length / 12)) : 1;
+    doc.setTextColor(100,116,139);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(6.5);
+    rows.forEach(function(row, index){
+      if(index % labelStep !== 0 && index !== rows.length - 1) return;
+      const x = plotLeft + (rows.length > 1 ? step * index : 0);
+      doc.text(pdfText(row.xLabel || row.label), x, plotBottom + 14, { align:'center' });
+    });
+    return boxY + boxHeight;
+  };
+
+  let chartY = 236;
+  chartY = drawChart(model.foodWaste, {
+    title:model.chartTitle,
+    color:[59,130,246]
+  }, chartY) + 14;
+  chartY = drawChart(model.temperature, {
+    title:model.temperatureChartTitle,
+    color:[249,115,22]
+  }, chartY) + 14;
+  drawChart(model.humidity, {
+    title:model.humidityChartTitle,
+    color:[14,165,233]
+  }, chartY);
+  return doc;
+}
+
 async function exportReportPdf(){
   showReportExportToast('Loading PDF component...');
   const JsPDF = await loadReportJsPdf();
   const model = reportExportModel();
   const pdfTitle = model.pdfTitle || model.title;
-  const rows = [['Metric','Value','Unit'],['Daily Waste-in',model.metrics.wasteInAverageKg,'kg'],['Total Waste-in',model.metrics.wasteInTotalKg,'kg'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO2e'],...(reportShowsEnergy() ? [[model.metrics.energyLabel,model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%']];
-  const foodRows = [['Period','Value','Unit']].concat(model.foodWaste.map(function(row){
-    return [row.label, row.value, 'KG'];
-  }));
   if(typeof JsPDF === 'function'){
-    const doc = new JsPDF({ orientation:'portrait', unit:'pt', format:'a4' });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 34;
-    const tableWidth = Math.min(340, pageWidth - margin * 2);
-    const colWidths = [tableWidth * 0.54, tableWidth * 0.18, tableWidth * 0.28];
-    const rowHeight = 24;
-    const pdfSafeText = function(value){
-      return String(value === null || value === undefined ? '' : value)
-        .replace(/CO₂e/g, 'CO2e')
-        .replace(/₂/g, '2')
-        .replace(/²/g, '2');
-    };
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(21);
-    doc.text(pdfTitle, margin, 52);
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(9.5);
-    const metaText = model.period + ' · ' + model.client + ' · ' + model.device;
-    const metaLines = doc.splitTextToSize(pdfSafeText(metaText), tableWidth);
-    doc.text(metaLines, margin, 88);
-    let headerBottom = 88 + (metaLines.length - 1) * 12 + 10;
-    doc.setDrawColor(110);
-    doc.setLineWidth(0.6);
-    doc.line(margin, headerBottom, margin + tableWidth, headerBottom);
-
-    const drawTable = function(startY, tableRows){
-      let y = startY;
-      tableRows.forEach(function(row, rowIndex){
-        if(y + rowHeight > pageHeight - margin){
-          doc.addPage();
-          y = margin;
-        }
-        let x = margin;
-        row.forEach(function(cell, columnIndex){
-          doc.setDrawColor(120);
-          doc.setLineWidth(0.5);
-          doc.rect(x, y, colWidths[columnIndex], rowHeight);
-          doc.setFont('helvetica', rowIndex === 0 ? 'bold' : 'normal');
-          doc.setFontSize(9);
-          const lines = doc.splitTextToSize(pdfSafeText(cell), colWidths[columnIndex] - 10);
-          doc.text(lines, x + 5, y + 14);
-          x += colWidths[columnIndex];
-        });
-        y += rowHeight;
-      });
-      return y;
-    };
-
-    let cursorY = headerBottom + 50;
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(13);
-    doc.text('Report Summary', margin, cursorY);
-    cursorY = drawTable(cursorY + 26, rows);
-    cursorY += 42;
-    if(cursorY + 26 + rowHeight > pageHeight - margin){
-      doc.addPage();
-      cursorY = margin;
-    }
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(13);
-    doc.text(model.chartTitle, margin, cursorY);
-    drawTable(cursorY + 26, foodRows);
-    const fileName = 'bsf-report-' + new Date().toISOString().slice(0,10) + '.pdf';
+    const doc = buildReportPdfDocument(JsPDF, model);
+    const fileName = 'bsf-report-' + model.exportStartDate + '_to_' + model.exportEndDate + '.pdf';
     if(typeof window.showSaveFilePicker === 'function'){
       try {
         const handle = await window.showSaveFilePicker({
@@ -855,15 +999,11 @@ async function exportReportPdf(){
     return;
   }
 
-  const tableRows = rows.map(function(row){
-    return '<tr>' + row.map(function(cell){ return '<td>' + bsfEscapeHtml(cell) + '</td>'; }).join('') + '</tr>';
-  }).join('');
-  const htmlFoodRows = foodRows.slice(1).map(function(row){
-    return '<tr><td>' + bsfEscapeHtml(row[0]) + '</td><td>' + bsfEscapeHtml(row[1]) + '</td><td>' + bsfEscapeHtml(row[2]) + '</td></tr>';
-  }).join('');
+  const preview = document.getElementById('report-preview');
+  if(!preview){ showReportExportToast('Report preview is unavailable', 'error'); return; }
   const printWindow = window.open('', '_blank');
   if(!printWindow){ showReportExportToast('浏览器阻止了打印窗口，请允许弹窗', 'error'); return; }
-  printWindow.document.write('<html><head><meta charset="UTF-8"><title>' + bsfEscapeHtml(pdfTitle) + '</title><style>@page{size:A4 portrait;margin:12mm;}body{font-family:Arial,sans-serif;color:#111;}h1{font-size:26px;}h2{font-size:18px;margin-top:40px;}table{border-collapse:collapse;width:58%;}th,td{border:1px solid #777;padding:10px 8px;text-align:left;}</style></head><body><h1>' + bsfEscapeHtml(pdfTitle) + '</h1><p>' + bsfEscapeHtml(model.period) + ' · ' + bsfEscapeHtml(model.client) + ' · ' + bsfEscapeHtml(model.device) + '</p><h2>Report Summary</h2><table>' + tableRows + '</table><h2>' + bsfEscapeHtml(model.chartTitle) + '</h2><table><tr><th>Period</th><th>Value</th><th>Unit</th></tr>' + htmlFoodRows + '</table></body></html>');
+  printWindow.document.write('<html><head><meta charset="UTF-8"><title>' + bsfEscapeHtml(pdfTitle) + '</title><style>@page{size:A4 portrait;margin:8mm;}html,body{background:#0f172a !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{margin:0;padding:0;}#report-preview{max-width:none !important;margin:0 !important;}.report-chart-section{break-inside:avoid;page-break-inside:avoid;}</style></head><body>' + preview.outerHTML + '</body></html>');
   printWindow.document.close();
   printWindow.focus();
   showReportExportToast('PDF 组件未加载，已打开打印窗口作为备用');
