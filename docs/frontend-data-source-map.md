@@ -125,8 +125,8 @@
 | Est. Fertilizer | BSF 计算 | 由 Weight 推导的 Waste-in × `fertilizerRatio` |
 | Avg Container Temp | 厂家汇总 | 遥测 `CabinTemp` 平均值 |
 | Avg Humidity | 厂家汇总 | 遥测 `Humidity` 平均值 |
-| Waste In | 厂家汇总 | 查询周期内唯一 `RealTimeWeight` 采样整体求平均，再乘当月实际天数 |
-| Daily/Monthly Waste-in 图表 | 厂家汇总 | 月报按天、年报表按月显示 `RealTimeWeight` 平均值折线；负值按缺失处理，0 kg 为有效值 |
+| Waste In | 厂家汇总 | 只使用 Running/Standby 且 weight 非负的唯一采样；平均值乘有效在线天数 |
+| Daily/Monthly Waste-in 图表 | 厂家汇总 | 月报按天、年报表按月显示在线日 `RealTimeWeight` 平均值；Offline 日不参与，0 kg 为有效值 |
 | `No vendor daily report` | API 状态 | 本地和厂家日报都没有所选周期的数据 |
 | `Some vendor daily reports are unavailable` | API 状态 | 部分设备日报请求失败 |
 | Export Excel | 本地数据库 + BSF 计算 | 从 BSF Raw Data 分页读取完整周期，在浏览器生成 `.xlsx`；包含 `Weight`、`Temp`、`Humidity` 三个独立工作表及对应原生折线图，不调用厂家导出接口 |

@@ -421,7 +421,7 @@ test('Graphs and Reports resolve the same energy from matching operating status'
   close(graph.summary.ghgKg, report.summary.ghgKg);
 });
 
-test('daily aggregate zero is plotted once at noon without copying GHG forward', () => {
+test('offline daily aggregate zero does not produce GHG', () => {
   const result = aggregateTelemetrySnapshots([
     {
       capturedAt: '2026-10-31T12:00:00+08:00',
@@ -446,12 +446,13 @@ test('daily aggregate zero is plotted once at noon without copying GHG forward',
   assert.equal(result.items[12].value, 0);
   assert.equal(result.energyItems[12].value, 0);
   assert.equal(result.summary.pointCount, 1);
-  assert.equal(result.ghgItems[12].value, result.summary.ghgKg);
+  assert.equal(result.ghgItems[12].value, null);
+  assert.equal(result.summary.ghgKg, null);
   assert.deepEqual(
     result.ghgItems
       .map((item, index) => item.value === null ? null : index)
       .filter((index) => index !== null),
-    [12],
+    [],
   );
 });
 

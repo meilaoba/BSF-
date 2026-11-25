@@ -75,16 +75,25 @@ test('monthly report weights use each day average', () => {
     {
       capturedAt:'2026-11-01T12:00:00+08:00',
       deviceId:'device-a',
+      deviceStatusCode:2,
       weightAverageKg:4,
     },
     {
       capturedAt:'2026-11-01T12:00:00+08:00',
       deviceId:'device-b',
+      deviceStatusCode:1,
       weightAverageKg:6,
+    },
+    {
+      capturedAt:'2026-11-02T12:00:00+08:00',
+      deviceId:'device-a',
+      deviceStatusCode:0,
+      weightAverageKg:100,
     },
     {
       capturedAt:'2026-11-03T12:00:00+08:00',
       deviceId:'device-a',
+      deviceStatusCode:2,
       weightAverageKg:3,
     },
   ], {
@@ -107,14 +116,16 @@ test('monthly report weights use each day average', () => {
   assert.equal(result.items[29].label, '30');
   assert.equal(result.summary.sampleCount, 3);
   assert.equal(result.summary.calendarDays, 30);
+  assert.equal(result.summary.activeDays, 2);
   assert.ok(Math.abs(result.summary.averageKg - (13 / 3)) < 1e-9);
-  assert.ok(Math.abs(result.summary.totalKg - 130) < 1e-9);
+  assert.ok(Math.abs(result.summary.totalKg - (26 / 3)) < 1e-9);
 });
 
 test('report weights keep zero as valid and exclude negative source values', () => {
   const result = aggregateReportWeightItems([{
     capturedAt:'2026-11-01T12:00:00+08:00',
     deviceId:'device-a',
+    deviceStatusCode:1,
     weightAverageKg:0,
     weightSumKg:0,
     weightSampleCount:1,
@@ -129,8 +140,8 @@ test('report weights keep zero as valid and exclude negative source values', () 
     path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), 'src/services/vendor-analytics.js'),
     'utf8'
   );
-  assert.match(service, /FILTER \(WHERE t\.real_time_weight_kg >= 0\)/);
-  assert.doesNotMatch(service, /FILTER \(WHERE t\.real_time_weight_kg > 0\)/);
+  assert.match(service, /FILTER \(\s*WHERE t\.real_time_weight_kg >= 0[\s\S]*?device_online_code IS DISTINCT FROM 0/);
+  assert.doesNotMatch(service, /FILTER \(\s*WHERE t\.real_time_weight_kg > 0/);
 });
 
 test('yearly report weights average unique samples within each month', () => {
@@ -138,11 +149,13 @@ test('yearly report weights average unique samples within each month', () => {
     {
       capturedAt:'2026-01-01T12:00:00+08:00',
       deviceId:'device-a',
+      deviceStatusCode:2,
       weightAverageKg:4,
     },
     {
       capturedAt:'2026-01-02T12:00:00+08:00',
       deviceId:'device-a',
+      deviceStatusCode:2,
       weightAverageKg:7,
     },
   ], { period:'yearly', start:'2026-01-01', end:'2026-12-31' });
@@ -153,7 +166,8 @@ test('yearly report weights average unique samples within each month', () => {
   assert.equal(result.items[1].value, null);
   assert.equal(result.summary.sampleCount, 2);
   assert.equal(result.summary.calendarDays, 365);
-  assert.ok(Math.abs(result.summary.totalKg - 2007.5) < 1e-9);
+  assert.equal(result.summary.activeDays, 2);
+  assert.ok(Math.abs(result.summary.totalKg - 11) < 1e-9);
 });
 
 test('report GHG uses weight-derived Waste-in and fixed machine carbon', () => {

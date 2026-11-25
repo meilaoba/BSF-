@@ -285,10 +285,13 @@ export function aggregateReportWeightItems(rows, { period, start, end, now = new
   const buckets = new Map();
   let totalWeightKg = 0;
   let totalSamples = 0;
+  const onlineDayKeys = new Set();
 
   for (const row of Array.isArray(rows) ? rows : []) {
+    const status = Number(row?.deviceStatusCode);
+    const online = status === 1 || status === 2;
     const average = Number(row?.weightAverageKg);
-    if (!Number.isFinite(average)) continue;
+    if (!online || !Number.isFinite(average)) continue;
     const weightSum = Number(row?.weightSumKg);
     const sampleCount = Number(row?.weightSampleCount);
     const effectiveSum = Number.isFinite(weightSum) ? weightSum : average;
@@ -303,6 +306,7 @@ export function aggregateReportWeightItems(rows, { period, start, end, now = new
     buckets.set(key, bucket);
     totalWeightKg += effectiveSum;
     totalSamples += effectiveCount;
+    onlineDayKeys.add(dailyKey);
   }
 
   const todayKey = hongKongDateKey(now);
@@ -324,14 +328,16 @@ export function aggregateReportWeightItems(rows, { period, start, end, now = new
   const calendarDays = period === 'yearly'
     ? Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1
     : categories.length;
+  const activeDays = onlineDayKeys.size;
   const averageKg = totalSamples ? totalWeightKg / totalSamples : null;
   return {
     items,
     summary: {
       averageKg,
-      totalKg:averageKg === null ? null : averageKg * calendarDays,
+      totalKg:averageKg === null ? null : averageKg * activeDays,
       sampleCount:totalSamples,
       calendarDays,
+      activeDays,
     },
   };
 }

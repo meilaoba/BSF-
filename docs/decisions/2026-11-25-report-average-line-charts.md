@@ -13,12 +13,14 @@ Waste-in 口径为 `RealTimeWeight`：本月唯一 weight 记录先整体求平�
 - 年报表的每个月份点使用该月有效 weight 采样值的算术平均。
 - Reports 的 Waste-in 汇总使用查询周期内全部唯一 weight 采样的总平均值；
   当前唯一键为设备 ID + 采集时间。
-- Month Total = 周期 weight 平均值 × 当月实际天数。
+- Month Total = 周期 weight 平均值 × 有效在线天数。
 - GHG Reduced 的厨余减排项使用上述 Waste-in；Est. Fertilizer 同样使用 Waste-in。
 - 缺失日保持空白，不补零，也不跨缺失日连接折线。
 - Reports 的 Excel Weight 日聚合同样使用当天平均值。
 - Reports 在 Weight 折线图下方显示 Temperature 和 Humidity 平均折线图。
 - 负值 weight 按缺失读数处理；0 kg 是有效读数，参与平均值并绘制。
+- Offline 日不作为有效计算日：Weight、Temperature、Humidity、GHG 和 Fertilizer
+  均不使用 Offline 数据，也不计入 Total Waste-in 的有效天数。
 - Graphs 页的 Food Waste In 和 Reports 的 Waste Collected 继续使用原有权威字段，
   不因本决策改变。
 

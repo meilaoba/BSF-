@@ -416,7 +416,8 @@ export function aggregateTelemetrySnapshots(rows, {
         : (day.directWasteKg !== null ? day.directWasteKg : dailyInputWasteKg);
     const energyKwh = resolveDailyEnergyKwh(day.operatingStatusCode, day.formula);
     if (wasteKg === null && energyKwh === null) continue;
-    const fixedCarbonKg = energyKwh === null
+    const online = day.operatingStatusCode === 1 || day.operatingStatusCode === 2;
+    const fixedCarbonKg = energyKwh === null || !online
       ? null
       : machineCarbonKg(energyKwh, day.region, 1, day.formula);
     const ghgKg = wasteKg === null || fixedCarbonKg === null
