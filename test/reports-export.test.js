@@ -126,13 +126,15 @@ test('report Excel export creates independent Weight, Temp and Humidity sheets',
   assert.match(files.get('xl/charts/chart1.xml'), /<a:srgbClr val="D9D9D9"\/>/);
   assert.match(files.get('xl/charts/chart1.xml'), /<c:tickLblSkip val="1"\/>/);
   assert.match(files.get('xl/charts/chart1.xml'), /<a:defRPr sz="900"\/>/);
-  assert.match(files.get('xl/charts/chart1.xml'), /<c:v>weight<\/c:v>/);
+  assert.match(files.get('xl/charts/chart1.xml'), /<c:tx><c:strRef><c:f>'Weight'!\$G\$1<\/c:f><\/c:strRef><\/c:tx>/);
   assert.match(files.get('xl/worksheets/sheet1.xml'), /Weight\(kg\)/);
   assert.match(files.get('xl/worksheets/sheet2.xml'), /Temp\(°C\)/);
   assert.match(files.get('xl/worksheets/sheet3.xml'), /Hum\(%\)/);
   assert.match(files.get('xl/worksheets/sheet1.xml'), /<c r="F2" t="inlineStr"><is><t xml:space="preserve">1<\/t><\/is><\/c>/);
   assert.match(files.get('xl/worksheets/sheet1.xml'), /<c r="F32" t="inlineStr"><is><t xml:space="preserve">31<\/t><\/is><\/c>/);
   assert.match(files.get('xl/worksheets/sheet1.xml'), /<col min="4" max="7"[^>]*hidden="1"\/>/);
+  const rowNumbers = Array.from(files.get('xl/worksheets/sheet1.xml').matchAll(/<row r="(\d+)"/g), (match) => Number(match[1]));
+  assert.equal(new Set(rowNumbers).size, rowNumbers.length);
   const zipText = Buffer.from(new Uint8Array(lastDownload.parts[0])).toString('utf8');
   assert.match(zipText, /xl\/charts\/chart1\.xml/);
   assert.match(zipText, /<c:lineChart>/);

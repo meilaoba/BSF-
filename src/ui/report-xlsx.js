@@ -154,21 +154,25 @@
     return Math.max(4, index);
   }
 
-  function chartHelperXml(chartData){
+  function chartHelperXml(chartData, spec){
     const series = chartData.series;
     const lastColumn = column(6 + Math.max(0, series.length - 1));
-    const rows = ['<row r="1">' + inlineCell('F1', 'Chart Day', 1) +
-      series.map(function(item, index){ return inlineCell(column(6 + index) + '1', item.name, 1); }).join('') +
-      '</row>'];
-    chartData.categories.forEach(function(label, index){
-      const rowNumber = index + 2;
-      rows.push('<row r="' + rowNumber + '">' + inlineCell('F' + rowNumber, label) +
+    const seriesNames = series.map(function(item){
+      return series.length === 1 ? spec.seriesName : item.name;
+    });
+    const headerCells = [inlineCell('F1', 'Chart Day', 1)].concat(seriesNames.map(function(name, index){
+      return inlineCell(column(6 + index) + '1', name, 1);
+    }));
+    const rowCells = chartData.categories.map(function(label, index){
+      return [inlineCell('F' + (index + 2), label)].concat(
         series.map(function(item, seriesIndex){
-          return numberCell(column(6 + seriesIndex) + rowNumber, item.values[index]);
-        }).join('') + '</row>');
+          return numberCell(column(6 + seriesIndex) + (index + 2), item.values[index]);
+        })
+      );
     });
     return {
-      rows:rows.join(''),
+      headerCells:headerCells,
+      rowCells:rowCells,
       categoryRange:'$F$2:$F$' + Math.max(2, chartData.categories.length + 1),
       seriesRanges:series.map(function(_, index){
         const letter = column(6 + index);
@@ -178,22 +182,31 @@
     };
   }
 
-  function worksheetXml(name, title, key, rows, index, chartData){
-    const sheetRows = rows.map(function(row, rowIndex){
-      const rowNumber = rowIndex + 2;
-      return '<row r="' + rowNumber + '">' +
-        inlineCell('A' + rowNumber, row.recordedAt) +
-        inlineCell('B' + rowNumber, row.device) +
-        numberCell('C' + rowNumber, row[key]) +
-        '</row>';
-    }).join('');
-    const header = '<row r="1">' +
-      inlineCell('A1', 'Recorded Time', 1) +
-      inlineCell('B1', 'Device', 1) +
-      inlineCell('C1', title, 1) +
-      '</row>';
-    const helper = chartHelperXml(chartData);
+  function worksheetXml(name, title, key, rows, index, chartData, spec){
+    const helper = chartHelperXml(chartData, spec);
     const lastRow = Math.max(rows.length + 1, chartData.categories.length + 1);
+    const cellsByRow = new Map();
+    const addCell = function(rowNumber, cell){
+      const cells = cellsByRow.get(rowNumber) || [];
+      cells.push(cell);
+      cellsByRow.set(rowNumber, cells);
+    };
+    addCell(1, inlineCell('A1', 'Recorded Time', 1));
+    addCell(1, inlineCell('B1', 'Device', 1));
+    addCell(1, inlineCell('C1', title, 1));
+    helper.headerCells.forEach(function(cell){ addCell(1, cell); });
+    rows.forEach(function(row, rowIndex){
+      const rowNumber = rowIndex + 2;
+      addCell(rowNumber, inlineCell('A' + rowNumber, row.recordedAt));
+      addCell(rowNumber, inlineCell('B' + rowNumber, row.device));
+      addCell(rowNumber, numberCell('C' + rowNumber, row[key]));
+    });
+    helper.rowCells.forEach(function(cells, rowIndex){
+      cells.forEach(function(cell){ addCell(rowIndex + 2, cell); });
+    });
+    const sheetRows = Array.from({ length:lastRow }, function(_, index){
+      return '<row r="' + (index + 1) + '">' + (cellsByRow.get(index + 1) || []).join('') + '</row>';
+    }).join('');
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
       'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
@@ -204,7 +217,7 @@
       '<col min="2" max="2" width="24" customWidth="1"/>' +
       '<col min="3" max="3" width="14" customWidth="1"/>' +
       '<col min="4" max="' + columnLetterToIndex(helper.lastColumn) + '" width="14" customWidth="1" hidden="1"/></cols>' +
-      '<sheetData>' + header + sheetRows + helper.rows + '</sheetData>' +
+      '<sheetData>' + sheetRows + '</sheetData>' +
       '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>' +
       '<drawing r:id="rId1"/>' +
       '</worksheet>';
@@ -231,7 +244,7 @@
     return series.map(function(item, index){
       const color = colors[index % colors.length];
       return '<c:ser><c:idx val="' + index + '"/><c:order val="' + index + '"/>' +
-        '<c:tx><c:v>' + xmlEscape(series.length === 1 ? spec.seriesName : item.name) + '</c:v></c:tx>' +
+        '<c:tx><c:strRef><c:f>' + ref + '$' + column(6 + index) + '$1</c:f></c:strRef></c:tx>' +
         '<c:spPr><a:ln w="25400" cap="rnd"><a:solidFill><a:srgbClr val="' + color + '"/></a:solidFill>' +
         '<a:round/></a:ln></c:spPr>' +
         '<c:marker><c:symbol val="none"/></c:marker>' +
@@ -246,7 +259,7 @@
     const valAxisId = catAxisId + 1;
     const labelRotation = chartData.categories.length > 12 ? '-2700000' : '0';
     const chartTitle = options.chartTitle || title;
-    const ranges = chartHelperXml(chartData);
+    const ranges = chartHelperXml(chartData, spec);
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ' +
       'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
@@ -354,7 +367,7 @@
     specs.forEach(function(spec, index){
       const number = index + 1;
       const chartData = chartDataFor(sorted, spec.key, buildOptions);
-      files.set('xl/worksheets/sheet' + number + '.xml', worksheetXml(spec.name, spec.title, spec.key, sorted, index, chartData));
+      files.set('xl/worksheets/sheet' + number + '.xml', worksheetXml(spec.name, spec.title, spec.key, sorted, index, chartData, spec));
       files.set('xl/worksheets/_rels/sheet' + number + '.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing' + number + '.xml"/>' +
