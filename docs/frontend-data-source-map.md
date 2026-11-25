@@ -76,7 +76,7 @@
 | Average Weight | 厂家汇总 | 在线 Running/Standby 的 `RealTimeWeight` 平均值；Offline 和负值排除，0 kg 有效 |
 | Container Temp | 厂家汇总 | `CabinTemp` 的时/日/月平均 |
 | Container Humidity | 厂家汇总 | `Humidity` 的时/日/月平均 |
-| Energy Consumed | BSF 计算 | 只计算 Running/Standby；Offline 日期不显示，也不计入汇总 |
+| Energy Consumed | BSF 计算 | 只计算 Running/Standby；普通设备 `+1.5 kWh/日`，太阳能 CR-50S 为 `-1.5 kWh/日`；Offline 不显示 |
 | GHG Reduced | BSF 计算 | 由 Weight 推导的 Waste-in × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
 | Avg 值 | BSF 计算 | 前端对所有非空图点求平均 |
 | `No data for selected period` | 状态文本 | 当前选择范围聚合后无值 |
@@ -121,7 +121,7 @@
 | Client / Machine / Period | 用户输入 + 本地映射 | 页面筛选条件 |
 | Waste Collected | BSF 计算 | 与 Total Waste-in 相同，来自在线 Running/Standby 的 Weight 去重平均值 × 有效天数 |
 | GHG Reduced | BSF 计算 | 厨余量 × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
-| Energy Consumed | BSF 计算 | 厂家 `deviceOnline` 聚合后的运行/待机日 × 每日能耗 |
+| Energy Consumed | BSF 计算 | 运行/待机日 × 每日净能耗；太阳能设备使用负值 |
 | Est. Fertilizer | BSF 计算 | 由 Weight 推导的 Waste-in × `fertilizerRatio` |
 | Avg Container Temp | 厂家汇总 | 遥测 `CabinTemp` 平均值 |
 | Avg Humidity | 厂家汇总 | 遥测 `Humidity` 平均值 |

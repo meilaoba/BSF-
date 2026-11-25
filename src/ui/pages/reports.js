@@ -40,6 +40,16 @@ function reportHumidityChartTitle(){
   return reportFilters.period === 'monthly' ? 'Daily Average Humidity (%)' : 'Monthly Average Humidity (%)';
 }
 
+function reportEnergyDisplay(metrics){
+  const raw = metrics && metrics.energyKwh;
+  if(raw === null || raw === undefined) return { label:'Energy Consumed', value:null };
+  const value = Number(raw);
+  return {
+    label:Number.isFinite(value) && value < 0 ? 'Solar Energy Credit' : 'Energy Consumed',
+    value:Number.isFinite(value) ? Math.abs(value) : null
+  };
+}
+
 function reportPad(value){
   return String(value).padStart(2, '0');
 }
@@ -539,7 +549,8 @@ function renderReports(container, options){
   const humidityChartTitle = reportHumidityChartTitle();
   const wasteValue = reportMetricDisplay(metrics.wasteKg);
   const ghgValue = reportMetricDisplay(metrics.ghgKg);
-  const energyValue = reportMetricDisplay(metrics.energyKwh);
+  const energyDisplay = reportEnergyDisplay(metrics);
+  const energyValue = reportMetricDisplay(energyDisplay.value);
   const fertilizerValue = reportMetricDisplay(metrics.fertilizerKg);
   const avgTemp = reportMetricDisplay(metrics.avgTempC);
   const avgHumidity = reportMetricDisplay(metrics.avgHumidityPct);
@@ -547,7 +558,7 @@ function renderReports(container, options){
   const vendorDataStatusMarkup = vendorDataStatus
     ? '<p id="report-data-status" role="status" style="margin:-16px 0 24px;text-align:center;color:' + vendorDataStatus.color + ';font-size:13px;">' + bsfEscapeHtml(vendorDataStatus.text) + '</p>'
     : '';
-  const energyCard = reportShowsEnergy() ? card('Energy Consumed', energyValue, 'kWh', '#ef4444') : '';
+  const energyCard = reportShowsEnergy() ? card(energyDisplay.label, energyValue, 'kWh', '#ef4444') : '';
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Report Generation</h2>
@@ -617,6 +628,7 @@ function reportExportModel(){
   const title = reportDisplayTitle();
   const chartTitle = reportWeightChartTitle();
   const foodWaste = normalizedReportWeightRows(false);
+  const energyDisplay = reportEnergyDisplay(metrics);
   return {
     title:title,
     pdfTitle:title,
@@ -629,7 +641,8 @@ function reportExportModel(){
       wasteInTotalKg:reportMetricDisplay(metrics.wasteInTotalKg),
       wasteKg:reportMetricDisplay(metrics.wasteKg),
       ghgKg:reportMetricDisplay(metrics.ghgKg),
-      energyKwh:reportMetricDisplay(metrics.energyKwh),
+      energyKwh:reportMetricDisplay(energyDisplay.value),
+      energyLabel:energyDisplay.label,
       fertilizerKg:reportMetricDisplay(metrics.fertilizerKg),
       avgTempC:reportMetricDisplay(metrics.avgTempC),
       avgHumidityPct:reportMetricDisplay(metrics.avgHumidityPct)
@@ -720,7 +733,7 @@ function excelCell(value){
 
 function exportReportCsv(){
   const model = reportExportModel();
-  const rows = [['Report',model.title],['Period',model.period],['Client',model.client],['Machine',model.device],[],['Metric','Value','Unit'],['Daily Waste-in',model.metrics.wasteInAverageKg,'kg'],['Total Waste-in',model.metrics.wasteInTotalKg,'kg'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO₂e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%'],[],[model.chartTitle]];
+  const rows = [['Report',model.title],['Period',model.period],['Client',model.client],['Machine',model.device],[],['Metric','Value','Unit'],['Daily Waste-in',model.metrics.wasteInAverageKg,'kg'],['Total Waste-in',model.metrics.wasteInTotalKg,'kg'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO₂e'],...(reportShowsEnergy() ? [[model.metrics.energyLabel,model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%'],[],[model.chartTitle]];
   model.foodWaste.forEach(function(row){ rows.push([row.label,row.value]); });
   downloadReportFile('bsf-report-' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv;charset=utf-8', '\uFEFF' + rows.map(function(row){ return row.map(csvCell).join(','); }).join('\r\n'));
   showReportExportToast('CSV 导出已开始');
@@ -752,7 +765,7 @@ async function exportReportPdf(){
   const JsPDF = await loadReportJsPdf();
   const model = reportExportModel();
   const pdfTitle = model.pdfTitle || model.title;
-  const rows = [['Metric','Value','Unit'],['Daily Waste-in',model.metrics.wasteInAverageKg,'kg'],['Total Waste-in',model.metrics.wasteInTotalKg,'kg'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO2e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%']];
+  const rows = [['Metric','Value','Unit'],['Daily Waste-in',model.metrics.wasteInAverageKg,'kg'],['Total Waste-in',model.metrics.wasteInTotalKg,'kg'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO2e'],...(reportShowsEnergy() ? [[model.metrics.energyLabel,model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%']];
   const foodRows = [['Period','Value','Unit']].concat(model.foodWaste.map(function(row){
     return [row.label, row.value, 'KG'];
   }));

@@ -199,6 +199,23 @@ function graphSeriesValidCount(rows, key){
   }).length;
 }
 
+function graphEnergyDisplay(rows){
+  const solar = (Array.isArray(rows) ? rows : []).some(function(row){
+    const value = Number(row && row.value);
+    return Number.isFinite(value) && value < 0;
+  });
+  return {
+    solar:solar,
+    rows:(Array.isArray(rows) ? rows : []).map(function(row){
+      const raw = row && row.value;
+      const value = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
+      return Object.assign({}, row, {
+        value:Number.isFinite(value) ? Math.abs(value) : null
+      });
+    })
+  };
+}
+
 function graphErrorMessage(error){
   const code = error && error.code ? String(error.code) : '';
   if(code === 'VENDOR_ACCOUNT_SCOPE_REQUIRED'){
@@ -517,7 +534,8 @@ function renderGraphs(container){
   const foodWaste = graphSeries('items');
   const ghg = graphSeries('ghgItems');
   const temperature = graphSeries('tempItems');
-  const energy = graphSeries('energyItems');
+  const energyDisplay = graphEnergyDisplay(graphSeries('energyItems'));
+  const energy = energyDisplay.rows;
   const retry = graphApiError ? ' <button onclick="retryGraphData()" style="margin-left:8px;padding:2px 8px;background:#334155;border:1px solid #475569;border-radius:5px;color:#e2e8f0;cursor:pointer;font-size:11px;">Retry</button>' : '';
 
   container.innerHTML = `
@@ -538,7 +556,7 @@ function renderGraphs(container){
     ${graphChartMarkup(graphChartTitle('foodWaste'), foodWaste, 'value', '#3b82f6', 'KG')}
     ${graphChartMarkup(graphChartTitle('ghg'), ghg, 'value', '#10b981', 'kg CO₂e')}
     ${currentRole === 'admin'
-      ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">' + graphChartMarkup(graphChartTitle('temp'), temperature, 'value', '#f97316', '°C') + graphChartMarkup(graphChartTitle('energy'), energy, 'value', '#ef4444', 'kWh') + '</div>'
+      ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">' + graphChartMarkup(graphChartTitle('temp'), temperature, 'value', '#f97316', '°C') + graphChartMarkup(energyDisplay.solar ? graphPeriodLabel(graphPeriods.foodWaste) + ' Solar Energy Credit (kWh)' : graphChartTitle('energy'), energy, 'value', '#ef4444', 'kWh') + '</div>'
       : graphChartMarkup(graphChartTitle('temp'), temperature, 'value', '#f97316', '°C')}
   `;
   loadGraphApiData();

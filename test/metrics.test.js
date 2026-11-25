@@ -270,7 +270,7 @@ test('applies per-site monthly mileage and the solar electricity branch', () => 
   const cicTransport = ((140 * 12) / 365 / 100) * 8.3 * 2.32;
   const hsitpTransport = ((24 * 12) / 365 / 100) * 8.3 * 2.32;
   close(result.summary.wasteKg, 4);
-  close(result.summary.energyKwh, 3);
+  close(result.summary.energyKwh, 0);
   close(result.summary.ghgKg,
     (2 * 1.5 - 1.5 * 0.37 - cicTransport)
       + (2 * 1.5 + 1.5 * 0.37 - hsitpTransport));

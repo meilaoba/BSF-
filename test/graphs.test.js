@@ -77,6 +77,16 @@ test('graph errors distinguish missing account linkage from an empty dataset', (
   );
 });
 
+test('solar graph energy is shown as a positive energy credit', () => {
+  const result = JSON.parse(JSON.stringify(vm.runInContext(`graphEnergyDisplay([
+    { date:'2026-11-01', value:-1.5 },
+    { date:'2026-11-02', value:-1.5 },
+    { date:'2026-11-03', value:null }
+  ])`, sandbox)));
+  assert.equal(result.solar, true);
+  assert.deepEqual(result.rows.map((row) => row.value), [1.5, 1.5, null]);
+});
+
 test('a failed graph request is rendered once instead of starting a fetch loop', async () => {
   let calls = 0;
   sandbox.fetch = async () => {

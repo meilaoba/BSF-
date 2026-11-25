@@ -68,12 +68,21 @@ test('report cards and CSV/Excel/PDF model share the API summary values', () => 
     wasteKg:'26.0',
     ghgKg:'18.4',
     energyKwh:'3.0',
+    energyLabel:'Energy Consumed',
     fertilizerKg:'2.4',
     avgTempC:'41.2',
     avgHumidityPct:'53.5'
   });
   assert.deepEqual(JSON.parse(JSON.stringify(model.foodWaste.map((row) => row.value))), [12.5, 7.5]);
   assert.equal(model.chartTitle, 'Daily Waste-in (KG)');
+});
+
+test('solar report energy is labelled as a positive credit', () => {
+  const result = vm.runInContext('reportEnergyDisplay({ energyKwh:-10.5 })', sandbox);
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    label:'Solar Energy Credit',
+    value:10.5,
+  });
 });
 
 test('report preview exposes PDF and Excel exports without a CSV button', () => {

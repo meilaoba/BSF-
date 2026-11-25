@@ -19,12 +19,15 @@
 
 | 设备日状态 | 能耗 |
 | --- | ---: |
-| Running `2` | `standbyEnergyKwh`，默认 `1.5 kWh/日` |
-| Standby `1` | `standbyEnergyKwh`，默认 `1.5 kWh/日` |
+| Running `2` | 普通设备 `standbyEnergyKwh`；太阳能设备 `-1.5 kWh/日` |
+| Standby `1` | 普通设备 `standbyEnergyKwh`；太阳能设备 `-1.5 kWh/日` |
 | Offline `0` | 不进入平均、能耗、GHG 和肥料计算，图表保持空白 |
 | 没有可用状态 | `null`，界面显示 `—` |
 
 厂家日报返回的 `powerConsume` 不再覆盖上述结果。
+
+太阳能型号（当前为 CR-50S）的日净能耗固定为 `-1.5 kWh`，因此
+`Energy Consumed` 也显示负值，并与电力碳排 `-0.555 kg CO₂e/日` 保持一致。
 
 ## 最新设备状态快照
 

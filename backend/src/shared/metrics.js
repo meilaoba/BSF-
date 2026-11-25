@@ -192,7 +192,9 @@ export function resolveDailyEnergyKwh(operatingStatusCode, formula = {}) {
   const status = finiteNumber(operatingStatusCode);
   if (status === 0) return 0;
   if (status !== 1 && status !== 2) return null;
-  return formulaNumber(formula, 'standbyEnergyKwh');
+  return formulaBoolean(formula, 'solar')
+    ? -SOLAR_DAILY_ENERGY_KWH
+    : formulaNumber(formula, 'standbyEnergyKwh');
 }
 
 export function averageDailyDistanceKm(formula = {}) {
