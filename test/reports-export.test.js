@@ -8,10 +8,15 @@ import * as metrics from '../src/shared/metrics.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = fs.readFileSync(path.join(root, 'src/ui/pages/reports.js'), 'utf8');
+let lastDownload = null;
 const sandbox = {
   console,
   window:{ BSF_METRICS:metrics, BSF_API_CONFIG:{ enabled:true } },
-  document:{ getElementById(){ return null; } },
+  document:{
+    getElementById(){ return null; },
+    createElement(){ return { click(){}, remove(){}, style:{} }; },
+    body:{ appendChild(){} },
+  },
   setInterval(){ return 0; },
   clearTimeout(){},
   setTimeout(){ return 0; },
@@ -23,8 +28,16 @@ const sandbox = {
   isClientScopedRole(){ return sandbox.clientScoped === true; },
   bsfEscapeHtml(value){ return String(value ?? ''); },
   bsfSpreadsheetSafeText(value){ return String(value ?? ''); },
-  URL:{ createObjectURL(){ return 'blob:test'; }, revokeObjectURL(){} },
-  Blob:class {},
+  URL:{
+    createObjectURL(blob){ lastDownload = blob; return 'blob:test'; },
+    revokeObjectURL(){},
+  },
+  Blob:class {
+    constructor(parts, options){
+      this.parts = parts;
+      this.type = options && options.type;
+    }
+  },
   clientScoped:false,
 };
 vm.createContext(sandbox);
@@ -61,8 +74,27 @@ test('report preview exposes PDF and Excel exports without a CSV button', () => 
   assert.match(source, /onclick="exportReportPdf\(\)"/);
   assert.match(source, /onclick="exportReportExcel\(\)"/);
   assert.doesNotMatch(source, /onclick="exportReportCsv\(\)"/);
-  assert.match(source, /downloadDeviceExport/);
-  assert.doesNotMatch(source, /bsf-report-.*\.xls/);
+  assert.doesNotMatch(source, /downloadDeviceExport/);
+  assert.match(source, /bsf-report-.*\.xls/);
+  assert.match(source, /reportExportModel\(\)/);
+});
+
+test('report Excel export is generated locally from the displayed report model', () => {
+  vm.runInContext(`
+    reportFilters = { client:'Client A', device:'', period:'monthly', month:10, year:2026 };
+    reportFoodWasteData = [{ date:'2026-10-01', value:12.5 }];
+    reportApiData = {
+      summary:{ wasteKg:20, ghgKg:18.4, energyKwh:3, fertilizerKg:2.4, avgTempC:41.2, avgHumidityPct:53.5, pointCount:1 },
+      items:reportFoodWasteData
+    };
+    reportApiKey = reportRequestKey();
+    exportReportExcel();
+  `, sandbox);
+
+  assert.equal(lastDownload.type, 'application/vnd.ms-excel;charset=utf-8');
+  assert.match(String(lastDownload.parts[0]), /Waste Collected/);
+  assert.match(String(lastDownload.parts[0]), /18\.4/);
+  assert.match(String(lastDownload.parts[0]), /2026-10-01/);
 });
 
 test('PDF library is loaded only when PDF export is requested', () => {

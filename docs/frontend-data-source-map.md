@@ -128,7 +128,7 @@
 | Food Waste In 图表 | 厂家汇总 | 遥测 `input.dailyInput` 吨值转换为 kg，不依赖厂家日报是否存在 |
 | `No vendor daily report` | API 状态 | 本地和厂家日报都没有所选周期的数据 |
 | `Some vendor daily reports are unavailable` | API 状态 | 部分设备日报请求失败 |
-| Export Excel | 厂家文件 | 后端代理厂家 `/export/table`，日期结束日自动转换为排他日期 |
+| Export Excel | BSF 计算 | 使用页面当前 Reports 汇总和 Food Waste In 数据在浏览器生成 Excel，不调用厂家导出接口 |
 
 ## Clients
 

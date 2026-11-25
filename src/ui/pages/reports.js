@@ -512,33 +512,14 @@ function exportReportCsv(){
   showReportExportToast('CSV 导出已开始');
 }
 
-async function exportReportExcel(){
-  if(!window.BSF_API || typeof window.BSF_API.downloadDeviceExport !== 'function'){
-    showReportExportToast('Vendor Excel export is unavailable', 'error');
-    return;
-  }
-  const selectedDevice = scopedDevices().find(function(device){
-    return String(device.backendId || device.id) === String(reportFilters.device);
-  });
-  const scoped = scopedDevices();
-  const exportDevice = selectedDevice || (scoped.length === 1 ? scoped[0] : null);
-  if(!exportDevice){
-    showReportExportToast('Select one Machine before exporting Excel', 'error');
-    return;
-  }
-  const range = reportPeriodRange();
-  showReportExportToast('Downloading vendor Excel export...');
-  try {
-    const file = await window.BSF_API.downloadDeviceExport({
-      machineId:exportDevice.id,
-      startDate:range.start,
-      endDate:range.end
-    });
-    downloadReportBlob(file.filename, file.blob);
-    showReportExportToast('Vendor Excel export downloaded', 'success');
-  } catch(error) {
-    showReportExportToast(error && error.message ? error.message : 'Vendor Excel export failed', 'error');
-  }
+function exportReportExcel(){
+  const model = reportExportModel();
+  const rows = [['Metric','Value','Unit'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO₂e'],...(reportShowsEnergy() ? [['Energy Consumed',model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%']];
+  const tableRows = rows.map(function(row){ return '<tr>' + row.map(excelCell).join('') + '</tr>'; }).join('');
+  const foodRows = model.foodWaste.map(function(row){ return '<tr>' + excelCell(row.label) + excelCell(row.value) + excelCell('KG') + '</tr>'; }).join('');
+  const html = '<html><head><meta charset="UTF-8"></head><body><h2>' + bsfEscapeHtml(model.title) + '</h2><p>' + bsfEscapeHtml(model.period) + ' · ' + bsfEscapeHtml(model.client) + ' · ' + bsfEscapeHtml(model.device) + '</p><table border="1">' + tableRows + '</table><h3>' + bsfEscapeHtml(model.chartTitle) + '</h3><table border="1"><tr><td>Period</td><td>Value</td><td>Unit</td></tr>' + foodRows + '</table></body></html>';
+  downloadReportFile('bsf-report-' + new Date().toISOString().slice(0,10) + '.xls', 'application/vnd.ms-excel;charset=utf-8', '\uFEFF' + html);
+  showReportExportToast('Excel export started');
 }
 async function exportReportPdf(){
   showReportExportToast('Loading PDF component...');
