@@ -128,7 +128,7 @@
 | Food Waste In 图表 | 厂家汇总 | 遥测 `input.dailyInput` 吨值转换为 kg，不依赖厂家日报是否存在 |
 | `No vendor daily report` | API 状态 | 本地和厂家日报都没有所选周期的数据 |
 | `Some vendor daily reports are unavailable` | API 状态 | 部分设备日报请求失败 |
-| Export Excel | BSF 计算 | 浏览器本地生成 `.xlsx`，包含 `Weight`、`Temp`、`Humidity` 三个独立工作表及对应原生折线图，不调用厂家导出接口 |
+| Export Excel | 本地数据库 + BSF 计算 | 从 BSF Raw Data 分页读取完整周期，在浏览器生成 `.xlsx`；包含 `Weight`、`Temp`、`Humidity` 三个独立工作表及对应原生折线图，不调用厂家导出接口 |
 
 ## Clients
 

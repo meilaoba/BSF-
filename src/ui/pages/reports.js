@@ -124,6 +124,73 @@ function reportRowsForPeriod(){
   });
 }
 
+function reportAddDays(value, days){
+  const date = new Date(String(value || '').slice(0,10) + 'T00:00:00Z');
+  if(!Number.isFinite(date.getTime())) return '';
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0,10);
+}
+
+function reportExportRanges(){
+  const range = reportPeriodRange();
+  const ranges = [];
+  let start = range.start;
+  const finalExclusive = reportAddDays(range.end, 1);
+  while(start < finalExclusive){
+    const candidate = reportAddDays(start, 60);
+    const end = candidate < finalExclusive ? candidate : finalExclusive;
+    ranges.push({ start:start + 'T00:00:00', end:end + 'T00:00:00' });
+    start = end;
+  }
+  return ranges;
+}
+
+function reportMergeExportRows(rows){
+  const unique = new Map();
+  (Array.isArray(rows) ? rows : []).forEach(function(row){
+    if(!row || !row.device || !row.recordedAt) return;
+    unique.set(row.device + '@' + (row.sourceTimestampSeconds || row.recordedAt), row);
+  });
+  return Array.from(unique.values()).sort(function(left, right){
+    return String(left.recordedAt).localeCompare(String(right.recordedAt)) ||
+      String(left.device).localeCompare(String(right.device));
+  });
+}
+
+async function reportRowsForExcelExport(){
+  if(typeof window.BSF_LOAD_RAW_SAMPLES !== 'function') return reportRowsForPeriod();
+  const selected = scopedDevices().find(function(device){
+    return String(device.backendId || device.id) === String(reportFilters.device);
+  });
+  const fallback = isUserRole() ? scopedDevices()[0] : null;
+  const exportDevice = selected || fallback;
+  const rows = [];
+  for(const range of reportExportRanges()){
+    let page = 1;
+    let total = 0;
+    let fetched = 0;
+    while(page <= 1000){
+      const result = await window.BSF_LOAD_RAW_SAMPLES({
+        page:page,
+        pageSize:30,
+        start:range.start,
+        end:range.end,
+        clientId:reportFilters.client || undefined,
+        machineId:exportDevice ? exportDevice.id : undefined,
+        devices:scopedDevices(),
+      });
+      const batch = result && Array.isArray(result.rows) ? result.rows : [];
+      rows.push.apply(rows, batch);
+      fetched += batch.length;
+      total = Number(result && result.total) || 0;
+      if(!batch.length || fetched >= total) break;
+      page += 1;
+    }
+    if(fetched < total) throw new Error('The report contains too many samples; narrow the period.');
+  }
+  return reportMergeExportRows(rows);
+}
+
 function reportYearOptions(){
   const years = new Set(rawDataRows.map(function(row){ return String(row.recordedAt || '').slice(0,4); }).filter(Boolean));
   years.add(String(reportFilters.year || new Date().getFullYear()));
@@ -512,14 +579,20 @@ function exportReportCsv(){
   showReportExportToast('CSV 导出已开始');
 }
 
-function exportReportExcel(){
+async function exportReportExcel(){
   if(!window.BSF_REPORT_XLSX || typeof window.BSF_REPORT_XLSX.build !== 'function'){
     showReportExportToast('Excel generator is unavailable', 'error');
     return;
   }
-  const blob = window.BSF_REPORT_XLSX.build(reportRowsForPeriod());
-  downloadReportBlob('bsf-report-' + new Date().toISOString().slice(0,10) + '.xlsx', blob);
-  showReportExportToast('Excel export started');
+  showReportExportToast('Loading complete report data...');
+  try {
+    const rows = await reportRowsForExcelExport();
+    const blob = window.BSF_REPORT_XLSX.build(rows);
+    downloadReportBlob('bsf-report-' + new Date().toISOString().slice(0,10) + '.xlsx', blob);
+    showReportExportToast('Excel export started');
+  } catch(error) {
+    showReportExportToast(error && error.message ? error.message : 'Report Excel export failed', 'error');
+  }
 }
 async function exportReportPdf(){
   showReportExportToast('Loading PDF component...');

@@ -84,7 +84,7 @@ test('report preview exposes PDF and Excel exports without a CSV button', () => 
   assert.match(source, /BSF_REPORT_XLSX\.build/);
 });
 
-test('report Excel export creates independent Weight, Temp and Humidity sheets', () => {
+test('report Excel export creates independent Weight, Temp and Humidity sheets', async () => {
   sandbox.window.BSF_DEVICE_HISTORY_ROWS = [{
     recordedAt: '2026-10-01 10:00:00',
     device: 'device-a',
@@ -94,7 +94,7 @@ test('report Excel export creates independent Weight, Temp and Humidity sheets',
   }];
   sandbox.scopedDevices = function(){ return [{ id:'device-a', client:'Client A' }]; };
   sandbox.devices = [{ id:'device-a', client:'Client A' }];
-  vm.runInContext(`
+  await vm.runInContext(`
     reportFilters = { client:'Client A', device:'', period:'monthly', month:10, year:2026 };
     exportReportExcel();
   `, sandbox);
@@ -132,6 +132,43 @@ test('report Excel export leaves missing measurements blank', () => {
   assert.match(files.get('xl/worksheets/sheet1.xml'), /<c r="C2"\/>/);
   assert.match(files.get('xl/worksheets/sheet2.xml'), /<c r="C2"\/>/);
   assert.match(files.get('xl/worksheets/sheet3.xml'), /<c r="C2"\/>/);
+});
+
+test('report Excel export loads every raw-data page instead of the cached rows', async () => {
+  const allRows = Array.from({ length:65 }, function(_, index){
+    const minute = String(index % 60).padStart(2, '0');
+    return {
+      recordedAt:'2026-10-01 10:' + minute + ':00',
+      sourceTimestampSeconds:1790000000 + index,
+      device:'device-a',
+      weight:index,
+      temperature:40 + index / 10,
+      humidity:50,
+    };
+  });
+  sandbox.window.BSF_LOAD_RAW_SAMPLES = async function(options){
+    const start = (options.page - 1) * options.pageSize;
+    return {
+      rows:allRows.slice(start, start + options.pageSize),
+      total:allRows.length,
+    };
+  };
+  sandbox.scopedDevices = function(){ return [{ id:'device-a', client:'Client A' }]; };
+  sandbox.devices = [{ id:'device-a', client:'Client A' }];
+
+  const rows = await vm.runInContext(`
+    reportFilters = { client:'Client A', device:'', period:'monthly', month:10, year:2026 };
+    reportRowsForExcelExport();
+  `, sandbox);
+
+  assert.equal(rows.length, 65);
+  assert.deepEqual(
+    Array.from(rows, (row) => Number(row.weight)).sort((left, right) => left - right),
+    Array.from({ length:65 }, (_, index) => index)
+  );
+  delete sandbox.window.BSF_LOAD_RAW_SAMPLES;
+  sandbox.scopedDevices = function(){ return []; };
+  sandbox.devices = [];
 });
 
 test('PDF library is loaded only when PDF export is requested', () => {
