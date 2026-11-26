@@ -53,7 +53,7 @@ export function createBackendApi(options = {}) {
 
     getUsers(params) { return http.get('/users', params); },
     getVendorUsers(params) { return http.get('/vendor-users', params); },
-    deleteVendorUser(id) { return http.delete('/vendor-users', { vendorUserId: id }); },
+    deleteVendorUser(id) { return http.delete('/vendor-users?vendorUserId=' + encodeURIComponent(id)); },
     getUserAssignments(id) { return http.get('/vendor-users/assignments', { userId: id }); },
     setUserAssignments(id, deviceIds) { return http.put('/vendor-users/assignments', { userId: id, deviceId: deviceIds }); },
     createUser(data) { return http.post('/users', data); },
