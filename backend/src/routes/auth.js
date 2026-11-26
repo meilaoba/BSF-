@@ -148,6 +148,21 @@ async function machineIdsForUser(user) {
   return machineIds;
 }
 
+async function resolveVendorLoginName(identifier) {
+  const value = String(identifier || '').trim();
+  if (!value.includes('@')) return value;
+  const { rows } = await query(
+    `SELECT vendor_username
+       FROM users
+      WHERE lower(email) = lower($1)
+        AND vendor_username IS NOT NULL
+        AND status = 'active'
+      LIMIT 1`,
+    [value]
+  );
+  return rows[0]?.vendor_username || value;
+}
+
 async function resolveUniqueContact(kind, value, existingUserId) {
   if (!value) return null;
   const column = kind === 'email' ? 'lower(email)' : 'phone';
@@ -232,7 +247,7 @@ export function registerAuthRoutes(router) {
     }
 
     const body = await readJsonBody(req);
-    const userName = requireString(body.userName ?? body.email, 'userName', { max: 200 });
+    const loginIdentifier = requireString(body.userName ?? body.email, 'userName', { max: 200 });
     const password = body.password ?? body.userPass;
     if (typeof password !== 'string' || password.length === 0 || password.length > 256) {
       throw new ValidationError('`password` is required and must be at most 256 characters');
@@ -240,17 +255,18 @@ export function registerAuthRoutes(router) {
     const ip = clientIp(req);
 
     pruneLoginState();
-    checkLoginRate(ip, userName);
+    checkLoginRate(ip, loginIdentifier);
 
     let vendorResult;
     try {
-      vendorResult = await loginWithVendor(userName, password);
+      const vendorUserName = await resolveVendorLoginName(loginIdentifier);
+      vendorResult = await loginWithVendor(vendorUserName, password);
     } catch (err) {
       const isCredentialFailure = err?.code === 'INVALID_CREDENTIALS';
-      const blocked = isCredentialFailure ? recordLoginFailure(ip, userName) : false;
+      const blocked = isCredentialFailure ? recordLoginFailure(ip, loginIdentifier) : false;
       await audit({
         actorType: 'system',
-        actorLabel: userName.slice(0, 120),
+        actorLabel: loginIdentifier.slice(0, 120),
         action: blocked ? 'auth.login.locked' : 'auth.login.failed',
         entityType: 'auth',
         metadata: { code: err?.code || 'AUTH_FAILED', severity: blocked ? 'critical' : 'warning' },
@@ -268,7 +284,7 @@ export function registerAuthRoutes(router) {
       req,
     });
     const machineIds = await machineIdsForUser(user);
-    clearLoginFailures(ip, userName);
+    clearLoginFailures(ip, loginIdentifier);
 
     await audit({
       actorType: 'user',

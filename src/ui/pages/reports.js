@@ -96,8 +96,8 @@ function reportRequestKey(){
 function reportSelectedMachine(){
   if(reportFilters.device) return reportFilters.device;
   if(isUserRole()){
-    const device = scopedDevices()[0];
-    return device ? device.id : '';
+    const assigned = scopedDevices();
+    if(assigned.length === 1) return assigned[0].backendId || assigned[0].id || '';
   }
   return '';
 }
@@ -149,7 +149,10 @@ function reportShowsEnergy(){
 }
 
 function reportDisplayTitle(){
-  const dimension = reportFilters.device || isUserRole() ? 'Machine' : 'Client';
+  const assignedCount = scopedDevices().length;
+  const dimension = isUserRole() && !reportFilters.device && assignedCount > 1
+    ? 'Assigned Devices'
+    : (reportFilters.device || (isUserRole() && assignedCount === 1) ? 'Machine' : 'Client');
   return dimension + ' ' + reportPeriodTitle() + ' Report';
 }
 
@@ -212,7 +215,7 @@ async function reportRowsForExcelExport(){
   const selected = scopedDevices().find(function(device){
     return String(device.backendId || device.id) === String(reportFilters.device);
   });
-  const fallback = isUserRole() ? scopedDevices()[0] : null;
+  const fallback = isUserRole() && scopedDevices().length === 1 ? scopedDevices()[0] : null;
   const exportDevice = selected || fallback;
   const rows = [];
   for(const range of reportExportRanges()){
@@ -266,7 +269,10 @@ function reportFilterOptions(){
   const availableDevices = scopedDevices().filter(function(dev){
     return !reportFilters.client || dev.client === reportFilters.client;
   });
-  const deviceOptions = (isUserRole() ? '' : '<option value="">Select Machine</option>') + availableDevices.map(function(dev){
+  const allAssignedOption = isUserRole() && availableDevices.length > 1
+    ? '<option value=""' + (reportFilters.device === '' ? ' selected' : '') + '>All Assigned Devices</option>'
+    : '';
+  const deviceOptions = (isUserRole() ? allAssignedOption : '<option value="">Select Machine</option>') + availableDevices.map(function(dev){
     const value = dev.backendId || dev.id;
     return '<option value="' + bsfEscapeHtml(value) + '"' + (String(reportFilters.device)===String(value)?' selected':'') + '>' + bsfEscapeHtml(dev.id) + '</option>';
   }).join('');
@@ -553,11 +559,14 @@ function renderReports(container, options){
   const range = reportPeriodRange();
   const metrics = reportMetricModel();
   const scopedDevice = scopedDevices()[0] || null;
+  const assignedCount = scopedDevices().length;
   const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'Select Customer');
   const selectedDevice = scopedDevices().find(function(device){
     return String(device.backendId || device.id) === String(reportFilters.device);
   });
-  const reportDevice = selectedDevice ? selectedDevice.id : (reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'Select Machine'));
+  const reportDevice = selectedDevice
+    ? selectedDevice.id
+    : (reportFilters.device || (isUserRole() && assignedCount > 1 ? 'All Assigned Devices' : (isUserRole() && scopedDevice ? scopedDevice.id : 'Select Machine')));
   const reportPeriod = range.start + ' - ' + range.end;
   const reportOptions = reportFilterOptions();
   const title = reportDisplayTitle();
@@ -585,7 +594,7 @@ function renderReports(container, options){
       <select onchange="setReportFilter('period',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;"><option value="monthly"${reportFilters.period==='monthly'?' selected':''}>Monthly Report</option><option value="yearly"${reportFilters.period==='yearly'?' selected':''}>Yearly Report</option></select>
       ${reportFilters.period === 'monthly' ? '<select id="report-month-filter" onchange="setReportFilter(\'month\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportMonthOptions() + '</select>' : ''}
       ${reportFilters.period === 'yearly' ? '<select id="report-year-filter" onchange="setReportFilter(\'year\',this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;">' + reportYearOptions() + '</select>' : ''}
-      <select ${isUserRole()?'disabled':''} onchange="setReportFilter('device',this.value)" style="padding:10px 16px;background:${isUserRole()?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${isUserRole()?'#94a3b8':'#e2e8f0'};font-size:14px;cursor:${isUserRole()?'not-allowed':'pointer'};">${reportOptions.deviceOptions}</select>
+      <select ${isUserRole() && assignedCount <= 1 ? 'disabled' : ''} onchange="setReportFilter('device',this.value)" style="padding:10px 16px;background:${isUserRole() && assignedCount <= 1?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${isUserRole() && assignedCount <= 1?'#94a3b8':'#e2e8f0'};font-size:14px;cursor:${isUserRole() && assignedCount <= 1?'not-allowed':'pointer'};">${reportOptions.deviceOptions}</select>
       <button onclick="generateReportPreview()" style="padding:10px 20px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Generate Preview</button>
     </div>
     <div id="report-preview" style="background:#1e293b;border-radius:12px;padding:32px;border:1px solid #334155;max-width:900px;margin:0 auto;">
@@ -639,8 +648,9 @@ function reportExportModel(){
   const range = reportPeriodRange();
   const metrics = reportMetricModel();
   const scopedDevice = scopedDevices()[0] || null;
+  const assignedCount = scopedDevices().length;
   const reportClient = reportFilters.client || (isClientScopedRole() ? (scopedDevice ? scopedDevice.client : 'Unassigned') : 'Select Customer');
-  const reportDevice = reportFilters.device || (isUserRole() && scopedDevice ? scopedDevice.id : 'Select Machine');
+  const reportDevice = reportFilters.device || (isUserRole() && assignedCount > 1 ? 'All Assigned Devices' : (isUserRole() && scopedDevice ? scopedDevice.id : 'Select Machine'));
   const exportEndDate = reportPdfEndDate(range);
   const reportPeriod = range.start + ' - ' + exportEndDate;
   const title = reportDisplayTitle();

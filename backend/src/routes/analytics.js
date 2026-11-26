@@ -688,13 +688,19 @@ export function registerAnalyticsRoutes(router) {
       const resolved = await resolveClientAdminDeviceScope(req, vendorAccountId, { clientRef, machineId });
       deviceIds = resolved.deviceIds;
     } else if (role === 'user') {
-      if (!req.auth.user.machineId) throw forbiddenAccount();
+      const assignedMachineIds = req.auth.user.machineIds?.length
+        ? req.auth.user.machineIds
+        : (req.auth.user.machineId ? [req.auth.user.machineId] : []);
+      if (!assignedMachineIds.length) throw forbiddenAccount();
       const requestedMachine = optionalString(
         url.searchParams.get('machineId') ?? url.searchParams.get('machine'),
         'machineId',
         { max: 160 }
       );
-      const scope = analyticsScopeForUser(req.auth.user, { machineId: requestedMachine });
+      const scope = analyticsScopeForUser(
+        { ...req.auth.user, machineIds: assignedMachineIds },
+        { machineId: requestedMachine }
+      );
       deviceIds = await resolveVendorDeviceIds({
         machineIds: scope.machineIds,
       });

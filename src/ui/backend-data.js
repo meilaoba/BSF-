@@ -591,6 +591,23 @@ async function bsfFetchSnapshot(limit){
   );
 }
 
+async function bsfRefreshUserSession(){
+  if(typeof currentRole === 'undefined' || currentRole !== 'user') return false;
+  const api = await bsfWaitForBackendApi();
+  if(!api || typeof api.getSession !== 'function') return false;
+  const previousIds = JSON.stringify((window.BSF_USER_PROFILE || {}).machineIds || []);
+  const session = await api.getSession();
+  if(!session || !session.user) return false;
+  window.BSF_SESSION = session;
+  window.BSF_USER_PROFILE = session.user;
+  window.BSF_CURRENT_USER = session.user;
+  const nextIds = JSON.stringify(session.user.machineIds || []);
+  if(previousIds !== nextIds && typeof applyClientScopeToState === 'function'){
+    applyClientScopeToState();
+  }
+  return true;
+}
+
 async function bsfLoadDirectoryData(){
   const api = await bsfWaitForBackendApi();
   if(!api) throw new Error('Backend API is unavailable');
@@ -953,6 +970,9 @@ function bsfRowsForCurrentScope(snapshot){
 }
 
 async function bsfLoadBackendData(limit){
+  await bsfRefreshUserSession().catch(function(error){
+    console.warn('[BSF] session scope refresh failed:', error.message);
+  });
   const snapshot = await bsfFetchSnapshot(limit);
   const fingerprint = bsfSnapshotFingerprint(snapshot.devices, snapshot.rows);
   const previousFingerprint = window.BSF_BACKEND_LAST_FINGERPRINT;

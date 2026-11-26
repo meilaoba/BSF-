@@ -46,7 +46,9 @@ function rawDataHistoryViewKey(){
   return [range.start, range.end, rawDataFilters.client || '', rawDataFilters.device || '', rawDataPage].join('|');
 }
 function rawDataRequestOptions(page, pageSize){
-  const selectedDevice = scopedDevices().find(function(device){ return device.id === rawDataFilters.device; });
+  const selectedDevice = scopedDevices().find(function(device){
+    return String(device.backendId || device.id) === String(rawDataFilters.device);
+  });
   const range = rawDataHistoryRange();
   return {
     page:page || 1,
@@ -293,16 +295,19 @@ function populateRawDataFilters(clients, clientDevices){
   }
   if(deviceSelect){
     const userRole = isUserRole();
-    const options = userRole ? [] : [{ value:'', label:'Select Machine', selected:rawDataFilters.device === '' }];
+    const options = userRole
+      ? [{ value:'', label:clientDevices.length > 1 ? 'All Assigned Devices' : 'Assigned Device', selected:rawDataFilters.device === '' }]
+      : [{ value:'', label:'Select Machine', selected:rawDataFilters.device === '' }];
     clientDevices.forEach(function(dev){
       const value = dev.backendId || dev.id;
       options.push({ value:value, label:dev.id, selected:String(rawDataFilters.device) === String(value) });
     });
     bsfReplaceSelectOptions(deviceSelect, options);
-    deviceSelect.disabled = userRole;
-    deviceSelect.style.background = userRole ? '#111827' : '#1e293b';
-    deviceSelect.style.color = userRole ? '#94a3b8' : '#e2e8f0';
-    deviceSelect.style.cursor = userRole ? 'not-allowed' : 'pointer';
+    const locked = userRole && clientDevices.length <= 1;
+    deviceSelect.disabled = locked;
+    deviceSelect.style.background = locked ? '#111827' : '#1e293b';
+    deviceSelect.style.color = locked ? '#94a3b8' : '#e2e8f0';
+    deviceSelect.style.cursor = locked ? 'not-allowed' : 'pointer';
   }
 }
 function renderRawData(container){

@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const stateSource = fs.readFileSync(path.join(root, 'src/ui/state.js'), 'utf8');
 const usersSource = fs.readFileSync(path.join(root, 'src/ui/pages/users.js'), 'utf8');
+const reportsSource = fs.readFileSync(path.join(root, 'src/ui/pages/reports.js'), 'utf8');
+const rawDataSource = fs.readFileSync(path.join(root, 'src/ui/pages/raw-data.js'), 'utf8');
+const backendDataSource = fs.readFileSync(path.join(root, 'src/ui/backend-data.js'), 'utf8');
 
 test('ordinary users can see every machine in their assigned machine list', () => {
   const sandbox = {
@@ -40,4 +43,13 @@ test('user management shows multiple assigned devices and does not overwrite the
   assert.match(usersSource, />Assigned Devices<\/th>/);
   assert.doesNotMatch(usersSource, /Linked Machine/);
   assert.doesNotMatch(usersSource, /user-machine-input/);
+});
+
+test('multi-device users can aggregate reports and raw data across all assigned machines', () => {
+  assert.match(reportsSource, /All Assigned Devices/);
+  assert.match(reportsSource, /assigned\.length === 1/);
+  assert.match(rawDataSource, /All Assigned Devices/);
+  assert.match(rawDataSource, /String\(device\.backendId \|\| device\.id\) === String\(rawDataFilters\.device\)/);
+  assert.match(backendDataSource, /async function bsfRefreshUserSession/);
+  assert.match(backendDataSource, /api\.getSession\(\)/);
 });
