@@ -36,15 +36,14 @@
 2. `/api/v1/vendor-devices` 代理厂家设备列表。
 3. `/api/v1/machines` 提供客户与机器资料。
 4. `/api/v1/device-data`、`/api/v1/raw-data-samples`、Machines、Locations 和
-   Graphs 读取 `vendor_device_telemetry`；Graphs 的 Food Waste In 使用
-   `input.dailyInput`，每台设备每天取最大值，不得用 `RealTimeWeight`
-   或厂家日报处理量替代。
-5. Reports 的 Waste Collected 读取厂家日报 `kitchenWaste`；运行状态、能耗、
-   温度和湿度从 `vendor_device_telemetry` 补充。厂家日报 `powerConsume`
-   仅保留为审计字段，不再作为业务展示能耗。Reports 的 Food Waste In 趋势
-   使用 `input.dailyInput`，月报按天、年报表按月；Waste Collected、GHG 和
-   Fertilizer 继续使用厂家日报口径。`RealTimeWeight` 只在 Machines 和
-   Raw Data 作为当前机内重量展示。
+   Graphs 读取 `vendor_device_telemetry`；Graphs 的 Weight 图表使用在线
+   Running/Standby 记录的 `ABS(RealTimeWeight)`，负数取绝对值后参与平均。
+5. Reports 的 Waste Collected、Waste-in、GHG 和 Fertilizer 使用
+   `ABS(RealTimeWeight)`；运行状态、能耗、温度和湿度从
+   `vendor_device_telemetry` 补充。厂家日报 `powerConsume`
+   仅保留为审计字段，不再作为业务展示能耗。Reports 的 Waste-in 使用
+   `ABS(RealTimeWeight)` 的周期平均值和有效在线天数计算；GHG 和 Fertilizer
+   也从该 Waste-in 推导。月报按天、年报表按月。Raw Data 保留厂家原始正负值。
 6. `/api/v1/vendor-devices/history` 只提供厂家历史温湿度曲线。
 7. Master Admin 每 3 分钟、Client Admin / User 每 10 分钟读取一次最新记录；
    Client Admin 的可见范围由厂家账号设备池和其 Client 归属共同决定。

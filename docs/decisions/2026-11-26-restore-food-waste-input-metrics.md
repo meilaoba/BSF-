@@ -1,5 +1,7 @@
 # ADR-2026-11-26: 恢复 Food Waste In 的 dailyInput 口径
 
+状态：已被 `2026-11-26-absolute-real-time-weight-metrics.md` 取代。
+
 ## 背景
 
 2026-11-25 的报表调整把 `RealTimeWeight` 当作投入量，并按平均值推算周期总量。

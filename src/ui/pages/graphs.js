@@ -400,7 +400,7 @@ function buildLineChartSvg(rows, valueKey, color){
 
 function graphChartTitle(kind){
   const period = graphPeriodLabel(graphPeriods.foodWaste);
-  if(kind === 'foodWaste') return period + ' Food Waste In (KG)';
+  if(kind === 'foodWaste') return period + ' Average Weight (KG)';
   if(kind === 'ghg') return period + ' GHG Reduced (KG CO₂e)';
   if(kind === 'temp') return period + ' Container Temperature (°C)';
   if(kind === 'energy') return period + ' Energy Consumed (kWh)';
@@ -541,7 +541,7 @@ function renderGraphs(container){
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Data Analytics</h2>
-      <p style="color:#64748b;font-size:14px;margin:0;">Visualize real vendor data across food waste, carbon reduction, temperature and energy</p>
+      <p style="color:#64748b;font-size:14px;margin:0;">Visualize real vendor data across weight, carbon reduction, temperature and energy</p>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end;">
       ${clientScoped ? clientScopeBadge() : '<label style="display:flex;flex-direction:column;gap:6px;color:#94a3b8;font-size:12px;font-weight:600;">Client Filter<select id="graph-client-filter" onchange="graphSetClient(this.value)" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;min-width:190px;">' + clientOptions.join('') + '</select></label>'}

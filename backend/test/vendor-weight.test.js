@@ -17,7 +17,7 @@ test('DailyFeedWeight never overrides the canonical input.dailyInput counter', (
   }), 0.2);
 });
 
-test('input.dailyInput remains authoritative for Food Waste In', () => {
+test('input.dailyInput remains authoritative for the canonical daily input counter', () => {
   assert.equal(canonicalDailyInputT({ input: { dailyInput: 0.004 } }), 0.004);
   assert.equal(canonicalDailyInputKg({ input: { dailyInput: 0.004 } }), 4);
   assert.equal(canonicalDailyInputKg({ input: { dailyInput: 0.016 } }), 16);

@@ -29,7 +29,7 @@ function reportExcelChartTitle(){
 }
 
 function reportWeightChartTitle(){
-  return reportFilters.period === 'monthly' ? 'Daily Food Waste In (KG)' : 'Monthly Food Waste In (KG)';
+  return reportFilters.period === 'monthly' ? 'Daily Waste-in (KG)' : 'Monthly Waste-in (KG)';
 }
 
 function reportTemperatureChartTitle(){
@@ -112,7 +112,9 @@ function reportMetricModel(){
   const hasApiData = reportApiData && reportApiKey === reportRequestKey();
   const summary = hasApiData && reportApiData.summary ? reportApiData.summary : {};
   return {
-    wasteKg:reportMetricNumber(summary.wasteKg),
+    wasteInAverageKg:reportMetricNumber(summary.wasteInAverageKg),
+    wasteInTotalKg:reportMetricNumber(summary.wasteInTotalKg),
+    wasteKg:reportMetricNumber(summary.wasteInTotalKg),
     ghgKg:reportMetricNumber(summary.ghgKg),
     energyKwh:reportMetricNumber(summary.energyKwh),
     fertilizerKg:reportMetricNumber(summary.fertilizerKg),
@@ -308,9 +310,10 @@ function reportFoodWasteDateParts(row){
 function normalizedReportWeightRows(includeMissing){
   const hasApiData = reportApiData && reportApiKey === reportRequestKey();
   const source = hasApiData && Array.isArray(reportApiData.weightItems) ? reportApiData.weightItems : [];
-  if(!source.length) return normalizedReportFoodWasteRows(includeMissing);
+  if(!source.length) return [];
   return source.map(function(row){
-    const value = reportFoodWasteValue({ value:row && row.averageKg !== undefined ? row.averageKg : row && row.value });
+    const rawValue = reportFoodWasteValue({ value:row && row.averageKg !== undefined ? row.averageKg : row && row.value });
+    const value = rawValue === null ? null : Math.abs(rawValue);
     return {
       label:row && (row.date || row.label) || '',
       xLabel:row && row.label || '',
@@ -459,9 +462,8 @@ function buildReportFoodWasteSvg(rows){
   return buildReportLineChartSvg(rows, {
     unit:'KG',
     color:'#3b82f6',
-    emptyMessage:'No Food Waste In data for selected period',
-    ariaLabel:'Food Waste In line chart',
-    legendLabel:'Food Waste In'
+    emptyMessage:'No Weight data for selected period',
+    ariaLabel:'Average weight line chart'
   });
 }
 
@@ -485,7 +487,7 @@ function buildReportHumiditySvg(rows){
 
 function renderReportFoodWasteChart(){
   const chart = document.getElementById('report-food-waste-chart');
-  if(chart) chart.innerHTML = buildReportFoodWasteSvg(normalizedReportFoodWasteRows(true));
+  if(chart) chart.innerHTML = buildReportFoodWasteSvg(normalizedReportWeightRows(true));
   const temperature = document.getElementById('report-temperature-chart');
   if(temperature){
     temperature.innerHTML = buildReportTemperatureSvg(normalizedReportMetricRows(
@@ -655,7 +657,7 @@ function reportExportModel(){
   const reportPeriod = range.start + ' - ' + exportEndDate;
   const title = reportDisplayTitle();
   const chartTitle = reportWeightChartTitle();
-  const foodWaste = reportRowsThroughDate(normalizedReportFoodWasteRows(true), exportEndDate);
+  const foodWaste = reportRowsThroughDate(normalizedReportWeightRows(true), exportEndDate);
   const temperature = reportRowsThroughDate(normalizedReportMetricRows(
     reportApiData && reportApiData.tempItems,
     true
@@ -675,6 +677,8 @@ function reportExportModel(){
     client:reportClient,
     device:reportDevice,
     metrics:{
+      wasteInAverageKg:reportMetricDisplay(metrics.wasteInAverageKg),
+      wasteInTotalKg:reportMetricDisplay(metrics.wasteInTotalKg),
       wasteKg:reportMetricDisplay(metrics.wasteKg),
       ghgKg:reportMetricDisplay(metrics.ghgKg),
       energyKwh:reportMetricDisplay(energyDisplay.value),
@@ -773,7 +777,7 @@ function excelCell(value){
 
 function exportReportCsv(){
   const model = reportExportModel();
-  const rows = [['Report',model.title],['Period',model.period],['Client',model.client],['Machine',model.device],[],['Metric','Value','Unit'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO₂e'],...(reportShowsEnergy() ? [[model.metrics.energyLabel,model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%'],[],[model.chartTitle]];
+  const rows = [['Report',model.title],['Period',model.period],['Client',model.client],['Machine',model.device],[],['Metric','Value','Unit'],['Daily Waste-in',model.metrics.wasteInAverageKg,'kg'],['Total Waste-in',model.metrics.wasteInTotalKg,'kg'],['Waste Collected',model.metrics.wasteKg,'kg'],['GHG Reduced',model.metrics.ghgKg,'kg CO₂e'],...(reportShowsEnergy() ? [[model.metrics.energyLabel,model.metrics.energyKwh,'kWh']] : []),['Est. Fertilizer',model.metrics.fertilizerKg,'kg'],['Avg Container Temp',model.metrics.avgTempC,'°C'],['Avg Humidity',model.metrics.avgHumidityPct,'%'],[],[model.chartTitle]];
   model.foodWaste.forEach(function(row){ rows.push([row.label,row.value]); });
   downloadReportFile('bsf-report-' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv;charset=utf-8', '\uFEFF' + rows.map(function(row){ return row.map(csvCell).join(','); }).join('\r\n'));
   showReportExportToast('CSV 导出已开始');

@@ -7,8 +7,8 @@
 
 | 页面指标 | 权威字段 | 数据来源 | 统一转换 |
 | --- | --- | --- | ---: |
-| Food Waste In | `input.dailyInput` | `vendor_device_telemetry` | 当天最大值，吨 × 1000 = kg |
-| Waste Collected | 厂家日报 `kitchenWaste` | 厂家日报接口 | 乘以配置的 `kitchenWasteToKgFactor` |
+| Food Waste In / Waste In | `ABS(RealTimeWeight)` | `vendor_device_telemetry` | 在线采样先取绝对值，再按日/月平均并乘有效在线天数 |
+| Waste Collected | `ABS(RealTimeWeight)` | `vendor_device_telemetry` | 与 Total Waste-in 使用同一绝对 Weight 汇总 |
 | Total Added | `TotalAddMaterial` | 厂家实时接口 | 吨 × 1000 = kg |
 | Total Discharge | `TotalDischarge` | 厂家实时接口 | 吨 × 1000 = kg |
 
@@ -28,21 +28,21 @@
 
 | 厂家字段 | 单位 | 当前用途 |
 | --- | ---: | --- |
-| `input.dailyInput` | t | Food Waste In 的唯一权威字段 |
+| `input.dailyInput` | t | 原始累计投料展示；不作为当前 Weight 页面计算来源 |
 | `TotalAddMaterial` | t | 累计投料展示；不能逐条相加 |
 | `TotalDischarge` | t | 累计出料展示；不能逐条相加 |
 | `DailyFeedWeight` | kg | 仅保留为 Raw Data 原始字段；跨日规则未确认，不参与业务计算 |
 | `SingleAddMaterial` | kg | Raw Data 展示 |
 | `SingleDischarge` | 未确认 | Raw Data 展示 |
-| `RealTimeWeight` | 未确认 | Raw Data 展示 |
+| `RealTimeWeight` | 当前按 kg | Raw Data 保留正负原值；业务计算使用绝对值 |
 | `OtalUnloadingWeight` | 未确认 | Raw Data 展示 |
 | `kitchenWaste` | 未确认 | Waste Collected 的厂家日报来源；单位通过配置因子转换 |
 
 ## 强制规则
 
-1. Graphs 的 Food Waste In 只能聚合 `dailyInput`。
-2. Reports 的 Waste Collected 只能读取厂家日报 `kitchenWaste`。
-3. `DailyFeedWeight` 不得覆盖 `dailyInput`，直到厂家确认清零和跨日规则。
+1. Graphs 和 Reports 的 Waste-in 使用在线 Running/Standby 的 `ABS(RealTimeWeight)`。
+2. Reports 的 Waste Collected、GHG 和 Fertilizer 使用同一绝对 Weight 汇总。
+3. 负数不得改成 0 或丢弃，必须在采样层取绝对值。
 4. 累计计数器只展示，不做逐条累加。
 5. 真实 `0` 是有效值；字段缺失或非法时返回 `null`，界面显示 `—`。
 6. 不补零、不生成模拟数据、不用另一业务字段替代缺失值。
@@ -51,7 +51,7 @@
 
 - `kitchenWaste`、`powerConsume`、`runTime`、`unloadingWeight` 的最终单位。
 - `DailyFeedWeight` 的清零、离线补传和跨日规则。
-- `RealTimeWeight`、`SingleDischarge`、`OtalUnloadingWeight` 的业务定义。
+- `RealTimeWeight` 的原始业务定义；当前只确认负数需要按绝对值参与业务计算。
 
 ## 验收
 

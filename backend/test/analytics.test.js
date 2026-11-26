@@ -122,27 +122,28 @@ test('monthly report weights use each day average', () => {
   assert.ok(Math.abs(result.summary.totalKg - (26 / 3)) < 1e-9);
 });
 
-test('report weights keep zero as valid and exclude negative source values', () => {
+test('report weights keep zero valid and convert negative source values to absolute weight', () => {
   const result = aggregateReportWeightItems([{
     capturedAt:'2026-11-01T12:00:00+08:00',
     deviceId:'device-a',
     deviceStatusCode:1,
-    weightAverageKg:0,
-    weightSumKg:0,
-    weightSampleCount:1,
+    weightAverageKg:-3,
+    weightSumKg:-6,
+    weightSampleCount:2,
   }], {
     period:'monthly',
     start:'2026-11-01',
     end:'2026-11-30',
     now:new Date('2026-12-01T00:00:00+08:00'),
   });
-  assert.equal(result.items[0].value, 0);
+  assert.equal(result.items[0].value, 3);
   const service = fs.readFileSync(
     path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), 'src/services/vendor-analytics.js'),
     'utf8'
   );
-  assert.match(service, /FILTER \(\s*WHERE t\.real_time_weight_kg >= 0[\s\S]*?device_online_code IS DISTINCT FROM 0/);
-  assert.doesNotMatch(service, /FILTER \(\s*WHERE t\.real_time_weight_kg > 0/);
+  assert.match(service, /sum\(ABS\(t\.real_time_weight_kg\)\)/);
+  assert.match(service, /avg\(ABS\(t\.real_time_weight_kg\)\)/);
+  assert.doesNotMatch(service, /t\.real_time_weight_kg >= 0/);
 });
 
 test('yearly report weights average unique samples within each month', () => {
@@ -177,7 +178,7 @@ test('report GHG uses weight-derived Waste-in and fixed machine carbon', () => {
   assert.equal(reportGhgFromWeight(0, 1.5, 1.5), -1.5);
 });
 
-test('data analytics uses hourly weight averages and excludes offline samples', () => {
+test('data analytics uses absolute hourly weight averages and excludes offline samples', () => {
   const rows = [
     {
       capturedAt:'2026-11-25T10:00:00+08:00',
@@ -193,8 +194,8 @@ test('data analytics uses hourly weight averages and excludes offline samples', 
       capturedAt:'2026-11-25T11:00:00+08:00',
       deviceId:'device-a',
       deviceStatusCode:2,
-      weightAverageKg:12,
-      weightSumKg:12,
+      weightAverageKg:-12,
+      weightSumKg:-12,
       weightSampleCount:1,
       clientRegion:'non-hk',
       ghgFormula:{ monthlyDistanceKm:140 },
@@ -610,14 +611,15 @@ test('canonical telemetry history maps to the existing device-data response cont
   assert.equal(row.source, 'vendor_device_telemetry');
 });
 
-test('graphs use daily input while reports keep daily waste and daily-input trend separate', () => {
+test('graphs and reports use absolute weight metrics while retaining the daily-input trend', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const source = fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8');
   assert.match(source, /const sourceGroupBy = groupBy === 'hour' \? 'hour' : 'day';/);
   assert.match(source, /groupBy: sampleGroupBy/);
   assert.match(source, /loadGraphAnalytics\(context, range, sourceGroupBy\)/);
-  assert.doesNotMatch(source, /aggregateWeightGraph\(analytics\.rows/);
-  assert.doesNotMatch(source, /weightGraph\./);
+  assert.match(source, /aggregateWeightGraph\(analytics\.rows/);
+  assert.match(source, /items:weightGraph\.items/);
+  assert.match(source, /ghgItems:weightGraph\.ghgItems/);
   assert.match(source, /loadReportAnalytics\(req, context, range\)/);
   assert.match(source, /wasteSource: 'daily-input'/);
   assert.match(source, /wasteSource: 'daily-stats'/);
@@ -633,15 +635,17 @@ test('graphs use daily input while reports keep daily waste and daily-input tren
   assert.match(source, /persist: true/);
   assert.match(source, /items: foodWasteResult\.items/);
   assert.match(source, /wasteSource: 'daily-input'/);
-  assert.doesNotMatch(source, /weightItems: weightResult\.items/);
-  assert.doesNotMatch(source, /weightSummary: weightResult\.summary/);
-  assert.match(source, /summary: summaryResult\.summary/);
+  assert.match(source, /weightItems: weightResult\.items/);
+  assert.match(source, /weightSummary: weightResult\.summary/);
+  assert.match(source, /weightSource: 'absolute-daily-average'/);
+  assert.match(source, /wasteInAverageKg/);
+  assert.match(source, /wasteInTotalKg/);
   const reportRoute = source.slice(
     source.indexOf("router.get('/api/v1/reports'"),
     source.indexOf("router.get('/api/v1/reports'") + 5000
   );
-  assert.doesNotMatch(reportRoute, /reportGhgFromWeight/);
-  assert.doesNotMatch(reportRoute, /aggregateReportWeightItems/);
+  assert.match(reportRoute, /reportGhgFromWeight/);
+  assert.match(reportRoute, /aggregateReportWeightItems/);
   const graphLoader = source.slice(
     source.indexOf('async function loadGraphAnalytics'),
     source.indexOf('async function loadReportAnalytics')

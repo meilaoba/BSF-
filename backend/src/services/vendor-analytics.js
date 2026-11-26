@@ -493,16 +493,16 @@ export async function loadVendorTelemetrySummaries({
        max(t.device_online_code) AS device_online_code,
        avg(t.cabin_temp_c) FILTER (WHERE t.device_online_code IS DISTINCT FROM 0) AS cabin_temp_c,
        avg(t.humidity_pct) FILTER (WHERE t.device_online_code IS DISTINCT FROM 0) AS humidity_pct,
-       sum(t.real_time_weight_kg) FILTER (
-         WHERE t.real_time_weight_kg >= 0
+       sum(ABS(t.real_time_weight_kg)) FILTER (
+         WHERE t.real_time_weight_kg IS NOT NULL
            AND t.device_online_code IS DISTINCT FROM 0
        ) AS real_time_weight_sum_kg,
        count(t.real_time_weight_kg) FILTER (
-         WHERE t.real_time_weight_kg >= 0
+         WHERE t.real_time_weight_kg IS NOT NULL
            AND t.device_online_code IS DISTINCT FROM 0
        )::bigint AS real_time_weight_sample_count,
-       avg(t.real_time_weight_kg) FILTER (
-         WHERE t.real_time_weight_kg >= 0
+       avg(ABS(t.real_time_weight_kg)) FILTER (
+         WHERE t.real_time_weight_kg IS NOT NULL
            AND t.device_online_code IS DISTINCT FROM 0
        ) AS real_time_weight_avg_kg,
        max(t.vendor_device_name) AS vendor_device_name,

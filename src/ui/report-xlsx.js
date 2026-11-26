@@ -107,15 +107,16 @@
     return Array.from({ length:lastDay }, function(_, index){ return String(index + 1); });
   }
 
-  function chartDataFor(rows, key, options){
+  function chartDataFor(rows, key, options, absoluteValue){
     const yearly = options.chartPeriod === 'yearly';
     const categories = periodCategories(options, rows);
     const positions = new Map(categories.map(function(label, index){ return [label, index]; }));
     const deviceBuckets = new Map();
     rows.forEach(function(row){
-      const value = finite(row[key]);
+      const rawValue = finite(row[key]);
       const dateKey = recordedDateKey(row.recordedAt);
-      if(value === null || !dateKey) return;
+      if(rawValue === null || !dateKey) return;
+      const value = absoluteValue ? Math.abs(rawValue) : rawValue;
       const category = yearly ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(dateKey.slice(5, 7)) - 1] : String(Number(dateKey.slice(8, 10)));
       const position = positions.get(category);
       if(position === undefined) return;
@@ -323,7 +324,7 @@
   function workbookFiles(rows, options){
     const sorted = sortRows(rows);
     const specs = [
-      { name:'Weight', title:'Weight(kg)', key:'weight', seriesName:'weight', valueFormat:'0.00' },
+      { name:'Weight', title:'Weight(kg)', key:'weight', seriesName:'weight', valueFormat:'0.00', absolute:true },
       { name:'Temp', title:'Temp(°C)', key:'temperature', seriesName:'temp', valueFormat:'0.0' },
       { name:'Humidity', title:'Hum(%)', key:'humidity', seriesName:'humidity', valueFormat:'0.0' },
     ];
@@ -366,7 +367,7 @@
     files.set('xl/styles.xml', stylesXml());
     specs.forEach(function(spec, index){
       const number = index + 1;
-      const chartData = chartDataFor(sorted, spec.key, buildOptions);
+      const chartData = chartDataFor(sorted, spec.key, buildOptions, spec.absolute);
       files.set('xl/worksheets/sheet' + number + '.xml', worksheetXml(spec.name, spec.title, spec.key, sorted, index, chartData, spec));
       files.set('xl/worksheets/_rels/sheet' + number + '.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +

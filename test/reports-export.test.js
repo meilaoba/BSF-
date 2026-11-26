@@ -54,16 +54,23 @@ test('report cards and CSV/Excel/PDF model share the API summary values', () => 
       { date:'2026-10-01', value:12.5 },
       { date:'2026-10-02', value:7.5 }
     ];
+    reportWeightData = [
+      { date:'2026-10-01', label:'1', value:12.5, averageKg:12.5 },
+      { date:'2026-10-02', label:'2', value:7.5, averageKg:7.5 }
+    ];
     reportApiData = {
       summary:{ wasteInAverageKg:0.8667, wasteInTotalKg:26, wasteKg:20, ghgKg:18.4, energyKwh:3, fertilizerKg:2.4, avgTempC:41.2, avgHumidityPct:53.5, pointCount:2 },
-      items:reportFoodWasteData
+      items:reportFoodWasteData,
+      weightItems:reportWeightData
     };
     reportApiKey = reportRequestKey();
   `, sandbox);
   const model = vm.runInContext('reportExportModel()', sandbox);
   assert.equal(model.title, 'Client Monthly Report');
   assert.deepEqual(JSON.parse(JSON.stringify(model.metrics)), {
-    wasteKg:'20.0',
+    wasteInAverageKg:'0.9',
+    wasteInTotalKg:'26.0',
+    wasteKg:'26.0',
     ghgKg:'18.4',
     energyKwh:'3.0',
     energyLabel:'Energy Consumed',
@@ -74,7 +81,7 @@ test('report cards and CSV/Excel/PDF model share the API summary values', () => 
   assert.deepEqual(JSON.parse(JSON.stringify(
     model.foodWaste.map((row) => row.value).filter((value) => value !== null)
   )), [12.5, 7.5]);
-  assert.equal(model.chartTitle, 'Daily Food Waste In (KG)');
+  assert.equal(model.chartTitle, 'Daily Waste-in (KG)');
 });
 
 test('solar report energy is labelled as a positive credit', () => {
@@ -203,6 +210,20 @@ test('monthly report charts plot one aggregate per day and keep missing days bla
   assert.match(files.get('xl/charts/chart2.xml'), /<c:val><c:numRef><c:f>'Temp'!\$G\$2:\$G\$31<\/c:f><\/c:numRef><\/c:val>/);
 });
 
+test('report Excel weight charts average absolute values', () => {
+  const files = sandbox.window.BSF_REPORT_XLSX.workbookFiles([
+    { recordedAt:'2026-09-01 08:00:00', device:'device-a', weight:-4, temperature:40, humidity:50 },
+    { recordedAt:'2026-09-01 09:00:00', device:'device-a', weight:-6, temperature:40, humidity:50 },
+  ], {
+    chartTitle:'Sep',
+    chartPeriod:'monthly',
+    periodStart:'2026-09-01',
+    periodEnd:'2026-09-30',
+  });
+  const sheet = files.get('xl/worksheets/sheet1.xml');
+  assert.match(sheet, /<c r="G2"><v>5<\/v><\/c>/);
+});
+
 test('yearly report chart groups samples by calendar month', () => {
   const files = sandbox.window.BSF_REPORT_XLSX.workbookFiles([
     { recordedAt:'2026-01-15 10:00:00', device:'device-a', weight:5, temperature:20, humidity:30 },
@@ -293,9 +314,15 @@ test('missing report days stay missing while a real zero remains exportable', ()
       { date:'2026-10-29', value:null },
       { date:'2026-10-30', value:undefined }
     ];
+    reportWeightData = Array.from({ length:31 }, function(_, index){
+      var day = String(index + 1).padStart(2, '0');
+      return { date:'2026-10-' + day, label:String(index + 1), value:null, averageKg:null };
+    });
+    reportWeightData[27] = { date:'2026-10-28', label:'28', value:0, averageKg:0 };
     reportApiData = {
       summary:{ wasteKg:99, ghgKg:147.9, energyKwh:1.5, fertilizerKg:11.9, avgTempC:41, avgHumidityPct:0.2, pointCount:1 },
-      items:reportFoodWasteData
+      items:reportFoodWasteData,
+      weightItems:reportWeightData
     };
     reportApiKey = reportRequestKey();
   `, sandbox);
@@ -308,17 +335,18 @@ test('missing report days stay missing while a real zero remains exportable', ()
   });
 });
 
-test('report charts render food-waste-in, temperature and humidity lines', () => {
+test('report charts render weight, temperature and humidity average lines', () => {
   vm.runInContext(`
     reportFilters = { client:'Client A', device:'', period:'monthly', month:10, year:2026 };
-    reportFoodWasteData = [
-      { date:'2026-10-01', value:4 },
-      { date:'2026-10-02', value:5 },
-      { date:'2026-10-04', value:6 }
-    ];
     reportApiData = {
       summary:{ pointCount:2 },
-      items:reportFoodWasteData,
+      items:[],
+      weightItems:[
+        { date:'2026-10-01', label:'1', value:4, averageKg:4 },
+        { date:'2026-10-02', label:'2', value:-5, averageKg:-5 },
+        { date:'2026-10-03', label:'3', value:null, averageKg:null },
+        { date:'2026-10-04', label:'4', value:6, averageKg:6 }
+      ],
       tempItems:[
         { date:'2026-10-01', label:'1', value:38 },
         { date:'2026-10-02', label:'2', value:null },
@@ -332,19 +360,19 @@ test('report charts render food-waste-in, temperature and humidity lines', () =>
     };
     reportApiKey = reportRequestKey();
   `, sandbox);
-  const rows = vm.runInContext('normalizedReportFoodWasteRows(true)', sandbox);
+  const rows = vm.runInContext('normalizedReportWeightRows(true)', sandbox);
   const tempRows = vm.runInContext('normalizedReportMetricRows(reportApiData.tempItems, true)', sandbox);
-  const svg = vm.runInContext('buildReportFoodWasteSvg(normalizedReportFoodWasteRows(true))', sandbox);
+  const svg = vm.runInContext('buildReportFoodWasteSvg(normalizedReportWeightRows(true))', sandbox);
   const tempSvg = vm.runInContext('buildReportTemperatureSvg(normalizedReportMetricRows(reportApiData.tempItems, true))', sandbox);
   const humiditySvg = vm.runInContext('buildReportHumiditySvg(normalizedReportMetricRows(reportApiData.humidityItems, true))', sandbox);
-  assert.equal(rows.length, 31);
+  assert.equal(rows.length, 4);
   assert.equal(rows[0].value, 4);
+  assert.equal(rows[1].value, 5);
   assert.equal(tempRows[0].xLabel, '1');
   assert.doesNotMatch(svg, /report-weight-range/);
   assert.match(svg, /class="report-average-line"/);
   assert.match(svg, /class="report-average-point"/);
-  assert.match(svg, /Food Waste In line chart/);
-  assert.match(svg, /Food Waste In/);
+  assert.match(svg, /Average weight line chart/);
   assert.match(tempSvg, /Average temperature line chart/);
   assert.match(tempSvg, /#f97316/);
   assert.match(humiditySvg, /Average humidity line chart/);
@@ -352,6 +380,17 @@ test('report charts render food-waste-in, temperature and humidity lines', () =>
   assert.match(source, /id="report-temperature-chart"/);
   assert.match(source, /id="report-humidity-chart"/);
   assert.doesNotMatch(source, /card\([^\n]*Waste-in/);
+});
+
+test('report weight chart never falls back to daily input', () => {
+  vm.runInContext(`
+    reportFilters = { client:'Client A', device:'', period:'monthly', month:10, year:2026 };
+    reportFoodWasteData = [{ date:'2026-10-01', value:12.5 }];
+    reportApiData = { summary:{ pointCount:1 }, items:reportFoodWasteData, weightItems:[] };
+    reportApiKey = reportRequestKey();
+  `, sandbox);
+  const rows = vm.runInContext('normalizedReportWeightRows(true)', sandbox);
+  assert.deepEqual(JSON.parse(JSON.stringify(rows)), []);
 });
 
 test('reports show missing or partial vendor daily data without telemetry estimates', () => {
