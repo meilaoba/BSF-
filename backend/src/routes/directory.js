@@ -1,6 +1,6 @@
 import { query, withTransaction, audit } from '../db.js';
 import { sendJson, sendOk, readJsonBody, clientIp } from '../lib/http.js';
-import { NotFoundError, ValidationError } from '../lib/errors.js';
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
 import {
   clampLimit,
   clampOffset,
@@ -21,7 +21,12 @@ import {
 } from '../lib/validate.js';
 import { requireApiKey } from '../middleware/auth.js';
 import { getVendorAccessToken } from '../middleware/session.js';
-import { addVendorUser, findVendorUserByName } from '../providers/vendor-user.js';
+import {
+  addVendorUser,
+  deleteVendorUser,
+  findVendorUserByName,
+  updateVendorUser,
+} from '../providers/vendor-user.js';
 import { loadCollectorCredentials } from '../services/vendor-collector.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -91,7 +96,7 @@ function assertClientAdminCanManageClient(req, client) {
   }
 }
 
-async function vendorCredentialsForUserCreation(req) {
+async function vendorCredentialsForUserManagement(req) {
   if (req.auth) {
     return {
       token: await getVendorAccessToken(req.auth),
@@ -103,6 +108,15 @@ async function vendorCredentialsForUserCreation(req) {
     token: collector?.accessToken || null,
     userId: collector?.vendorUserId || null,
   };
+}
+
+function vendorUserStateForStatus(status) {
+  if (status === 'active') return 1;
+  if (status === 'disabled') return 0;
+  if (status === 'invited') {
+    throw new ValidationError('Vendor users cannot be moved to the invited state');
+  }
+  return null;
 }
 
 /**
@@ -517,7 +531,7 @@ export function registerDirectoryRoutes(router) {
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
     const { rows } = await query(
-      `SELECT u.id, u.vendor_username, u.vendor_type, u.email, u.phone, u.full_name, u.role, u.status,
+      `SELECT u.id, u.vendor_user_id, u.vendor_username, u.vendor_type, u.email, u.phone, u.full_name, u.role, u.status,
               u.client_id, u.machine_id, u.last_login_at, u.created_at, u.updated_at,
               c.name AS client_name, m.serial AS machine_serial, m.name AS machine_name
          FROM users u
@@ -615,7 +629,7 @@ export function registerDirectoryRoutes(router) {
     }
 
     if (createVendorAccount) {
-      const credentials = await vendorCredentialsForUserCreation(req);
+      const credentials = await vendorCredentialsForUserManagement(req);
       if (!credentials.token) {
         throw new AppError('VENDOR_SESSION_EXPIRED', 'No vendor credential is available for user creation', {
           status: 401,
@@ -766,28 +780,102 @@ export function registerDirectoryRoutes(router) {
       machineId = null;
     }
 
-    const { rows } = await query(
-      `UPDATE users
-          SET email = COALESCE($2, email),
-              phone = COALESCE($3, phone),
-              full_name = COALESCE($4, full_name),
-              role = $5,
-              client_id = $6,
-              machine_id = $7,
-              status = COALESCE($8, status)
-        WHERE id = $1
-          RETURNING id, vendor_username, email, phone, full_name, role, status, client_id, machine_id, updated_at`,
-      [
-        userId,
-        optionalEmail(body.email, 'email'),
-        optionalPhone(body.phone, 'phone'),
-        optionalDisplayText(body.fullName, 'fullName', { max: 200 }),
-        role,
-        clientId,
-        machineId,
-        body.status ? requireEnum(body.status, 'status', ['active', 'invited', 'disabled']) : null,
-      ]
-    );
+    const email = optionalEmail(body.email, 'email');
+    const phone = optionalPhone(body.phone ?? body.mobile, 'phone');
+    const fullName = optionalDisplayText(body.fullName, 'fullName', { max: 200 });
+    const userName = optionalDisplayText(body.userName, 'userName', { max: 200 });
+    const userIcon = optionalString(body.userIcon, 'userIcon', { max: 2000 });
+    const status = body.status
+      ? requireEnum(body.status, 'status', ['active', 'invited', 'disabled'])
+      : null;
+    let vendorUpdated = false;
+
+    if (before.rows[0].vendor_user_id) {
+      const nextUserName = userName || before.rows[0].vendor_username || null;
+      const nextPhone = phone || before.rows[0].phone || null;
+      const nextVendorState = status ? vendorUserStateForStatus(status) : null;
+      const vendorChanged = (
+        (nextUserName && nextUserName !== before.rows[0].vendor_username)
+        || (nextPhone && nextPhone !== before.rows[0].phone)
+        || (userIcon !== null && userIcon !== before.rows[0].metadata?.vendor?.userIcon)
+        || (nextVendorState !== null
+          && nextVendorState !== (before.rows[0].status === 'active' ? 1 : 0))
+      );
+      if (vendorChanged) {
+        const credentials = await vendorCredentialsForUserManagement(req);
+        if (!credentials.token || !credentials.userId) {
+          throw new AppError('VENDOR_SESSION_EXPIRED', 'No vendor credential is available for user update', {
+            status: 401,
+          });
+        }
+        await updateVendorUser({
+          token: credentials.token,
+          id: before.rows[0].vendor_user_id,
+          userName: nextUserName,
+          mobile: nextPhone,
+          userIcon,
+          userState: nextVendorState,
+        });
+        vendorUpdated = true;
+      }
+    }
+
+    let rows;
+    try {
+      ({ rows } = await query(
+        `UPDATE users
+            SET email = COALESCE($2, email),
+                phone = COALESCE($3, phone),
+                full_name = COALESCE($4, full_name),
+                role = $5,
+                client_id = $6,
+                machine_id = $7,
+                status = COALESCE($8, status),
+                vendor_username = COALESCE($9, vendor_username)
+          WHERE id = $1
+            RETURNING id, vendor_user_id, vendor_username, vendor_type, email, phone, full_name,
+                      role, status, client_id, machine_id, updated_at`,
+        [
+          userId,
+          email,
+          phone,
+          fullName,
+          role,
+          clientId,
+          machineId,
+          status,
+          userName,
+        ]
+      ));
+    } catch (error) {
+      if (vendorUpdated) {
+        await audit({
+          action: 'user.update_local_cleanup_failed',
+          actorType: 'api',
+          entityType: 'user',
+          entityId: userId,
+          before: { role: before.rows[0].role, machineId: before.rows[0].machine_id },
+          after: { vendorUpdated: true, localUpdated: false },
+          ip: clientIp(req),
+        });
+        throw new AppError(
+          'VENDOR_USER_LOCAL_UPDATE_FAILED',
+          'The vendor account was updated, but the local BSF user could not be updated. Refresh and reconcile this user.',
+          { status: 502 }
+        );
+      }
+      throw error;
+    }
+    if (!rows[0]) {
+      if (vendorUpdated) {
+        throw new AppError(
+          'VENDOR_USER_LOCAL_UPDATE_FAILED',
+          'The vendor account was updated, but the local BSF user no longer exists. Refresh and reconcile this user.',
+          { status: 502 }
+        );
+      }
+      throw new NotFoundError('User not found');
+    }
 
     await audit({
       action: 'user.update',
@@ -795,7 +883,7 @@ export function registerDirectoryRoutes(router) {
       entityType: 'user',
       entityId: userId,
       before: { role: before.rows[0].role, machineId: before.rows[0].machine_id },
-      after: { role, machineId },
+      after: { role, machineId, vendorUpdated },
       ip: clientIp(req),
     });
     sendOk(res, rows[0]);
@@ -807,17 +895,61 @@ export function registerDirectoryRoutes(router) {
     if (!userId) throw new ValidationError('`id` query parameter is required');
 
     const before = await query(
-      'SELECT id, email, phone, full_name, role, client_id, machine_id, status, metadata FROM users WHERE id = $1',
+      `SELECT id, vendor_user_id, vendor_username, email, phone, full_name, role,
+              client_id, machine_id, status, metadata
+         FROM users
+        WHERE id = $1`,
       [userId]
     );
     if (!before.rows[0]) throw new NotFoundError('User not found');
     await assertClientAdminCanManageUser(req, before.rows[0]);
-    const { rows } = await query(
-      `DELETE FROM users WHERE id = $1
-       RETURNING id, email, phone, full_name, role, status`,
-      [userId]
-    );
-    if (!rows[0]) throw new NotFoundError('User not found');
+    let vendorDeleted = false;
+    if (before.rows[0].vendor_user_id) {
+      const credentials = await vendorCredentialsForUserManagement(req);
+      if (!credentials.token || !credentials.userId) {
+        throw new AppError('VENDOR_SESSION_EXPIRED', 'No vendor credential is available for user deletion', {
+          status: 401,
+        });
+      }
+      await deleteVendorUser({
+        token: credentials.token,
+        id: before.rows[0].vendor_user_id,
+      });
+      vendorDeleted = true;
+    }
+    let rows;
+    try {
+      ({ rows } = await query(
+        `DELETE FROM users WHERE id = $1
+         RETURNING id, email, phone, full_name, role, status`,
+        [userId]
+      ));
+    } catch (error) {
+      if (vendorDeleted) {
+        await audit({
+          action: 'user.delete_local_cleanup_failed',
+          actorType: 'api',
+          entityType: 'user',
+          entityId: userId,
+          before: {
+            vendorUserId: before.rows[0].vendor_user_id,
+            vendorDeleted: true,
+          },
+          after: { localDeleted: false },
+          ip: clientIp(req),
+        });
+        throw new AppError(
+          'VENDOR_USER_LOCAL_DELETE_FAILED',
+          'The vendor account was deleted, but the local BSF user could not be removed. Refresh and reconcile this user.',
+          { status: 502 }
+        );
+      }
+      throw error;
+    }
+    if (!rows[0]) {
+      if (!vendorDeleted) throw new NotFoundError('User not found');
+      rows = [before.rows[0]];
+    }
 
     await audit({
       action: 'user.delete',
@@ -832,6 +964,8 @@ export function registerDirectoryRoutes(router) {
         clientId: before.rows[0].client_id,
         machineId: before.rows[0].machine_id,
         status: before.rows[0].status,
+        vendorUserId: before.rows[0].vendor_user_id,
+        vendorDeleted,
       },
       ip: clientIp(req),
     });

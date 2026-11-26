@@ -64,6 +64,61 @@ function userListUrl() {
   return url;
 }
 
+function userUpdateUrl() {
+  let url;
+  try {
+    url = new URL(config.auth.vendor.userUpdateUrl);
+  } catch {
+    throw new ProviderError('VENDOR_USER_UPDATE_CONFIGURATION_ERROR', 'Vendor user-update URL is invalid', {
+      status: 503,
+    });
+  }
+  if (!['http:', 'https:'].includes(url.protocol)
+    || url.username
+    || url.password
+    || (config.env === 'production' && url.protocol !== 'https:')) {
+    throw new ProviderError('VENDOR_USER_UPDATE_CONFIGURATION_ERROR', 'Vendor user-update URL is not allowed', {
+      status: 503,
+    });
+  }
+  return url;
+}
+
+function userDeleteUrl() {
+  let url;
+  try {
+    url = new URL(config.auth.vendor.userDeleteUrl);
+  } catch {
+    throw new ProviderError('VENDOR_USER_DELETE_CONFIGURATION_ERROR', 'Vendor user-delete URL is invalid', {
+      status: 503,
+    });
+  }
+  if (!['http:', 'https:'].includes(url.protocol)
+    || url.username
+    || url.password
+    || (config.env === 'production' && url.protocol !== 'https:')) {
+    throw new ProviderError('VENDOR_USER_DELETE_CONFIGURATION_ERROR', 'Vendor user-delete URL is not allowed', {
+      status: 503,
+    });
+  }
+  return url;
+}
+
+function vendorUserResponseError(response, { code, service }) {
+  if ([401, 403, 2002].includes(Number(response.body?.code))) {
+    throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session has expired. Please sign in again.', {
+      status: 401,
+    });
+  }
+  if (Number(response.body?.code) !== 200) {
+    throw new ProviderError(
+      code,
+      cleanText(response.body?.msg, 300) || `${service} rejected the request`,
+      { status: 502 }
+    );
+  }
+}
+
 export async function addVendorUser({
   token,
   userName,
@@ -97,7 +152,7 @@ export async function addVendorUser({
     timeoutMs: config.auth.vendor.deviceTimeoutMs,
     provider: 'Vendor user-add service',
   });
-  if ([401, 403].includes(Number(response.body?.code))) {
+  if ([401, 403, 2002].includes(Number(response.body?.code))) {
     throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session has expired. Please sign in again.', {
       status: 401,
     });
@@ -112,6 +167,94 @@ export async function addVendorUser({
   return {
     userName: name,
     mobile: phone,
+    message: cleanText(response.body?.msg, 300),
+  };
+}
+
+export async function updateVendorUser({
+  token,
+  id,
+  userName,
+  mobile,
+  userIcon,
+  userState,
+} = {}) {
+  const accessToken = cleanText(token, 8192);
+  const userId = integer(id, { min: 1 });
+  const name = cleanText(userName, 200);
+  const phone = cleanText(mobile, 40);
+  const icon = cleanText(userIcon, 2000);
+  const state = userState === undefined || userState === null || userState === ''
+    ? null
+    : integer(userState, { min: 0 });
+  if (!accessToken) throw new ValidationError('A vendor access token is required');
+  if (!userId) throw new ValidationError('A vendor user id is required');
+  if (state !== null && ![0, 1].includes(state)) {
+    throw new ValidationError('Vendor user state must be 0 or 1');
+  }
+
+  const body = { id: userId };
+  if (name) body.userName = name;
+  if (phone) body.mobile = phone;
+  if (icon) body.userIcon = icon;
+  if (state !== null) body.userState = state;
+  if (Object.keys(body).length === 1) {
+    throw new ValidationError('At least one vendor user field must be supplied');
+  }
+
+  const response = await httpRequest({
+    url: userUpdateUrl().toString(),
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      token: accessToken,
+    },
+    body,
+    timeoutMs: config.auth.vendor.deviceTimeoutMs,
+    provider: 'Vendor user-update service',
+  });
+  vendorUserResponseError(response, {
+    code: 'VENDOR_USER_UPDATE_REJECTED',
+    service: 'Vendor user-update service',
+  });
+  return {
+    id: userId,
+    message: cleanText(response.body?.msg, 300),
+  };
+}
+
+export async function deleteVendorUser({ token, id } = {}) {
+  const accessToken = cleanText(token, 8192);
+  const userId = integer(id, { min: 1 });
+  if (!accessToken) throw new ValidationError('A vendor access token is required');
+  if (!userId) throw new ValidationError('A vendor user id is required');
+
+  const response = await httpRequest({
+    url: userDeleteUrl().toString(),
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      token: accessToken,
+    },
+    body: { id: userId },
+    timeoutMs: config.auth.vendor.deviceTimeoutMs,
+    provider: 'Vendor user-delete service',
+  });
+  if (Number(response.body?.code) === 4002) {
+    return {
+      id: userId,
+      message: cleanText(response.body?.msg, 300),
+      alreadyDeleted: true,
+    };
+  }
+  vendorUserResponseError(response, {
+    code: 'VENDOR_USER_DELETE_REJECTED',
+    service: 'Vendor user-delete service',
+  });
+  return {
+    id: userId,
     message: cleanText(response.body?.msg, 300),
   };
 }
@@ -148,7 +291,7 @@ export async function listVendorUsers({
     timeoutMs: config.auth.vendor.deviceTimeoutMs,
     provider: 'Vendor user-list service',
   });
-  if ([401, 403].includes(Number(response.body?.code))) {
+  if ([401, 403, 2002].includes(Number(response.body?.code))) {
     throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor session has expired. Please sign in again.', {
       status: 401,
     });
@@ -186,6 +329,53 @@ export async function listVendorUsers({
       size: integer(data.size) ?? size,
       current: integer(data.current) ?? page,
       pages: integer(data.pages) ?? 0,
+    },
+  };
+}
+
+export async function listAllVendorUsers({
+  token,
+  userId,
+  userName = '',
+  maxPages = 20,
+} = {}) {
+  const limit = Math.max(1, Math.min(Number(maxPages) || 20, 100));
+  const first = await listVendorUsers({
+    token,
+    userId,
+    userName,
+    pageNum: 1,
+    pageSize: 100,
+  });
+  const records = [...first.records];
+  const pages = Math.max(1, Math.min(Number(first.pagination.pages) || 1, limit));
+
+  for (let start = 2; start <= pages; start += 4) {
+    const pageNumbers = [];
+    for (let pageNum = start; pageNum <= Math.min(pages, start + 3); pageNum += 1) {
+      pageNumbers.push(pageNum);
+    }
+    const pageResults = await Promise.all(pageNumbers.map((pageNum) => listVendorUsers({
+      token,
+      userId,
+      userName,
+      pageNum,
+      pageSize: 100,
+    })));
+    for (const page of pageResults) records.push(...page.records);
+  }
+
+  const unique = new Map();
+  for (const record of records) {
+    if (record?.id) unique.set(String(record.id), record);
+  }
+  return {
+    records: Array.from(unique.values()),
+    pagination: {
+      ...first.pagination,
+      current: 1,
+      pages,
+      total: Math.max(first.pagination.total, unique.size),
     },
   };
 }

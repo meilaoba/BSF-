@@ -320,6 +320,11 @@ export function authorizeApiPath(req, pathname, session) {
     return;
   }
 
+  if (isPathOrChild('/api/v1/vendor-users')) {
+    if (!['master_admin', 'client_admin'].includes(role)) throw new ForbiddenError();
+    return;
+  }
+
   if (isPathOrChild('/api/v1/settings')) {
     if (role !== 'master_admin') throw new ForbiddenError();
     return;

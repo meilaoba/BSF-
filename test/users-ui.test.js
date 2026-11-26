@@ -291,14 +291,27 @@ test('frontend mobile validation matches the backend acceptance cases', () => {
 
 test('filtered client user rows keep their original record ids for edit and delete', () => {
   assert.match(source, /safe\.userId = String\(user\.id \|\| ''\)/);
-  assert.match(source, /deleteUserRecord\('\$\{u\.userId\}'\)/);
+  assert.match(source, /deleteUserRecord\(\\'' \+ u\.userId \+ '\\'\)/);
   assert.match(source, /userRecords\.findIndex\(function\(user\)\{ return String\(user\.id\) === String\(userRef\); \}\)/);
   assert.match(source, /if\(!user\.id\)\{ alert\('User record is incomplete\. Refresh the page and try again\.'\); return; \}/);
   assert.doesNotMatch(source, /onclick="deleteUserRecord\(\$\{i\}\)"/);
   assert.match(source, /userRecords\.splice\(index, 1\)/);
   assert.match(source, /Permanently delete user/);
-  assert.match(source, /The vendor account is not deleted/);
+  assert.match(source, /from BSF and the vendor system/);
+  assert.match(source, /from BSF local records/);
   assert.match(source, /user\.statusValue === 'disabled'/);
+});
+
+test('user management exposes vendor account update and complete device assignment', () => {
+  assert.match(source, /openUserAssignmentModal/);
+  assert.match(source, /getUserAssignments\(user\.id\)/);
+  assert.match(source, /setUserAssignments\(modal\.dataset\.userId, deviceIds\)/);
+  assert.match(source, /The checked devices are the complete final assignment/);
+  assert.match(source, /Permanently delete user/);
+  assert.match(source, /from BSF and the vendor system/);
+  assert.match(source, /id="user-username-input"[^>]*(?!readonly)/);
+  assert.match(source, /id="user-status-input"/);
+  assert.match(source, /status:statusValue/);
 });
 
 test('Add User opens the modal in create mode without a record id', () => {
@@ -312,4 +325,63 @@ test('User form exposes one name field and uses Username as the display value', 
   assert.doesNotMatch(source, /user-name-input/);
   assert.match(source, />Username<\/th>/);
   assert.match(source, /userName:userName/);
+});
+
+test('device assignment modal loads assigned devices and submits the complete checked set', async () => {
+  let assignmentRequest = null;
+  let submitted = null;
+  const alerts = [];
+  const modal = {
+    dataset:{},
+    innerHTML:'',
+    removed:false,
+    querySelectorAll(){
+      return [
+        { dataset:{ deviceId:'30' } },
+        { dataset:{ deviceId:'32' } },
+      ];
+    },
+    remove(){ this.removed = true; },
+  };
+  const sandbox = {
+    console,
+    window:{
+      BSF_API:{
+        async getUserAssignments(id){
+          assignmentRequest = id;
+          return {
+            assignedList:[{ id:30, deviceName:'Composter A', deviceSerialNum:'SN-A' }],
+            unassignedList:[{ id:31, deviceName:'Composter B', deviceSerialNum:'SN-B' }],
+          };
+        },
+        async setUserAssignments(id, deviceIds){
+          submitted = { id, deviceIds };
+        },
+      },
+    },
+    document:{
+      getElementById(){ return modal.removed ? null : modal; },
+      createElement(){ return modal; },
+      body:{ appendChild(){} },
+    },
+    alert(message){ alerts.push(String(message)); },
+    clientEscape(value){ return String(value ?? ''); },
+    bsfEscapeHtml(value){ return String(value ?? ''); },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox, { filename:'users.js' });
+  vm.runInContext(`userRecords = [{ id:'11111111-1111-4111-8111-111111111111', username:'child', name:'Child User' }]`, sandbox);
+
+  await vm.runInContext("openUserAssignmentModal('11111111-1111-4111-8111-111111111111')", sandbox);
+  assert.equal(assignmentRequest, '11111111-1111-4111-8111-111111111111');
+  assert.match(modal.innerHTML, /Composter A/);
+  assert.match(modal.innerHTML, /Composter B/);
+  assert.match(modal.innerHTML, /data-device-id="30"/);
+
+  await vm.runInContext('saveUserAssignments()', sandbox);
+  assert.deepEqual(JSON.parse(JSON.stringify(submitted)), {
+    id:'11111111-1111-4111-8111-111111111111',
+    deviceIds:[30, 32],
+  });
+  assert.deepEqual(alerts, ['Device assignments updated']);
 });

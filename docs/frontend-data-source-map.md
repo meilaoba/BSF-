@@ -146,13 +146,15 @@
 
 | 界面数据 | 来源 | 说明 |
 | --- | --- | --- |
-| Username | 厂家字段 + 本地数据库 | 厂家 `userName` 与本地用户记录 |
-| Email、Phone | 本地数据库/厂家用户接口 | 取决于用户创建与关联情况 |
+| Username | 厂家字段 + 本地数据库 | `/user/list` 的 `userName` 与本地 `vendor_username` |
+| Email、Phone | 本地数据库/厂家用户接口 | 本地记录优先，未关联账号使用厂家手机号 |
 | Role | BSF 计算/映射 | 根据角色和厂家 `userType` 映射为 Master Admin、Client Admin、User |
 | Client | 本地数据库 | `users.client_id` |
 | Linked Machine | 本地数据库 | `users.machine_id` |
-| Status | 本地数据库 | active / invited / disabled |
-| Add/Edit 表单字段 | 用户输入 | 提交时写入本地数据库；新增用户还会调用厂家 `/user/add` |
+| Status | 本地数据库 + 厂家 `userState` | 已关联用户使用本地状态；未关联账号用厂家启用状态 |
+| Devices | 厂家分配接口 | `/emDeviceAssign/assignedUser`，保存时覆盖最终设备集合 |
+| Add/Edit 表单字段 | 用户输入 | 新增调用 `/user/add`；已关联用户编辑调用 `/user/update` 并更新本地 |
+| Delete | 厂家 + 本地数据库 | 先调用 `/user/delete`，成功后删除本地用户 |
 
 ## Alerts
 

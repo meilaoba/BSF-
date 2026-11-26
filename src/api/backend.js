@@ -52,6 +52,9 @@ export function createBackendApi(options = {}) {
     sendWhatsAppNotification(data) { return http.post('/notifications/whatsapp', data); },
 
     getUsers(params) { return http.get('/users', params); },
+    getVendorUsers(params) { return http.get('/vendor-users', params); },
+    getUserAssignments(id) { return http.get('/vendor-users/assignments', { userId: id }); },
+    setUserAssignments(id, deviceIds) { return http.put('/vendor-users/assignments', { userId: id, deviceId: deviceIds }); },
     createUser(data) { return http.post('/users', data); },
     updateUser(id, data) { return http.put('/users/' + encodeURIComponent(id), data); },
     deleteUser(id) { return http.delete('/users/' + encodeURIComponent(id)); },

@@ -155,20 +155,31 @@ function bsfDirectoryClientRow(row){
 
 function bsfDirectoryUserRow(row){
   const email = bsfField(row, ['email']) || '';
+  const rawStatus = bsfField(row, ['status', 'userState']);
+  const statusValue = rawStatus === 1 || rawStatus === '1'
+    ? 'active'
+    : rawStatus === 0 || rawStatus === '0'
+      ? 'disabled'
+      : (rawStatus || 'active');
+  const clientId = bsfField(row, ['client_id', 'clientId']) || '';
   return {
     id:bsfField(row, ['id']) || '',
     name:bsfField(row, ['full_name', 'fullName', 'email', 'phone']) || '',
-    username:bsfField(row, ['vendor_username', 'username']) || email,
+    username:bsfField(row, ['vendor_username', 'userName', 'username']) || email,
     email:email,
     phone:bsfField(row, ['phone']) || '',
     role:bsfDirectoryRoleLabel(bsfField(row, ['role'])),
     roleValue:bsfDirectoryRoleValue(bsfField(row, ['role'])),
     client:bsfField(row, ['client_name', 'client']) || '',
-    clientId:bsfField(row, ['client_id', 'clientId']) || '',
+    clientId:clientId,
     machineId:bsfField(row, ['machine_id', 'machineId']) || '',
     machineName:bsfField(row, ['machine_serial', 'machine_name']) || '',
-    status:bsfDirectoryStatusLabel(bsfField(row, ['status'])),
-    statusValue:bsfField(row, ['status']) || 'active'
+    status:bsfDirectoryStatusLabel(statusValue),
+    statusValue:statusValue,
+    vendorUserId:bsfField(row, ['vendorUserId', 'vendor_user_id']) || '',
+    vendorType:bsfField(row, ['userType', 'vendor_type']) || null,
+    userIcon:bsfField(row, ['userIcon', 'user_icon']) || '',
+    isManaged:row && row.isManaged === false ? false : Boolean(bsfField(row, ['id']))
   };
 }
 
@@ -572,14 +583,15 @@ async function bsfLoadDirectoryData(){
   const api = await bsfWaitForBackendApi();
   if(!api) throw new Error('Backend API is unavailable');
   const role = typeof currentRole === 'undefined' ? 'user' : currentRole;
-  const requests = [];
-  if(role === 'admin' || role === 'client-admin') requests.push(api.getClients({ limit:500, status:'active' }));
-  if(role === 'admin' || role === 'client-admin') requests.push(api.getUsers({ limit:500 }));
-  if(!requests.length) return false;
+  if(role !== 'admin' && role !== 'client-admin') return false;
+  const requests = [
+    api.getClients({ limit:500, status:'active' }),
+    api.getUsers({ limit:500 }),
+    api.getVendorUsers({ pageNum:1, pageSize:100 })
+  ];
   const results = await Promise.allSettled(requests);
-  let index = 0;
-  if((role === 'admin' || role === 'client-admin') && results[index]){
-    const result = results[index++];
+  if(results[0]){
+    const result = results[0];
     if(result.status === 'fulfilled' && typeof clientRecords !== 'undefined'){
       const mapped = bsfList(result.value, 'clients').map(bsfDirectoryClientRow);
       mapped.forEach(function(client){
@@ -590,10 +602,28 @@ async function bsfLoadDirectoryData(){
       clientRecords.splice(0, clientRecords.length, ...mapped);
     }
   }
-  const userResult = results[index];
-  if(userResult && userResult.status === 'fulfilled' && typeof userRecords !== 'undefined'){
-    const mapped = bsfList(userResult.value, 'users').map(bsfDirectoryUserRow);
-    userRecords.splice(0, userRecords.length, ...mapped);
+  if(typeof userRecords !== 'undefined'){
+    const localUsers = results[1] && results[1].status === 'fulfilled'
+      ? bsfList(results[1].value, 'users').map(bsfDirectoryUserRow)
+      : [];
+    const vendorUsers = results[2] && results[2].status === 'fulfilled'
+      ? bsfList(results[2].value, 'users').map(bsfDirectoryUserRow)
+      : [];
+    const merged = new Map();
+    localUsers.forEach(function(user){
+      const key = user.vendorUserId ? 'vendor:' + user.vendorUserId : 'local:' + user.id;
+      merged.set(key, user);
+    });
+    vendorUsers.forEach(function(user){
+      const key = user.vendorUserId
+        ? 'vendor:' + user.vendorUserId
+        : 'vendor-only:' + user.username;
+      const local = merged.get(key);
+      merged.set(key, Object.assign({}, local || {}, user, {
+        isManaged:Boolean((local && local.id) || user.id)
+      }));
+    });
+    userRecords.splice(0, userRecords.length, ...Array.from(merged.values()));
   }
   return true;
 }

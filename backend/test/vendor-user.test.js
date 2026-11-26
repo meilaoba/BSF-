@@ -6,9 +6,12 @@ process.env.NODE_ENV = 'development';
 
 const {
   addVendorUser,
+  deleteVendorUser,
   encryptVendorUserPassword,
   findVendorUserByName,
+  listAllVendorUsers,
   listVendorUsers,
+  updateVendorUser,
 } = await import('../src/providers/vendor-user.js');
 
 test('encrypts the documented vendor user password sample', () => {
@@ -128,6 +131,103 @@ test('finds an existing vendor child user by exact user name', async () => {
     });
     assert.equal(result.id, 52);
     assert.equal(result.userType, 3);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('updates only documented vendor user fields', async () => {
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    calls.push({ url: String(url), options });
+    return new Response(JSON.stringify({ code: 200, msg: '修改成功', data: null }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    await updateVendorUser({
+      token: 'vendor-token',
+      id: 52,
+      userName: 'new-name',
+      mobile: '+85291234567',
+      userState: 0,
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  assert.match(calls[0].url, /\/user\/update$/);
+  assert.equal(calls[0].options.headers.token, 'vendor-token');
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    id: 52,
+    userName: 'new-name',
+    mobile: '+85291234567',
+    userState: 0,
+  });
+});
+
+test('deletes the vendor child user by vendor id', async () => {
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    calls.push({ url: String(url), options });
+    return new Response(JSON.stringify({ code: 200, msg: '删除成功', data: null }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    await deleteVendorUser({ token: 'vendor-token', id: 52 });
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  assert.match(calls[0].url, /\/user\/delete$/);
+  assert.equal(calls[0].options.headers.token, 'vendor-token');
+  assert.deepEqual(JSON.parse(calls[0].options.body), { id: 52 });
+});
+
+test('treats an already missing vendor user as an idempotent delete', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify({
+    code: 4002,
+    msg: '删除失败',
+    data: null,
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  try {
+    const result = await deleteVendorUser({ token: 'vendor-token', id: 52 });
+    assert.equal(result.alreadyDeleted, true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('loads all vendor user pages without duplicate ids', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (_url, options) => {
+    const payload = JSON.parse(options.body);
+    const records = payload.pageNum === 1
+      ? [
+        { id: 51, userName: 'one', userState: 1, parentId: 8, userType: 3 },
+        { id: 52, userName: 'two', userState: 1, parentId: 8, userType: 3 },
+      ]
+      : [
+        { id: 52, userName: 'two', userState: 1, parentId: 8, userType: 3 },
+        { id: 53, userName: 'three', userState: 1, parentId: 8, userType: 3 },
+      ];
+    return new Response(JSON.stringify({
+      code: 200,
+      data: { records, total: 3, size: 100, current: payload.pageNum, pages: 2 },
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const result = await listAllVendorUsers({
+      token: 'vendor-token',
+      userId: 8,
+    });
+    assert.deepEqual(result.records.map((record) => record.id), [51, 52, 53]);
   } finally {
     global.fetch = originalFetch;
   }

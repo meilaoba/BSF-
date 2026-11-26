@@ -131,6 +131,8 @@ GET|POST|PUT|DELETE /api/v1/machines      设备（含客户关联）
 GET  /api/v1/vendor-devices              厂家设备列表（只读代理）
 PUT  /api/v1/vendor-devices/assignment   将自有设备分配给 Client
 POST /api/v1/vendor-devices/sync         同步厂家设备资料（不自动绑定）
+GET  /api/v1/vendor-users                查询并合并厂家子用户
+GET|PUT /api/v1/vendor-users/assignments 查询/覆盖子用户设备分配
 GET  /api/v1/device-data                 历史遥测查询
 POST /api/v1/device-data/ingest          遥测写入
 GET|POST|PUT|DELETE /api/v1/users         Master Admin / Client Admin / User
@@ -156,6 +158,14 @@ Clients、Machines 和 Users 统一使用集合式接口：`GET/POST` 使用集�
 新增普通 User 会调用厂家 `/user/add`。用户名、手机号用于本地记录，初始密码
 只用于厂家接口的 AES-CBC 加密请求，不保存到 BSF 数据库或日志。用户首次厂家
 登录后，后端按用户名把厂家用户 ID 关联到已有本地记录。
+
+已关联用户修改和删除时会同步厂家 `/user/update`、`/user/delete`。厂家支持修改
+用户名、手机号、头像和启用状态，邮箱、角色、Client 和 Machine 仍由 BSF 本地
+管理。厂家成功但本地持久化失败时，接口返回同步失败错误并写审计，不报告完全成功。
+
+子用户设备分配使用厂家 `/emDeviceAssign/assignedUser` 查询，并通过
+`/emDeviceAssign/allocateEquipment` 提交最终保留的设备集合。该接口是全量覆盖，
+空数组表示清空全部分配。
 
 ### 部署与自检
 

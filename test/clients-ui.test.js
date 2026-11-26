@@ -22,6 +22,6 @@ test('client admin UI excludes the Clients page while retaining vendor device as
 
 test('client admin scope is no longer restricted to one current client', () => {
   assert.match(state, /function isClientScopedRole\(\)\{\s*return currentRole === 'user';/);
-  assert.match(backendData, /role === 'admin' \|\| role === 'client-admin'/);
+  assert.match(backendData, /role !== 'admin' && role !== 'client-admin'/);
   assert.match(backendData, /api\.getClients\(\{ limit:500, status:'active' \}\)/);
 });

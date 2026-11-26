@@ -50,15 +50,46 @@ test('normalizes directory rows into stable frontend fields', () => {
     machineName: '',
     status: 'Invited',
     statusValue: 'invited',
+    vendorUserId: '',
+    vendorType: null,
+    userIcon: '',
+    isManaged: true,
   });
 });
 
 test('authenticated startup loads real clients and users from the backend', () => {
-  assert.match(source, /role === 'admin' \|\| role === 'client-admin'.*api\.getClients/);
+  assert.match(source, /role !== 'admin' && role !== 'client-admin'/);
+  assert.match(source, /api\.getClients\(\{ limit:500, status:'active' \}\)/);
   assert.match(source, /api\.getUsers\(\{ limit:500 \}\)/);
+  assert.match(source, /api\.getVendorUsers\(\{ pageNum:1, pageSize:100 \}\)/);
   assert.match(source, /await bsfLoadDirectoryData\(\)/);
   assert.match(source, /window\.BSF_LOAD_DIRECTORY_DATA = bsfLoadDirectoryData/);
   assert.doesNotMatch(source, /filter\(function\(user\)\{ return user\.statusValue !== 'disabled'; \}\)/);
+});
+
+test('vendor user rows represent vendor state and unmanaged accounts', () => {
+  const managed = JSON.parse(JSON.stringify(directoryUserRow({
+    id: '11111111-1111-4111-8111-111111111111',
+    vendorUserId: '52',
+    userName: 'vendor-child',
+    role: 'user',
+    status: 'disabled',
+    isManaged: true,
+  })));
+  assert.equal(managed.vendorUserId, '52');
+  assert.equal(managed.statusValue, 'disabled');
+  assert.equal(managed.isManaged, true);
+
+  const unmanaged = JSON.parse(JSON.stringify(directoryUserRow({
+    vendorUserId: '53',
+    userName: 'vendor-only',
+    userState: 1,
+    isManaged: false,
+  })));
+  assert.equal(unmanaged.id, '');
+  assert.equal(unmanaged.statusValue, 'active');
+  assert.equal(unmanaged.isManaged, false);
+  assert.equal(unmanaged.username, 'vendor-only');
 });
 
 

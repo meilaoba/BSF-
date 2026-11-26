@@ -191,6 +191,7 @@
       clientId:value.clientId || null,
       machineId:value.machineId,
       status:directoryStatus(value.status),
+      ...(value.userIcon ? { userIcon:value.userIcon } : {}),
       ...(value.metadata ? { metadata:value.metadata } : {})
     };
   }
@@ -237,6 +238,9 @@
     sendAlertNotification:function(data){ return post('/notifications/alert', data); },
     sendWhatsAppNotification:function(data){ return post('/notifications/whatsapp', data); },
     getUsers:function(params){ return get('/users', params); },
+    getVendorUsers:function(params){ return get('/vendor-users', params); },
+    getUserAssignments:function(id){ return get('/vendor-users/assignments', { userId:id }); },
+    setUserAssignments:function(id, deviceIds){ return put('/vendor-users/assignments', { userId:id, deviceId:deviceIds }); },
     createUser:function(data){ return post('/users', userPayload(data)); },
     updateUser:function(id, data){ return put('/users', userPayload(Object.assign({}, data, { id:id }))); },
     deleteUser:function(id){ return remove('/users', { id:id }); },

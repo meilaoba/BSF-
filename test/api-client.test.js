@@ -181,3 +181,26 @@ test('directory writes use the backend collection routes and canonical user fiel
     monthlyDistanceKm:140,
   });
 });
+
+test('vendor user queries and complete device assignments use the vendor-user routes', async () => {
+  const { client, calls } = loadClient(async () => ({
+    ok: true,
+    json: async () => ({ ok: true, data: {} }),
+  }), 'bsf_csrf=csrf-token');
+
+  await client.getVendorUsers({ pageNum: 1, pageSize: 100 });
+  await client.getUserAssignments('11111111-1111-4111-8111-111111111111');
+  await client.setUserAssignments(
+    '11111111-1111-4111-8111-111111111111',
+    [30, 32],
+  );
+
+  assert.equal(calls[0].url, '/api/v1/vendor-users?pageNum=1&pageSize=100');
+  assert.equal(calls[1].url, '/api/v1/vendor-users/assignments?userId=11111111-1111-4111-8111-111111111111');
+  assert.equal(calls[2].url, '/api/v1/vendor-users/assignments');
+  assert.equal(calls[2].options.method, 'PUT');
+  assert.deepEqual(JSON.parse(calls[2].options.body), {
+    userId: '11111111-1111-4111-8111-111111111111',
+    deviceId: [30, 32],
+  });
+});

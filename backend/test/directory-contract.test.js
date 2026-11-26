@@ -86,3 +86,24 @@ test('user deletion permanently removes the local database row', () => {
   assert.match(block, /action: 'user\.delete'/);
   assert.match(block, /before: \{/);
 });
+
+test('vendor-backed user updates and deletes call the vendor before local persistence', () => {
+  const updateStart = source.indexOf("router.put('/api/v1/users'");
+  const updateEnd = source.indexOf("router.delete('/api/v1/users'", updateStart);
+  const updateBlock = source.slice(updateStart, updateEnd);
+  assert.match(updateBlock, /before\.rows\[0\]\.vendor_user_id/);
+  assert.match(updateBlock, /await updateVendorUser\(/);
+  assert.match(updateBlock, /vendor_username = COALESCE/);
+  const vendorCall = updateBlock.indexOf('await updateVendorUser(');
+  const localUpdate = updateBlock.indexOf('UPDATE users', vendorCall);
+  assert.ok(vendorCall >= 0 && localUpdate > vendorCall);
+
+  const deleteStart = source.indexOf("router.delete('/api/v1/users'");
+  const deleteEnd = source.indexOf("router.get('/api/v1/notification-recipients'", deleteStart);
+  const deleteBlock = source.slice(deleteStart, deleteEnd);
+  assert.match(deleteBlock, /await deleteVendorUser\(/);
+  assert.match(deleteBlock, /vendor_user_id/);
+  const vendorDelete = deleteBlock.indexOf('await deleteVendorUser(');
+  const localDelete = deleteBlock.indexOf('DELETE FROM users', vendorDelete);
+  assert.ok(vendorDelete >= 0 && localDelete > vendorDelete);
+});
