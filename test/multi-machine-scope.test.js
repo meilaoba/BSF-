@@ -38,6 +38,6 @@ test('ordinary users can see every machine in their assigned machine list', () =
 test('user management shows multiple assigned devices and does not overwrite them from edit form', () => {
   assert.match(usersSource, /safe\.assignedDevices = \(user\.machineNames \|\| \[\]\)/);
   assert.match(usersSource, />Assigned Devices<\/th>/);
-  assert.match(usersSource, /isEdit \? '' : '<label[^']+Linked Machine/);
-  assert.match(usersSource, /\.\.\.\(existing\?\{\}:\{machineId:machineId \|\| null\}\)/);
+  assert.doesNotMatch(usersSource, /Linked Machine/);
+  assert.doesNotMatch(usersSource, /user-machine-input/);
 });

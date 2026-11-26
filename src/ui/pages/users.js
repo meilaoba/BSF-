@@ -67,34 +67,6 @@ function userClientOptions(selectedId){
   }).join('');
 }
 
-function userMachineOptions(clientId, selected, includeAllDevices){
-  const list = includeAllDevices
-    ? scopedDevices().filter(function(dev){
-      return dev.backendId || dev.vendorDeviceId || dev.serial || dev.id;
-    })
-    : clientId
-      ? scopedDevices().filter(function(dev){
-        return dev.backendId && String(dev.clientId || '') === String(clientId);
-      })
-      : [];
-  return '<option value="">Select Machine</option>' + list.map(function(dev){
-    const value = dev.backendId || dev.vendorDeviceId || dev.serial || dev.id || '';
-    return '<option value="' + clientEscape(value) + '"' + (String(selected || '') === String(value) ? ' selected' : '') + '>' + clientEscape(dev.id) + '</option>';
-  }).join('');
-}
-
-function syncUserMachineOptions(){
-  const clientSelect = document.getElementById('user-client-input');
-  const machineSelect = document.getElementById('user-machine-input');
-  if(!machineSelect) return;
-  const clientAdmin = typeof currentRole !== 'undefined' && currentRole === 'client-admin';
-  machineSelect.innerHTML = userMachineOptions(
-    clientSelect ? clientSelect.value : '',
-    machineSelect.value,
-    clientAdmin
-  );
-}
-
 function userMobileValidationMessage(value){
   const raw=String(value || '').trim();
   if(!raw) return '';
@@ -177,9 +149,8 @@ function openUserModal(userRef){
       '<select id="user-role-input" style="' + fieldStyle + '">' + roles + '</select>' +
       '<div style="display:' + (clientAdmin ? 'none' : 'block') + ';">' +
         '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Client</label>' +
-        '<select id="user-client-input"' + clientSelectAttrs + ' onchange="syncUserMachineOptions()" style="' + fieldStyle + clientSelectStyle + '">' + userClientOptions(user.clientId) + '</select>' +
+        '<select id="user-client-input"' + clientSelectAttrs + ' style="' + fieldStyle + clientSelectStyle + '">' + userClientOptions(user.clientId) + '</select>' +
       '</div>' +
-      (isEdit ? '' : '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Machine</label><select id="user-machine-input" style="' + fieldStyle + '">' + userMachineOptions(user.clientId, user.machineId, clientAdmin) + '</select>') +
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Status</label>' +
       '<select id="user-status-input" style="' + fieldStyle + '"><option value="active"' + (user.statusValue!=='disabled'?' selected':'') + '>Active</option><option value="disabled"' + (user.statusValue==='disabled'?' selected':'') + '>Disabled</option></select>' +
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;"><button onclick="closeUserModal()" style="padding:9px 18px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-size:13px;cursor:pointer;">Cancel</button><button onclick="saveUserModal()" style="padding:9px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save</button></div>' +
@@ -196,7 +167,6 @@ async function saveUserModal(){
   const password=(document.getElementById('user-password-input')||{}).value || '';
   const role=(document.getElementById('user-role-input')||{}).value || 'User';
   const clientId=(document.getElementById('user-client-input')||{}).value || '';
-  const machineId=(document.getElementById('user-machine-input')||{}).value || '';
   const statusValue=(document.getElementById('user-status-input')||{}).value || 'active';
   const editIndex=modal.dataset.editIndex===''?-1:Number(modal.dataset.editIndex);
   const existing=editIndex>=0?userRecords[editIndex]:null;
@@ -217,7 +187,7 @@ async function saveUserModal(){
     }
   }
   if(!existing && !password){ alert('Initial Password is required for a new user'); return; }
-  const payload={id:existing?existing.id:'',userName:userName,email:email,mobile:mobile,password:password,role:role,clientId:clientId || null,status:statusValue,...(existing?{}:{machineId:machineId || null})};
+  const payload={id:existing?existing.id:'',userName:userName,email:email,mobile:mobile,password:password,role:role,clientId:clientId || null,status:statusValue};
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{ if(existing) await window.BSF_API.updateUser(existing.id,payload); else await window.BSF_API.createUser(payload); }catch(error){ alert('Save failed: '+error.message); return; }
   }

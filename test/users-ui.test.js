@@ -58,7 +58,6 @@ test('Add User save submits a vendor user without a frontend exception', async (
     password:'password',
     role:'User',
     clientId:'client-1',
-    machineId:'machine-1',
     status:'active',
   });
 });
@@ -160,7 +159,7 @@ test('Add User can create a customer-scoped user without a machine', async () =>
 
   assert.deepEqual(alerts, []);
   assert.equal(created.clientId, 'client-1');
-  assert.equal(created.machineId, null);
+  assert.equal(Object.prototype.hasOwnProperty.call(created, 'machineId'), false);
   assert.equal(created.role, 'User');
 });
 
@@ -207,7 +206,7 @@ test('Add User can create a fully unassigned user when no customer is available'
 
   assert.deepEqual(alerts, []);
   assert.equal(created.clientId, null);
-  assert.equal(created.machineId, null);
+  assert.equal(Object.prototype.hasOwnProperty.call(created, 'machineId'), false);
   assert.equal(created.role, 'User');
 });
 
@@ -218,55 +217,11 @@ test('mobile field contains the requested helper and immediate validation', () =
   assert.match(source, /digits\.length===11 && digits\.startsWith\('1'\)/);
 });
 
-test('machine options only show locally linked machines for the selected customer', () => {
-  const sandbox = {
-    scopedDevices(){
-      return [
-        { id:'VENDOR-ONLY', backendId:'', vendorDeviceId:'vendor-1', serial:'VENDOR-ONLY', clientId:'client-1' },
-        { id:'SERIAL-LOCAL', backendId:'machine-2', vendorDeviceId:'vendor-2', serial:'SERIAL-LOCAL', clientId:'client-1' },
-        { id:'OTHER-CLIENT', backendId:'machine-3', vendorDeviceId:'vendor-3', serial:'OTHER-CLIENT', clientId:'client-2' },
-      ];
-    },
-    clientEscape(value){ return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); },
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(source, sandbox, { filename:'users.js' });
-
-  const markup = sandbox.userMachineOptions('client-1', '');
-  assert.doesNotMatch(markup, /VENDOR-ONLY/);
-  assert.doesNotMatch(markup, /OTHER-CLIENT/);
-  assert.match(markup, /<option value="machine-2">SERIAL-LOCAL<\/option>/);
-});
-
-test('machine selection stays empty until a customer is selected', () => {
-  const sandbox = {
-    scopedDevices(){ return [{ id:'SERIAL-LOCAL', backendId:'machine-2', clientId:'client-1' }]; },
-    clientEscape(value){ return String(value ?? ''); },
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(source, sandbox, { filename:'users.js' });
-
-  const markup = sandbox.userMachineOptions('', '');
-  assert.match(markup, /<option value="">Select Machine<\/option>/);
-  assert.doesNotMatch(markup, /SERIAL-LOCAL/);
-});
-
-test('client admin machine options list account devices without a customer selection', () => {
-  const sandbox = {
-    scopedDevices(){
-      return [
-        { id:'DEVICE-A', backendId:'', vendorDeviceId:'vendor-a', serial:'SERIAL-A', clientId:'' },
-        { id:'DEVICE-B', backendId:'machine-b', vendorDeviceId:'vendor-b', serial:'SERIAL-B', clientId:'' },
-      ];
-    },
-    clientEscape(value){ return String(value ?? ''); },
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(source, sandbox, { filename:'users.js' });
-
-  const markup = sandbox.userMachineOptions('', '', true);
-  assert.match(markup, /<option value="vendor-a">DEVICE-A<\/option>/);
-  assert.match(markup, /<option value="machine-b">DEVICE-B<\/option>/);
+test('user creation no longer exposes the redundant single-machine field', () => {
+  assert.doesNotMatch(source, /Linked Machine/);
+  assert.doesNotMatch(source, /user-machine-input/);
+  assert.doesNotMatch(source, /machineId:machineId/);
+  assert.match(source, /role:role,clientId:clientId \|\| null,status:statusValue/);
 });
 
 test('client admin Add User hides the linked customer field', () => {
