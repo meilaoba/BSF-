@@ -140,11 +140,6 @@ async function loadMachineMetrics(device){
   return request;
 }
 
-function selectMachineForOverview(value){
-  machineFilters.device = String(value || '');
-  renderMachines(document.getElementById('page-content'));
-}
-
 function renderMachines(container){
   const clients = scopedClientNames();
   const clientScoped = isClientScopedRole();
@@ -200,16 +195,6 @@ function renderMachines(container){
         <span style="font-size:13px;color:#94a3b8;">${statusCounts.offline} Offline</span>
       </div>
     </div>
-    ${isUserRole() && clientDevices.length > 1 ? `
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:-8px 0 24px;">
-        <span style="color:#64748b;font-size:12px;font-weight:600;padding:8px 0;">Assigned Devices</span>
-        ${clientDevices.map(dev=>{
-          const value=dev.backendId || dev.id;
-          const selected=String(selectedMachineId)===String(value);
-          return '<button onclick="selectMachineForOverview(\'' + machinePreviewEscape(value) + '\')" style="padding:8px 12px;background:' + (selected?'#0f766e':'#1e293b') + ';border:1px solid ' + (selected?'#10b981':'#334155') + ';border-radius:8px;color:#e2e8f0;font-size:12px;font-weight:600;cursor:pointer;">' + machinePreviewEscape(dev.id) + ' · ' + machinePreviewEscape(machineStatusValue(dev.status).toUpperCase()) + '</button>';
-        }).join('')}
-      </div>
-    ` : ''}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
       ${d ? machineMetricsMarkup(d) : '<div style="grid-column:1/-1;background:#1e293b;border-radius:12px;padding:28px;text-align:center;color:#64748b;border:1px solid #334155;">No device data available</div>'}
     </div>
