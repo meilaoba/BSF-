@@ -4,12 +4,14 @@ import { clientIp, readJsonBody, sendOk } from '../lib/http.js';
 import { optionalInt, optionalString, optionalUuid } from '../lib/validate.js';
 import { requireApiKey } from '../middleware/auth.js';
 import { getVendorAccessToken } from '../middleware/session.js';
+import { listAllVendorDevicesCached } from '../providers/vendor-devices.js';
 import { deleteVendorUser, listAllVendorUsers } from '../providers/vendor-user.js';
 import {
   listVendorUserAssignments,
   replaceVendorUserAssignments,
 } from '../providers/vendor-user-devices.js';
 import { loadCollectorCredentials } from '../services/vendor-collector.js';
+import { upsertVendorDevices } from '../services/device-data.js';
 
 function q(req) {
   return new URL(req.url, 'http://localhost').searchParams;
@@ -112,6 +114,61 @@ async function loadMachinesForVendorDevices(deviceIds) {
   );
   const byVendorId = new Map(rows.map((machine) => [String(machine.vendor_device_id), machine]));
   return ids.map((id) => byVendorId.get(id)).filter(Boolean);
+}
+
+async function ensureLocalMachinesForVendorDevices({
+  token,
+  vendorDeviceIds,
+  vendorAccountId,
+}) {
+  const requestedIds = [...new Set((vendorDeviceIds || []).map(String))];
+  if (!requestedIds.length) return [];
+  let machines = await loadMachinesForVendorDevices(requestedIds);
+  const mappedIds = new Set(machines.map((machine) => String(machine.vendor_device_id)));
+  const missingIds = requestedIds.filter((id) => !mappedIds.has(id));
+  if (!missingIds.length) return machines;
+
+  const pool = await listAllVendorDevicesCached({ token, pageNum: 1, pageSize: 100 });
+  const missingRecords = missingIds
+    .map((id) => pool.records.find((device) => String(device.id) === id))
+    .filter(Boolean);
+  if (missingRecords.length !== missingIds.length) {
+    throw new AppError(
+      'VENDOR_DEVICE_NOT_AVAILABLE',
+      'Some selected vendor devices are not available to this vendor account.',
+      {
+        status: 409,
+        details: {
+          vendorDeviceIds: missingIds.filter((id) => (
+            !missingRecords.some((device) => String(device.id) === id)
+          )),
+        },
+      }
+    );
+  }
+
+  await upsertVendorDevices(missingRecords);
+  for (const device of missingRecords) {
+    const serial = device.serialNumber || String(device.id);
+    await query(
+      `INSERT INTO machines
+         (serial, device_id, name, latitude, longitude, status, vendor_device_id, vendor_account_id)
+       VALUES ($1,$2,$3,$4,$5,'active',$6,$7)
+       ON CONFLICT DO NOTHING`,
+      [
+        serial,
+        device.serialNumber || null,
+        device.deviceName || serial,
+        device.latitude,
+        device.longitude,
+        String(device.id),
+        vendorAccountId ? String(vendorAccountId) : null,
+      ]
+    );
+  }
+  machines = await loadMachinesForVendorDevices(requestedIds);
+  assertAllVendorDevicesMapped(requestedIds, machines);
+  return machines;
 }
 
 function assertAllVendorDevicesMapped(deviceIds, machines) {
@@ -369,8 +426,11 @@ export function registerVendorUserRoutes(router) {
       token: credentials.token,
       userId: targetVendorUserId,
     });
-    const requestedMachines = await loadMachinesForVendorDevices(body.deviceId);
-    assertAllVendorDevicesMapped(body.deviceId, requestedMachines);
+    await ensureLocalMachinesForVendorDevices({
+      token: credentials.token,
+      vendorDeviceIds: body.deviceId,
+      vendorAccountId: fromUserId,
+    });
     await replaceVendorUserAssignments({
       token: credentials.token,
       userId: targetVendorUserId,

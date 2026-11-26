@@ -35,6 +35,10 @@ test('vendor user identity is resolved server-side and assignments are verified 
   const verify = source.indexOf('await listVendorUserAssignments(', write);
   assert.ok(write >= 0 && verify > write);
   assert.match(source, /FROM clients\s+WHERE id = \$1\s+AND vendor_account_id = \$2/);
+  assert.match(source, /ensureLocalMachinesForVendorDevices/);
+  assert.match(source, /listAllVendorDevicesCached/);
+  assert.match(source, /upsertVendorDevices\(missingRecords\)/);
+  assert.match(source, /INSERT INTO machines[\s\S]+ON CONFLICT DO NOTHING/);
 });
 
 test('vendor user routes are restricted to user managers', () => {
