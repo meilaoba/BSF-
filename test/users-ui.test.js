@@ -314,6 +314,14 @@ test('user management exposes vendor account update and complete device assignme
   assert.match(source, /status:statusValue/);
 });
 
+test('unmanaged vendor accounts expose a vendor-only delete action', () => {
+  assert.match(source, /safe\.vendorUserId = String\(user\.vendorUserId \|\| ''\)/);
+  assert.match(source, /deleteVendorUserRecord/);
+  assert.match(source, /Delete Vendor Account/);
+  assert.match(source, /There is no linked BSF user record/);
+  assert.match(source, /window\.BSF_API\.deleteVendorUser\(vendorId\)/);
+});
+
 test('Add User opens the modal in create mode without a record id', () => {
   assert.match(source, /const isAdd = userRef === undefined \|\| userRef === null \|\| userRef === ''/);
   assert.match(source, /const index = isAdd\s*\? -1/);

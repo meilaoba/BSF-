@@ -6,6 +6,7 @@ function renderUsers(container){
     const safe = Object.assign({}, user);
     ['name','username','email','role','client','machineId','status'].forEach(function(key){ safe[key] = bsfEscapeHtml(user[key]); });
     safe.userId = String(user.id || '').replace(/[^a-zA-Z0-9-]/g, '');
+    safe.vendorUserId = String(user.vendorUserId || '').replace(/[^0-9]/g, '');
     safe.displayRole = user.isManaged === false ? 'Unmanaged' : user.role;
     safe.statusStyle = user.statusValue === 'disabled'
       ? 'background:rgba(239,68,68,0.15);color:#ef4444;'
@@ -43,7 +44,7 @@ function renderUsers(container){
               <td style="padding:14px 20px;color:#e2e8f0;">${u.client}</td>
               <td style="padding:14px 20px;color:#94a3b8;">${u.machineName || u.machineId || "—"}</td>
               <td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;${u.statusStyle}">${u.status}</span></td>
-              <td style="padding:14px 20px;">${u.userId ? '<button onclick="openUserModal(\'' + u.userId + '\')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button>' + (u.vendorUserId ? '<button onclick="openUserAssignmentModal(\'' + u.userId + '\')" style="padding:6px 14px;background:#1d4ed8;border:none;border-radius:6px;color:#fff;font-size:12px;cursor:pointer;margin-right:6px;">Devices</button>' : '') + '<button onclick="deleteUserRecord(\'' + u.userId + '\')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;">Delete</button>' : '<span style="color:#64748b;font-size:12px;">Vendor account only</span>'}</td>
+              <td style="padding:14px 20px;">${u.userId ? '<button onclick="openUserModal(\'' + u.userId + '\')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button>' + (u.vendorUserId ? '<button onclick="openUserAssignmentModal(\'' + u.userId + '\')" style="padding:6px 14px;background:#1d4ed8;border:none;border-radius:6px;color:#fff;font-size:12px;cursor:pointer;margin-right:6px;">Devices</button>' : '') + '<button onclick="deleteUserRecord(\'' + u.userId + '\')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;">Delete</button>' : (u.vendorUserId ? '<button onclick="deleteVendorUserRecord(\'' + u.vendorUserId + '\')" style="padding:6px 14px;background:#7f1d1d;border:none;border-radius:6px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Delete Vendor Account</button>' : '<span style="color:#64748b;font-size:12px;">Vendor account only</span>')}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -237,6 +238,29 @@ async function deleteUserRecord(userRef){
     try{ await window.BSF_API.deleteUser(user.id); }catch(error){ alert('Delete failed: '+error.message); return; }
   }
   userRecords.splice(index, 1);
+  if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
+  renderUsers(document.getElementById('page-content'));
+}
+
+async function deleteVendorUserRecord(vendorUserId){
+  const vendorId = Number(vendorUserId);
+  if(!Number.isInteger(vendorId) || vendorId < 1){
+    alert('Vendor account id is invalid');
+    return;
+  }
+  const user = userRecords.find(function(item){ return String(item.vendorUserId) === String(vendorId) && !item.id; });
+  const label = user ? (user.username || user.name || String(vendorId)) : String(vendorId);
+  if(!window.BSF_API || typeof window.BSF_API.deleteVendorUser !== 'function'){
+    alert('Vendor account deletion API is unavailable');
+    return;
+  }
+  if(!confirm('Permanently delete vendor account "'+label+'"? This cannot be undone. There is no linked BSF user record.')) return;
+  try {
+    await window.BSF_API.deleteVendorUser(vendorId);
+  } catch(error) {
+    alert('Vendor account deletion failed: ' + error.message);
+    return;
+  }
   if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
   renderUsers(document.getElementById('page-content'));
 }

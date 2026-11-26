@@ -239,6 +239,7 @@
     sendWhatsAppNotification:function(data){ return post('/notifications/whatsapp', data); },
     getUsers:function(params){ return get('/users', params); },
     getVendorUsers:function(params){ return get('/vendor-users', params); },
+    deleteVendorUser:function(id){ return remove('/vendor-users', { vendorUserId:id }); },
     getUserAssignments:function(id){ return get('/vendor-users/assignments', { userId:id }); },
     setUserAssignments:function(id, deviceIds){ return put('/vendor-users/assignments', { userId:id, deviceId:deviceIds }); },
     createUser:function(data){ return post('/users', userPayload(data)); },

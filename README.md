@@ -131,7 +131,7 @@ GET|POST|PUT|DELETE /api/v1/machines      设备（含客户关联）
 GET  /api/v1/vendor-devices              厂家设备列表（只读代理）
 PUT  /api/v1/vendor-devices/assignment   将自有设备分配给 Client
 POST /api/v1/vendor-devices/sync         同步厂家设备资料（不自动绑定）
-GET  /api/v1/vendor-users                查询并合并厂家子用户
+GET|DELETE /api/v1/vendor-users          查询子用户 / 删除未纳管厂家账号
 GET|PUT /api/v1/vendor-users/assignments 查询/覆盖子用户设备分配
 GET  /api/v1/device-data                 历史遥测查询
 POST /api/v1/device-data/ingest          遥测写入

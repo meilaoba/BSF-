@@ -1,10 +1,10 @@
 import { query, audit } from '../db.js';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
 import { clientIp, readJsonBody, sendOk } from '../lib/http.js';
-import { optionalUuid, optionalString } from '../lib/validate.js';
+import { optionalInt, optionalString, optionalUuid } from '../lib/validate.js';
 import { requireApiKey } from '../middleware/auth.js';
 import { getVendorAccessToken } from '../middleware/session.js';
-import { listAllVendorUsers } from '../providers/vendor-user.js';
+import { deleteVendorUser, listAllVendorUsers } from '../providers/vendor-user.js';
 import {
   listVendorUserAssignments,
   replaceVendorUserAssignments,
@@ -197,6 +197,74 @@ export function registerVendorUserRoutes(router) {
       vendorUserId: String(localUser.vendor_user_id),
       fromUserId: String(fromUserId),
       ...(await enrichDevices(assignments)),
+    });
+  });
+
+  router.delete('/api/v1/vendor-users', async (req, res) => {
+    requireUserManager(req);
+    const vendorUserId = optionalInt(q(req).get('vendorUserId'), 'vendorUserId', { min: 1 });
+    if (!vendorUserId) throw new ValidationError('`vendorUserId` is required');
+
+    const local = await query(
+      'SELECT id FROM users WHERE vendor_user_id = $1 LIMIT 1',
+      [String(vendorUserId)]
+    );
+    if (local.rows[0]) {
+      throw new AppError(
+        'VENDOR_USER_MANAGED',
+        'This vendor account is linked to a BSF user. Delete it through the managed user record.',
+        { status: 409 }
+      );
+    }
+
+    const credentials = await vendorCredentials(req);
+    const actorUserId = Number(credentials.userId);
+    if (!credentials.token || !Number.isInteger(actorUserId) || actorUserId < 1) {
+      throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor account identity is unavailable', {
+        status: 401,
+      });
+    }
+    const remote = await listAllVendorUsers({
+      token: credentials.token,
+      userId: actorUserId,
+    });
+    const target = remote.records.find((record) => String(record.id) === String(vendorUserId));
+    if (!target) throw new NotFoundError('Vendor user not found');
+
+    const result = await deleteVendorUser({
+      token: credentials.token,
+      id: vendorUserId,
+    });
+    const linkedAfterDelete = await query(
+      'SELECT id FROM users WHERE vendor_user_id = $1 LIMIT 1',
+      [String(vendorUserId)]
+    );
+    if (linkedAfterDelete.rows[0]) {
+      throw new AppError(
+        'VENDOR_USER_LOCAL_LINK_CREATED',
+        'The vendor account was deleted, but a concurrent local link now exists. Reconcile this user.',
+        { status: 502 }
+      );
+    }
+
+    await audit({
+      action: 'vendor_user.delete_unmanaged',
+      actorType: 'api',
+      actorId: req.auth?.user?.id || null,
+      actorLabel: req.auth?.user?.userName || null,
+      entityType: 'vendor_user',
+      entityId: String(vendorUserId),
+      after: {
+        vendorUserId,
+        userName: target.userName,
+        alreadyDeleted: Boolean(result.alreadyDeleted),
+      },
+      ip: clientIp(req),
+    });
+    sendOk(res, {
+      vendorUserId: String(vendorUserId),
+      userName: target.userName,
+      alreadyDeleted: Boolean(result.alreadyDeleted),
     });
   });
 

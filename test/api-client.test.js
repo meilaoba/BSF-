@@ -189,6 +189,7 @@ test('vendor user queries and complete device assignments use the vendor-user ro
   }), 'bsf_csrf=csrf-token');
 
   await client.getVendorUsers({ pageNum: 1, pageSize: 100 });
+  await client.deleteVendorUser(53);
   await client.getUserAssignments('11111111-1111-4111-8111-111111111111');
   await client.setUserAssignments(
     '11111111-1111-4111-8111-111111111111',
@@ -196,10 +197,12 @@ test('vendor user queries and complete device assignments use the vendor-user ro
   );
 
   assert.equal(calls[0].url, '/api/v1/vendor-users?pageNum=1&pageSize=100');
-  assert.equal(calls[1].url, '/api/v1/vendor-users/assignments?userId=11111111-1111-4111-8111-111111111111');
-  assert.equal(calls[2].url, '/api/v1/vendor-users/assignments');
-  assert.equal(calls[2].options.method, 'PUT');
-  assert.deepEqual(JSON.parse(calls[2].options.body), {
+  assert.equal(calls[1].url, '/api/v1/vendor-users?vendorUserId=53');
+  assert.equal(calls[1].options.method, 'DELETE');
+  assert.equal(calls[2].url, '/api/v1/vendor-users/assignments?userId=11111111-1111-4111-8111-111111111111');
+  assert.equal(calls[3].url, '/api/v1/vendor-users/assignments');
+  assert.equal(calls[3].options.method, 'PUT');
+  assert.deepEqual(JSON.parse(calls[3].options.body), {
     userId: '11111111-1111-4111-8111-111111111111',
     deviceId: [30, 32],
   });

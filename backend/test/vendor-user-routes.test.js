@@ -17,6 +17,8 @@ test('vendor user routes expose query, assignment read and full replacement writ
   assert.match(source, /replaceVendorUserAssignments\(/);
   assert.match(source, /Array\.isArray\(body\.deviceId\)/);
   assert.match(source, /action: 'vendor_user\.device_assignment'/);
+  assert.match(source, /router\.delete\('\/api\/v1\/vendor-users'/);
+  assert.match(source, /action: 'vendor_user\.delete_unmanaged'/);
 });
 
 test('vendor user identity is resolved server-side and assignments are verified after write', () => {
@@ -32,4 +34,20 @@ test('vendor user identity is resolved server-side and assignments are verified 
 test('vendor user routes are restricted to user managers', () => {
   assert.match(middleware, /isPathOrChild\('\/api\/v1\/vendor-users'\)/);
   assert.match(middleware, /master_admin', 'client_admin/);
+});
+
+test('unmanaged deletion rejects linked users and verifies vendor ownership', () => {
+  const deleteStart = source.indexOf("router.delete('/api/v1/vendor-users'");
+  const deleteEnd = source.indexOf("router.put('/api/v1/vendor-users/assignments'", deleteStart);
+  const block = source.slice(deleteStart, deleteEnd);
+  assert.match(block, /vendor_user_id = \$1/);
+  assert.match(block, /VENDOR_USER_MANAGED/);
+  assert.match(block, /listAllVendorUsers\(/);
+  assert.match(block, /record\.id\) === String\(vendorUserId\)/);
+  assert.match(block, /await deleteVendorUser\(/);
+  assert.match(block, /VENDOR_USER_LOCAL_LINK_CREATED/);
+  const localCheck = block.indexOf('SELECT id FROM users');
+  const remoteCheck = block.indexOf('await listAllVendorUsers');
+  const vendorDelete = block.indexOf('await deleteVendorUser');
+  assert.ok(localCheck >= 0 && remoteCheck > localCheck && vendorDelete > remoteCheck);
 });
