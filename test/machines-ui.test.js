@@ -61,3 +61,9 @@ test('machine filters accept the backend id used by user scope', () => {
   assert.match(source, /dev\.id===machineFilters\.device \|\| dev\.backendId===machineFilters\.device/);
   assert.match(source, /const value=dev\.backendId \|\| dev\.id/);
 });
+
+test('multi-device users can switch machines but a single-device user stays locked', () => {
+  assert.match(source, /const machineFilterLocked = isUserRole\(\) && clientDevices\.length <= 1/);
+  assert.match(source, /\$\{machineFilterLocked\?'disabled':''\}/);
+  assert.match(source, /machineFilters\.device=this\.value/);
+});
