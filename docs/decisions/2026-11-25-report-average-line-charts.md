@@ -1,5 +1,7 @@
 # ADR-2026-11-25: Reports 使用 Weight、Temperature、Humidity 平均折线
 
+状态：已被 `2026-11-26-restore-food-waste-input-metrics.md` 取代。
+
 ## 背景
 
 Reports 原有 Food Waste In 图表读取厂家 `input.dailyInput`。客户确认报告中的

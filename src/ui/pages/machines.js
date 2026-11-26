@@ -106,21 +106,20 @@ async function loadMachineMetrics(device){
     ? window.BSF_API.getEnvironmentTemperature({ date:today }).catch(function(){ return null; })
     : Promise.resolve(null);
   const request = Promise.all([
-    window.BSF_API.getReports(Object.assign({
-      period:'monthly',
-      year:Number(today.slice(0, 4)),
-      month:Number(today.slice(5, 7))
-    }, identity)),
+    window.BSF_API.getGraphs(Object.assign({ period:'monthly' }, identity)),
     environmentRequest
   ]).then(function(results){
     const monthly = results[0] || {};
     const monthlySummary = monthly.summary || {};
+    const dailyWaste = Array.isArray(monthly.items)
+      ? monthly.items.find(function(item){ return item.date === today; })
+      : null;
     const environment = results[1] || {};
     const data = {
-      wasteKg:monthlySummary.wasteInTotalKg,
+      wasteKg:monthlySummary.wasteKg,
       ghgKg:monthlySummary.ghgKg,
       fertilizerKg:monthlySummary.fertilizerKg,
-      dailyWasteKg:monthlySummary.wasteInAverageKg,
+      dailyWasteKg:dailyWaste ? dailyWaste.value : null,
       environmentTempC:environment.temperatureC
     };
     machineMetricCache.set(key, { savedAt:Date.now(), data:data });

@@ -39,10 +39,10 @@
 | Device ID | 厂家字段 + 本地映射 | 厂家 `deviceSerialNum`，有本地机器时使用本地显示 ID |
 | Device Name | 厂家字段 + 本地数据库 | 优先本地 `machines.name`，否则厂家 `deviceName` |
 | Network | 静态/品牌文本 | 当前显示为 `Vendor API` |
-| This Month Waste | BSF 计算 | Reports 的 `weightInTotalKg`；去重 weight 平均 × 当月天数 |
-| Daily Waste | BSF 计算 | Reports 的 `weightInAverageKg`；当月去重 weight 平均值 |
-| This Month GHG Reduced | BSF 计算 | Reports 由 weight 推导的 Waste-in × 1.5 − 电力碳排 − 运输碳排 |
-| Est. Fertilizer This Month | BSF 计算 | Reports 由 weight 推导的 Waste-in × `fertilizerRatio` |
+| This Month Waste | BSF 计算 | Graphs 月度 `summary.wasteKg`；每台设备每天取 `input.dailyInput` 最大值后求和 |
+| Daily Waste | BSF 计算 | Graphs 当天 `items` 的 Food Waste In |
+| This Month GHG Reduced | BSF 计算 | Reports 厂家日报厨余量 × 1.5 − 电力碳排 − 运输碳排 |
+| Est. Fertilizer This Month | BSF 计算 | Reports 厂家日报厨余量 × `fertilizerRatio` |
 | Container Temp | 厂家字段 | `CabinTemp` |
 | Container Humidity | 厂家字段 | `Humidity`；若为 0–1 小数，前端按 100 换算为百分比 |
 | Avg Env Temp | 外部服务 | 香港天文台环境温度 |
@@ -72,13 +72,13 @@
 | Machine Filter | 厂家设备列表 + 本地映射 | 设备编号 |
 | Start / End Date | 用户输入 | 前端传入 `/api/v1/graphs` |
 | Period Filter | 用户输入 | Daily / Monthly / Yearly |
-| `N data points loaded` | BSF 计算 | 聚合后非空食品重量点数量 |
-| Average Weight | 厂家汇总 | 在线 Running/Standby 的 `RealTimeWeight` 平均值；Offline 和负值排除，0 kg 有效 |
+| `N data points loaded` | BSF 计算 | 聚合后非空 Food Waste In 数据点数量 |
+| Food Waste In | 厂家遥测 | `input.dailyInput` 按小时增量、按天最大值或按月汇总，并转换为 kg |
 | Container Temp | 厂家汇总 | `CabinTemp` 的时/日/月平均 |
 | Container Humidity | 厂家汇总 | `Humidity` 的时/日/月平均 |
 | Energy Consumed | BSF 计算 | 只计算 Running/Standby；普通设备 `+1.5 kWh/日`，太阳能 CR-50S 为 `-1.5 kWh/日`；Offline 不显示 |
-| GHG Reduced | BSF 计算 | 由 Weight 推导的 Waste-in × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
-| Avg 值 | BSF 计算 | 前端对所有非空图点求平均 |
+| GHG Reduced | BSF 计算 | `input.dailyInput` × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
+| Avg 值 | BSF 计算 | 前端按对应指标对非空图点求平均 |
 | `No data for selected period` | 状态文本 | 当前选择范围聚合后无值 |
 
 ## Raw Data
@@ -119,14 +119,14 @@
 | 界面数据 | 来源 | 原始字段或计算 |
 | --- | --- | --- |
 | Client / Machine / Period | 用户输入 + 本地映射 | 页面筛选条件 |
-| Waste Collected | BSF 计算 | 与 Total Waste-in 相同，来自在线 Running/Standby 的 Weight 去重平均值 × 有效天数 |
+| Waste Collected | 厂家日报 | `kitchenWaste` |
 | GHG Reduced | BSF 计算 | 厨余量 × 1.5 − 电力碳排 − 运输碳排；CR-50S/CR-30S 使用 Excel 型号默认公式，数据库配置优先 |
 | Energy Consumed | BSF 计算 | 运行/待机日 × 每日净能耗；太阳能设备使用负值 |
-| Est. Fertilizer | BSF 计算 | 由 Weight 推导的 Waste-in × `fertilizerRatio` |
+| Est. Fertilizer | BSF 计算 | 厂家日报 `kitchenWaste` × `fertilizerRatio` |
 | Avg Container Temp | 厂家汇总 | 遥测 `CabinTemp` 平均值 |
 | Avg Humidity | 厂家汇总 | 遥测 `Humidity` 平均值 |
-| Waste In | 厂家汇总 | 只使用 Running/Standby 且 weight 非负的唯一采样；平均值乘有效在线天数 |
-| Daily/Monthly Waste-in 图表 | 厂家汇总 | 月报按天、年报表按月显示在线日 `RealTimeWeight` 平均值；Offline 日不参与，0 kg 为有效值 |
+| Food Waste In | 厂家遥测 | 每台设备每天取 `input.dailyInput` 最大值 × 1000，再按设备日求和 |
+| Daily/Monthly Food Waste In 图表 | 厂家遥测 | 月报按天、年报表按月聚合 `input.dailyInput`；不能累加半小时快照 |
 | `No vendor daily report` | API 状态 | 本地和厂家日报都没有所选周期的数据 |
 | `Some vendor daily reports are unavailable` | API 状态 | 部分设备日报请求失败 |
 | Export Excel | 本地数据库 + BSF 计算 | 从 BSF Raw Data 分页读取完整周期，在浏览器生成 `.xlsx`；包含 `Weight`、`Temp`、`Humidity` 三个独立工作表及对应原生折线图，不调用厂家导出接口 |
@@ -257,4 +257,4 @@
 - 数据库同时保存厂家原值；读取时按当前 kg/kWh 因子重新计算，避免因子调整后历史口径不一致。
 - Reports 优先使用本地日报，再合并厂家最近 60 天结果；厂家不可用时不清空已保存数据。
 - 不存在的日报保持缺失，不补零。
-- `RealTimeWeight` 在 Machines/Raw Data 展示原始值；Graphs 和 Reports 使用其在线采样平均值计算图表、Waste-in、GHG 和 Fertilizer。`input.dailyInput` 不再作为页面图表来源。
+- `RealTimeWeight` 只在 Machines/Raw Data 展示当前机内物料重量；Graphs 和 Reports 的 Food Waste In 使用 `input.dailyInput`，Waste Collected、GHG 和 Fertilizer 使用厂家日报口径。

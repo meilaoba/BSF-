@@ -6,7 +6,6 @@ import { config } from '../config.js';
 import {
   aggregateTelemetrySnapshots,
   bucketKeys,
-  fertilizerKg,
   hongKongDateKey,
   hongKongHourKey,
   hongKongMonthKey,
@@ -777,30 +776,12 @@ export function registerAnalyticsRoutes(router) {
       formula: config.formula,
       wasteSource: 'daily-input',
     });
-    const weightGraph = aggregateWeightGraph(analytics.rows, {
-      period,
-      start: range.start,
-      end: range.end,
-      formula: config.formula,
-    });
     sendOk(res, {
       period,
       groupBy,
       range,
-      items:weightGraph.items,
-      ghgItems:weightGraph.ghgItems,
-      energyItems:result.energyItems,
-      tempItems:result.tempItems,
-      humidityItems:result.humidityItems,
-      summary:{
-        ...result.summary,
-        wasteKg:weightGraph.summary.averageKg,
-        wasteInAverageKg:weightGraph.summary.averageKg,
-        wasteInTotalKg:weightGraph.summary.totalKg,
-        pointCount:weightGraph.items.filter((item) => item.value !== null).length,
-      },
-      empty:weightGraph.items.every((item) => item.value === null),
-      weightSource:'daily-average',
+      ...result,
+      empty: result.summary.pointCount === 0,
       dataSources: analytics.dataSources,
     }, undefined, ANALYTICS_CACHE_HEADERS);
   });
@@ -837,15 +818,6 @@ export function registerAnalyticsRoutes(router) {
       formula: config.formula,
       wasteSource: 'daily-input',
     });
-    const weightResult = aggregateReportWeightItems(analytics.telemetryRows, {
-      period,
-      start:range.start,
-      end:range.end,
-    });
-    const wasteInAverageKg = weightResult.summary.averageKg;
-    const wasteInTotalKg = weightResult.summary.totalKg;
-    const fixedCarbonKg = summaryResult.summary.fixedCarbonKg;
-    const ghgKg = reportGhgFromWeight(wasteInTotalKg, fixedCarbonKg, config.formula.wasteReductionFactor);
     sendOk(res, {
       period,
       range,
@@ -853,21 +825,11 @@ export function registerAnalyticsRoutes(router) {
       title: period === 'yearly' ? 'Yearly Report' : 'Monthly Report',
       items: foodWasteResult.items,
       foodWasteSource: 'daily-input',
-      weightItems: weightResult.items,
-      weightSummary: weightResult.summary,
-      weightSource: 'daily-average',
       ghgItems: summaryResult.ghgItems,
       energyItems: summaryResult.energyItems,
       tempItems: summaryResult.tempItems,
       humidityItems: summaryResult.humidityItems,
-      summary: {
-        ...summaryResult.summary,
-        wasteKg:wasteInTotalKg,
-        wasteInAverageKg,
-        wasteInTotalKg,
-        ghgKg,
-        fertilizerKg:fertilizerKg(wasteInTotalKg, config.formula),
-      },
+      summary: summaryResult.summary,
       empty: summaryResult.summary.pointCount === 0,
       dataSources: analytics.dataSources,
     }, undefined, ANALYTICS_CACHE_HEADERS);

@@ -610,15 +610,14 @@ test('canonical telemetry history maps to the existing device-data response cont
   assert.equal(row.source, 'vendor_device_telemetry');
 });
 
-test('graphs read telemetry while reports use daily waste plus telemetry status, environment and food trend', () => {
+test('graphs use daily input while reports keep daily waste and daily-input trend separate', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const source = fs.readFileSync(path.join(root, 'src/routes/analytics.js'), 'utf8');
   assert.match(source, /const sourceGroupBy = groupBy === 'hour' \? 'hour' : 'day';/);
   assert.match(source, /groupBy: sampleGroupBy/);
   assert.match(source, /loadGraphAnalytics\(context, range, sourceGroupBy\)/);
-  assert.match(source, /aggregateWeightGraph\(analytics\.rows/);
-  assert.match(source, /items:weightGraph\.items/);
-  assert.match(source, /ghgItems:weightGraph\.ghgItems/);
+  assert.doesNotMatch(source, /aggregateWeightGraph\(analytics\.rows/);
+  assert.doesNotMatch(source, /weightGraph\./);
   assert.match(source, /loadReportAnalytics\(req, context, range\)/);
   assert.match(source, /wasteSource: 'daily-input'/);
   assert.match(source, /wasteSource: 'daily-stats'/);
@@ -634,11 +633,15 @@ test('graphs read telemetry while reports use daily waste plus telemetry status,
   assert.match(source, /persist: true/);
   assert.match(source, /items: foodWasteResult\.items/);
   assert.match(source, /wasteSource: 'daily-input'/);
-  assert.match(source, /weightItems: weightResult\.items/);
-  assert.match(source, /weightSummary: weightResult\.summary/);
-  assert.match(source, /wasteInAverageKg/);
-  assert.match(source, /wasteInTotalKg/);
-  assert.match(source, /reportGhgFromWeight/);
+  assert.doesNotMatch(source, /weightItems: weightResult\.items/);
+  assert.doesNotMatch(source, /weightSummary: weightResult\.summary/);
+  assert.match(source, /summary: summaryResult\.summary/);
+  const reportRoute = source.slice(
+    source.indexOf("router.get('/api/v1/reports'"),
+    source.indexOf("router.get('/api/v1/reports'") + 5000
+  );
+  assert.doesNotMatch(reportRoute, /reportGhgFromWeight/);
+  assert.doesNotMatch(reportRoute, /aggregateReportWeightItems/);
   const graphLoader = source.slice(
     source.indexOf('async function loadGraphAnalytics'),
     source.indexOf('async function loadReportAnalytics')
