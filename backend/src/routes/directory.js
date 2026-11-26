@@ -1,4 +1,5 @@
 import { query, withTransaction, audit } from '../db.js';
+import { config } from '../config.js';
 import { sendJson, sendOk, readJsonBody, clientIp } from '../lib/http.js';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
 import {
@@ -117,6 +118,30 @@ function vendorUserStateForStatus(status) {
     throw new ValidationError('Vendor users cannot be moved to the invited state');
   }
   return null;
+}
+
+function vendorUserOperationDeadline() {
+  const configured = Number(config.auth.vendor.userOperationTimeoutMs) || 24000;
+  return Date.now() + Math.max(10000, Math.min(configured, 45000));
+}
+
+function translateVendorUserCreateError(error) {
+  if (error?.code === 'VENDOR_SESSION_EXPIRED') throw error;
+  if (error?.code === 'PROVIDER_TIMEOUT' || error?.code === 'VENDOR_USER_OPERATION_TIMEOUT') {
+    throw new AppError(
+      'VENDOR_USER_CREATE_TIMEOUT',
+      'The vendor user service did not respond in time. Please retry.',
+      { status: 408, details: { causeCode: error.code } }
+    );
+  }
+  if (Number(error?.status) >= 500) {
+    throw new AppError(
+      'VENDOR_USER_CREATE_UNAVAILABLE',
+      error?.message || 'The vendor user service is unavailable. Please retry.',
+      { status: 424, details: { causeCode: error?.code || 'VENDOR_ERROR' } }
+    );
+  }
+  throw error;
 }
 
 /**
@@ -629,42 +654,52 @@ export function registerDirectoryRoutes(router) {
     }
 
     if (createVendorAccount) {
+      const deadlineAt = vendorUserOperationDeadline();
       const credentials = await vendorCredentialsForUserManagement(req);
       if (!credentials.token) {
         throw new AppError('VENDOR_SESSION_EXPIRED', 'No vendor credential is available for user creation', {
           status: 401,
         });
       }
-      if (credentials.userId) {
-        const existingVendorUser = await findVendorUserByName({
-          token: credentials.token,
-          userId: credentials.userId,
-          userName,
-        });
-        if (existingVendorUser) {
-          vendorUserId = existingVendorUser.id;
-          vendorType = existingVendorUser.userType;
-          vendorUserReused = true;
-        }
-      }
-      if (!vendorUserId) {
-        await addVendorUser({
-          token: credentials.token,
-          userName,
-          password: initialPassword,
-          mobile,
-          userIcon: body.userIcon || '',
-          status: 1,
-        });
-        vendorType = 3;
+      try {
         if (credentials.userId) {
-          const createdVendorUser = await findVendorUserByName({
+          const existingVendorUser = await findVendorUserByName({
             token: credentials.token,
             userId: credentials.userId,
             userName,
+            maxPages: 5,
+            deadlineAt,
           });
-          if (createdVendorUser) vendorUserId = createdVendorUser.id;
+          if (existingVendorUser) {
+            vendorUserId = existingVendorUser.id;
+            vendorType = existingVendorUser.userType;
+            vendorUserReused = true;
+          }
         }
+        if (!vendorUserId) {
+          await addVendorUser({
+            token: credentials.token,
+            userName,
+            password: initialPassword,
+            mobile,
+            userIcon: body.userIcon || '',
+            status: 1,
+            deadlineAt,
+          });
+          vendorType = 3;
+          if (credentials.userId) {
+            const createdVendorUser = await findVendorUserByName({
+              token: credentials.token,
+              userId: credentials.userId,
+              userName,
+              maxPages: 2,
+              deadlineAt,
+            });
+            if (createdVendorUser) vendorUserId = createdVendorUser.id;
+          }
+        }
+      } catch (error) {
+        translateVendorUserCreateError(error);
       }
     }
 

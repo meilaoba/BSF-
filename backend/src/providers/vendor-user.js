@@ -17,6 +17,31 @@ function integer(value, { min = 0 } = {}) {
   return Number.isInteger(number) && number >= min ? number : null;
 }
 
+function userRequestTimeout(value, deadlineAt = null) {
+  const configured = Math.max(
+    1000,
+    Math.min(Number(config.auth.vendor.userTimeoutMs) || 8000, 15000)
+  );
+  const requested = Number(value);
+  const base = Number.isFinite(requested) && requested > 0
+    ? Math.min(requested, configured)
+    : configured;
+  const hasDeadline = deadlineAt !== null
+    && deadlineAt !== undefined
+    && Number.isFinite(Number(deadlineAt));
+  const remaining = hasDeadline
+    ? Math.floor(Number(deadlineAt) - Date.now())
+    : base;
+  if (remaining < 250) {
+    throw new ProviderError(
+      'VENDOR_USER_OPERATION_TIMEOUT',
+      'Vendor user operation exceeded its time budget',
+      { status: 408, retryable: true }
+    );
+  }
+  return Math.max(250, Math.min(base, remaining));
+}
+
 export function encryptVendorUserPassword(password) {
   const text = String(password || '');
   if (!text) throw new ValidationError('An initial password is required');
@@ -126,6 +151,8 @@ export async function addVendorUser({
   mobile,
   userIcon = '',
   status = 1,
+  timeoutMs,
+  deadlineAt = null,
 } = {}) {
   const accessToken = cleanText(token, 8192);
   const name = cleanText(userName, 200);
@@ -149,7 +176,7 @@ export async function addVendorUser({
       userIcon: cleanText(userIcon, 2000) || '',
       status: Number(status) === 0 ? 0 : 1,
     },
-    timeoutMs: config.auth.vendor.deviceTimeoutMs,
+    timeoutMs: userRequestTimeout(timeoutMs, deadlineAt),
     provider: 'Vendor user-add service',
   });
   if ([401, 403, 2002].includes(Number(response.body?.code))) {
@@ -158,10 +185,15 @@ export async function addVendorUser({
     });
   }
   if (Number(response.body?.code) !== 200) {
-    throw new ProviderError(
+    throw new AppError(
       'VENDOR_USER_ADD_REJECTED',
       cleanText(response.body?.msg, 300) || 'Vendor user-add service rejected the request',
-      { status: 502 }
+      {
+        status: 409,
+        details: {
+          vendorCode: Number(response.body?.code),
+        },
+      }
     );
   }
   return {
@@ -265,6 +297,8 @@ export async function listVendorUsers({
   userName = '',
   pageNum = 1,
   pageSize = 100,
+  timeoutMs,
+  deadlineAt = null,
 } = {}) {
   const accessToken = cleanText(token, 8192);
   const ownerId = integer(userId, { min: 1 });
@@ -288,7 +322,7 @@ export async function listVendorUsers({
       pageSize: size,
       pageNum: page,
     },
-    timeoutMs: config.auth.vendor.deviceTimeoutMs,
+    timeoutMs: userRequestTimeout(timeoutMs, deadlineAt),
     provider: 'Vendor user-list service',
   });
   if ([401, 403, 2002].includes(Number(response.body?.code))) {
@@ -380,7 +414,14 @@ export async function listAllVendorUsers({
   };
 }
 
-export async function findVendorUserByName({ token, userId, userName, maxPages = 20 } = {}) {
+export async function findVendorUserByName({
+  token,
+  userId,
+  userName,
+  maxPages = 20,
+  timeoutMs,
+  deadlineAt = null,
+} = {}) {
   const target = cleanText(userName, 200);
   if (!target) return null;
   let pageNum = 1;
@@ -392,6 +433,8 @@ export async function findVendorUserByName({ token, userId, userName, maxPages =
       userName: target,
       pageNum,
       pageSize: 100,
+      timeoutMs,
+      deadlineAt,
     });
     const match = result.records.find((record) => (
       record.userName.toLowerCase() === target.toLowerCase()

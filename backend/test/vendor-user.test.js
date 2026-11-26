@@ -53,6 +53,60 @@ test('creates a vendor user with the required token header and payload', async (
   });
 });
 
+test('returns the vendor rejection as a readable conflict instead of a bare 502', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify({
+    code: 4001,
+    msg: '用户名已存在',
+    data: null,
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  try {
+    await assert.rejects(
+      addVendorUser({
+        token: 'vendor-token',
+        userName: 'duplicate',
+        password: 'password',
+        mobile: '+85291234567',
+      }),
+      (error) => {
+        assert.equal(error.code, 'VENDOR_USER_ADD_REJECTED');
+        assert.equal(error.status, 409);
+        assert.equal(error.message, '用户名已存在');
+        assert.equal(error.details.vendorCode, 4001);
+        return true;
+      }
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('fails before a vendor call when the user-operation deadline is exhausted', async () => {
+  const originalFetch = global.fetch;
+  let called = false;
+  global.fetch = async () => {
+    called = true;
+    throw new Error('unexpected fetch');
+  };
+  try {
+    await assert.rejects(
+      listVendorUsers({
+        token: 'vendor-token',
+        userId: 8,
+        deadlineAt: Date.now() - 1,
+      }),
+      (error) => {
+        assert.equal(error.code, 'VENDOR_USER_OPERATION_TIMEOUT');
+        assert.equal(error.status, 408);
+        return true;
+      }
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+  assert.equal(called, false);
+});
+
 test('lists vendor child users without exposing encrypted passwords', async () => {
   const calls = [];
   const originalFetch = global.fetch;

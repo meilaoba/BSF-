@@ -150,6 +150,8 @@ export const config = {
       requestFormat: str('VENDOR_LOGIN_FORMAT', 'json').toLowerCase(),
       timeoutMs: num('VENDOR_AUTH_TIMEOUT_MS', 10000),
       deviceTimeoutMs: num('VENDOR_DEVICE_TIMEOUT_MS', 15000),
+      userTimeoutMs: num('VENDOR_USER_TIMEOUT_MS', 8000),
+      userOperationTimeoutMs: num('VENDOR_USER_OPERATION_TIMEOUT_MS', 24000),
       accessTokenTtlDays: num('VENDOR_ACCESS_TOKEN_TTL_DAYS', 7),
       refreshTokenTtlDays: num('VENDOR_REFRESH_TOKEN_TTL_DAYS', 8),
       refreshUrl: str('VENDOR_REFRESH_URL', 'https://iot.creekscomposter.com:8888/user/refresh'),
