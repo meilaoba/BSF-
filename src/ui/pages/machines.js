@@ -139,6 +139,12 @@ async function loadMachineMetrics(device){
   machineMetricRequests.set(key, request);
   return request;
 }
+
+function selectMachineForOverview(value){
+  machineFilters.device = String(value || '');
+  renderMachines(document.getElementById('page-content'));
+}
+
 function renderMachines(container){
   const clients = scopedClientNames();
   const clientScoped = isClientScopedRole();
@@ -147,11 +153,12 @@ function renderMachines(container){
     ? clientDevices.filter(dev=>dev.id===machineFilters.device || dev.backendId===machineFilters.device)
     : clientDevices;
   const machineFilterLocked = isUserRole() && clientDevices.length <= 1;
-  const statusCounts = filteredDevices.reduce(function(counts, dev){
+  const statusCounts = clientDevices.reduce(function(counts, dev){
     counts[machineStatusValue(dev.status)] += 1;
     return counts;
   }, { running:0, standby:0, offline:0 });
   const d = filteredDevices[0] || null;
+  const selectedMachineId = machineFilters.device || (d ? d.backendId || d.id : '');
   const previewDevices = filteredDevices.filter(machineHasCoordinates);
   const previewLats = previewDevices.map(function(dev){ return Number(dev.lat); });
   const previewLngs = previewDevices.map(function(dev){ return Number(dev.lng); });
@@ -181,7 +188,7 @@ function renderMachines(container){
         Machine
         <select ${machineFilterLocked?'disabled':''} onchange="machineFilters.device=this.value;renderMachines(document.getElementById('page-content'));" style="padding:10px 16px;background:${machineFilterLocked?'#111827':'#1e293b'};border:1px solid #334155;border-radius:8px;color:${machineFilterLocked?'#94a3b8':'#e2e8f0'};font-size:14px;min-width:220px;cursor:${machineFilterLocked?'not-allowed':'pointer'};">
           ${isUserRole() || machineFilterLocked ? '' : '<option value="" ' + (machineFilters.device===''?'selected':'') + '>Select Machine</option>'}
-          ${clientDevices.map(dev=>{ const value=dev.backendId || dev.id; return `<option value="${machinePreviewEscape(value)}" ${String(machineFilters.device)===String(value)?'selected':''}>${machinePreviewEscape(dev.id)} - ${machinePreviewEscape(dev.name)}</option>`; }).join('')}
+          ${clientDevices.map(dev=>{ const value=dev.backendId || dev.id; return `<option value="${machinePreviewEscape(value)}" ${String(selectedMachineId)===String(value)?'selected':''}>${machinePreviewEscape(dev.id)}</option>`; }).join('')}
         </select>
       </label>
       <div style="display:flex;gap:8px;align-items:center;padding-bottom:11px;">
@@ -193,6 +200,16 @@ function renderMachines(container){
         <span style="font-size:13px;color:#94a3b8;">${statusCounts.offline} Offline</span>
       </div>
     </div>
+    ${isUserRole() && clientDevices.length > 1 ? `
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:-8px 0 24px;">
+        <span style="color:#64748b;font-size:12px;font-weight:600;padding:8px 0;">Assigned Devices</span>
+        ${clientDevices.map(dev=>{
+          const value=dev.backendId || dev.id;
+          const selected=String(selectedMachineId)===String(value);
+          return '<button onclick="selectMachineForOverview(\'' + machinePreviewEscape(value) + '\')" style="padding:8px 12px;background:' + (selected?'#0f766e':'#1e293b') + ';border:1px solid ' + (selected?'#10b981':'#334155') + ';border-radius:8px;color:#e2e8f0;font-size:12px;font-weight:600;cursor:pointer;">' + machinePreviewEscape(dev.id) + ' · ' + machinePreviewEscape(machineStatusValue(dev.status).toUpperCase()) + '</button>';
+        }).join('')}
+      </div>
+    ` : ''}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
       ${d ? machineMetricsMarkup(d) : '<div style="grid-column:1/-1;background:#1e293b;border-radius:12px;padding:28px;text-align:center;color:#64748b;border:1px solid #334155;">No device data available</div>'}
     </div>

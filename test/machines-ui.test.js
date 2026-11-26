@@ -66,4 +66,7 @@ test('multi-device users can switch machines but a single-device user stays lock
   assert.match(source, /const machineFilterLocked = isUserRole\(\) && clientDevices\.length <= 1/);
   assert.match(source, /\$\{machineFilterLocked\?'disabled':''\}/);
   assert.match(source, /machineFilters\.device=this\.value/);
+  assert.match(source, /function selectMachineForOverview/);
+  assert.match(source, /Assigned Devices/);
+  assert.match(source, /selectMachineForOverview\(/);
 });
