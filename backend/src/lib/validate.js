@@ -108,6 +108,27 @@ export function optionalUuid(value, field) {
   return v;
 }
 
+export function optionalUuidList(value, field, { max = 100 } = {}) {
+  if (value === undefined || value === null || value === '') return [];
+  const values = (Array.isArray(value) ? value : [value])
+    .flatMap((entry) => String(entry ?? '').split(','))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const unique = [];
+  const seen = new Set();
+  for (const entry of values) {
+    const id = optionalUuid(entry, field);
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      unique.push(id);
+    }
+  }
+  if (unique.length > max) {
+    throw new ValidationError(`\`${field}\` must contain at most ${max} values`, { field });
+  }
+  return unique;
+}
+
 export function optionalInt(value, field, { min, max } = {}) {
   if (value === undefined || value === null || value === '') return null;
   const n = Number(value);

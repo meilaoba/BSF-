@@ -150,7 +150,7 @@
 | Email、Phone | 本地数据库/厂家用户接口 | 本地记录优先，未关联账号使用厂家手机号 |
 | Role | BSF 计算/映射 | 根据角色和厂家 `userType` 映射为 Master Admin、Client Admin、User |
 | Client | 本地数据库 | `users.client_id` |
-| Linked Machine | 本地数据库 | `users.machine_id` |
+| Assigned Devices | 本地多对多关系 | `user_machines`，由厂家分配结果同步 |
 | Status | 本地数据库 + 厂家 `userState` | 已关联用户使用本地状态；未关联账号用厂家启用状态 |
 | Devices | 厂家分配接口 | `/emDeviceAssign/assignedUser`，保存时覆盖最终设备集合 |
 | Add/Edit 表单字段 | 用户输入 | 新增调用 `/user/add`；已关联用户编辑调用 `/user/update` 并更新本地 |

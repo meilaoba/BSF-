@@ -94,14 +94,18 @@ function defaultGroupBy(period) {
 export function analyticsDeviceLookup(scope) {
   if (!scope) return null;
   if (scope.role === 'master_admin') {
-    return scope.clientId || scope.machineId
-      ? { clientId: scope.clientId || null, machineId: scope.machineId || null }
+    return scope.clientId || scope.machineIds?.length || scope.machineId
+      ? {
+        clientId: scope.clientId || null,
+        machineIds: scope.machineIds || (scope.machineId ? [scope.machineId] : []),
+      }
       : null;
   }
   if (scope.role === 'user') {
-    return scope.machineId
-      ? { clientId: scope.clientId || null, machineId: scope.machineId }
-      : null;
+    const machineIds = scope.machineIds?.length
+      ? scope.machineIds
+      : (scope.machineId ? [scope.machineId] : []);
+    return machineIds.length ? { machineIds } : null;
   }
   if (scope.role === 'client_admin') {
     return {
@@ -123,8 +127,20 @@ export function analyticsScopeForUser(user, requested = {}) {
     };
   }
   if (role === 'user') {
-    if (!user.machineId) throw forbiddenAccount();
-    return { role, clientId: user.clientId || null, machineId: user.machineId };
+    const machineIds = [...new Set([
+      ...(Array.isArray(user.machineIds) ? user.machineIds : []),
+      ...(user.machineId ? [user.machineId] : []),
+    ].map(String).filter(Boolean))];
+    if (!machineIds.length) throw forbiddenAccount();
+    if (requested.machineId && !machineIds.includes(String(requested.machineId))) {
+      throw forbiddenAccount('Machine is not assigned to this account');
+    }
+    return {
+      role,
+      clientId: user.clientId || null,
+      machineId: requested.machineId || (machineIds.length === 1 ? machineIds[0] : null),
+      machineIds: requested.machineId ? [requested.machineId] : machineIds,
+    };
   }
   if (role !== 'master_admin') throw forbiddenAccount();
   return {
@@ -673,9 +689,14 @@ export function registerAnalyticsRoutes(router) {
       deviceIds = resolved.deviceIds;
     } else if (role === 'user') {
       if (!req.auth.user.machineId) throw forbiddenAccount();
+      const requestedMachine = optionalString(
+        url.searchParams.get('machineId') ?? url.searchParams.get('machine'),
+        'machineId',
+        { max: 160 }
+      );
+      const scope = analyticsScopeForUser(req.auth.user, { machineId: requestedMachine });
       deviceIds = await resolveVendorDeviceIds({
-        clientId: req.auth.user.clientId || null,
-        machineId: req.auth.user.machineId,
+        machineIds: scope.machineIds,
       });
     } else {
       throw forbiddenAccount();

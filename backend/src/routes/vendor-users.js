@@ -1,4 +1,4 @@
-import { query, audit } from '../db.js';
+import { query, withTransaction, audit } from '../db.js';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
 import { clientIp, readJsonBody, sendOk } from '../lib/http.js';
 import { optionalInt, optionalString, optionalUuid } from '../lib/validate.js';
@@ -101,6 +101,55 @@ async function enrichDevices(assignments) {
   };
 }
 
+async function loadMachinesForVendorDevices(deviceIds) {
+  const ids = [...new Set((deviceIds || []).map(String))];
+  if (!ids.length) return [];
+  const { rows } = await query(
+    `SELECT id, vendor_device_id, serial, name, client_id
+       FROM machines
+      WHERE vendor_device_id = ANY($1::text[])`,
+    [ids]
+  );
+  const byVendorId = new Map(rows.map((machine) => [String(machine.vendor_device_id), machine]));
+  return ids.map((id) => byVendorId.get(id)).filter(Boolean);
+}
+
+function assertAllVendorDevicesMapped(deviceIds, machines) {
+  const mapped = new Set(machines.map((machine) => String(machine.vendor_device_id)));
+  const missing = [...new Set((deviceIds || []).map(String))]
+    .filter((id) => !mapped.has(id));
+  if (missing.length) {
+    throw new AppError(
+      'VENDOR_DEVICE_LOCAL_MAPPING_MISSING',
+      'Some assigned vendor devices do not have a local Machine mapping.',
+      { status: 409, details: { vendorDeviceIds: missing } }
+    );
+  }
+}
+
+async function replaceUserMachines(localUserId, machines) {
+  const clientIds = [...new Set(machines.map((machine) => machine.client_id).filter(Boolean))];
+  const clientId = clientIds.length === 1 ? clientIds[0] : null;
+  const primaryMachineId = machines[0]?.id || null;
+  await withTransaction(async (clientDb) => {
+    await clientDb.query('DELETE FROM user_machines WHERE user_id = $1', [localUserId]);
+    if (machines.length) {
+      await clientDb.query(
+        `INSERT INTO user_machines (user_id, machine_id)
+         SELECT $1, unnest($2::uuid[])`,
+        [localUserId, machines.map((machine) => machine.id)]
+      );
+    }
+    await clientDb.query(
+      `UPDATE users
+          SET machine_id = $2,
+              client_id = $3
+        WHERE id = $1`,
+      [localUserId, primaryMachineId, clientId]
+    );
+  });
+}
+
 function vendorUserPayload(record, localRow) {
   return {
     id: localRow?.id || null,
@@ -122,6 +171,9 @@ function vendorUserPayload(record, localRow) {
     machine_id: localRow?.machine_id || null,
     machine_serial: localRow?.machine_serial || null,
     machine_name: localRow?.machine_name || null,
+    machine_ids: localRow?.machine_ids || [],
+    machine_names: localRow?.machine_names || [],
+    machine_serials: localRow?.machine_serials || [],
     status: localRow?.status || null,
     isManaged: Boolean(localRow),
   };
@@ -152,7 +204,24 @@ export function registerVendorUserRoutes(router) {
       const result = await query(
         `SELECT u.id, u.vendor_user_id, u.full_name, u.email, u.phone, u.role,
                 u.client_id, u.machine_id, u.status,
-                c.name AS client_name, m.serial AS machine_serial, m.name AS machine_name
+                c.name AS client_name, m.serial AS machine_serial, m.name AS machine_name,
+                COALESCE((
+                  SELECT array_agg(um.machine_id::text ORDER BY um.created_at, um.machine_id)
+                    FROM user_machines um
+                   WHERE um.user_id = u.id
+                ), ARRAY[]::text[]) AS machine_ids,
+                COALESCE((
+                  SELECT array_agg(COALESCE(mm.name, mm.serial) ORDER BY um.created_at, um.machine_id)
+                    FROM user_machines um
+                    JOIN machines mm ON mm.id = um.machine_id
+                   WHERE um.user_id = u.id
+                ), ARRAY[]::text[]) AS machine_names,
+                COALESCE((
+                  SELECT array_agg(mm.serial ORDER BY um.created_at, um.machine_id)
+                    FROM user_machines um
+                    JOIN machines mm ON mm.id = um.machine_id
+                   WHERE um.user_id = u.id
+                ), ARRAY[]::text[]) AS machine_serials
            FROM users u
            LEFT JOIN clients c ON c.id = u.client_id
            LEFT JOIN machines m ON m.id = u.machine_id
@@ -192,10 +261,21 @@ export function registerVendorUserRoutes(router) {
       token: credentials.token,
       userId: Number(localUser.vendor_user_id),
     });
+    const assignedMachines = await loadMachinesForVendorDevices(
+      assignments.assignedList.map((device) => device.id)
+    );
+    const mappedIds = new Set(assignedMachines.map((machine) => String(machine.vendor_device_id)));
+    const unmappedVendorDeviceIds = assignments.assignedList
+      .map((device) => String(device.id))
+      .filter((id) => !mappedIds.has(id));
+    if (!unmappedVendorDeviceIds.length) {
+      await replaceUserMachines(localUser.id, assignedMachines);
+    }
     sendOk(res, {
       userId: localUser.id,
       vendorUserId: String(localUser.vendor_user_id),
       fromUserId: String(fromUserId),
+      unmappedVendorDeviceIds,
       ...(await enrichDevices(assignments)),
     });
   });
@@ -289,6 +369,8 @@ export function registerVendorUserRoutes(router) {
       token: credentials.token,
       userId: targetVendorUserId,
     });
+    const requestedMachines = await loadMachinesForVendorDevices(body.deviceId);
+    assertAllVendorDevicesMapped(body.deviceId, requestedMachines);
     await replaceVendorUserAssignments({
       token: credentials.token,
       userId: targetVendorUserId,
@@ -299,6 +381,14 @@ export function registerVendorUserRoutes(router) {
       token: credentials.token,
       userId: targetVendorUserId,
     });
+    const assignedMachines = await loadMachinesForVendorDevices(
+      after.assignedList.map((device) => device.id)
+    );
+    assertAllVendorDevicesMapped(
+      after.assignedList.map((device) => device.id),
+      assignedMachines
+    );
+    await replaceUserMachines(localUser.id, assignedMachines);
     const enriched = await enrichDevices(after);
 
     await audit({
@@ -316,6 +406,7 @@ export function registerVendorUserRoutes(router) {
         vendorUserId: targetVendorUserId,
         fromUserId,
         deviceIds: enriched.assignedList.map((device) => device.id),
+        localMachineIds: assignedMachines.map((machine) => machine.id),
       },
       ip: clientIp(req),
     });

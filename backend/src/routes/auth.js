@@ -133,6 +133,21 @@ async function findPendingVendorUser(vendorUserName) {
   return rows[0] || null;
 }
 
+async function machineIdsForUser(user) {
+  const { rows } = await query(
+    `SELECT machine_id::text
+       FROM user_machines
+      WHERE user_id = $1
+      ORDER BY created_at, machine_id`,
+    [user.id]
+  );
+  const machineIds = rows.map((row) => row.machine_id);
+  if (user.machine_id && !machineIds.includes(String(user.machine_id))) {
+    machineIds.unshift(String(user.machine_id));
+  }
+  return machineIds;
+}
+
 async function resolveUniqueContact(kind, value, existingUserId) {
   if (!value) return null;
   const column = kind === 'email' ? 'lower(email)' : 'phone';
@@ -252,6 +267,7 @@ export function registerAuthRoutes(router) {
       vendorTokens: { token: vendorResult.token, refreshToken: vendorResult.refreshToken },
       req,
     });
+    const machineIds = await machineIdsForUser(user);
     clearLoginFailures(ip, userName);
 
     await audit({
@@ -278,7 +294,8 @@ export function registerAuthRoutes(router) {
           phone: user.phone,
           role: user.role,
           clientId: user.client_id,
-          machineId: user.machine_id,
+          machineId: machineIds[0] || user.machine_id || null,
+          machineIds,
           avatarUrl: vendorResult.vendorUser.userIcon,
           vendorType: vendorResult.vendorUser.type,
           vendorParentId: vendorResult.vendorUser.parentId,

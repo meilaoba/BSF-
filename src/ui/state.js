@@ -74,7 +74,19 @@ function isMasterAdminRole(){
 function currentUserHasMachineAssignment(){
   if(currentRole !== 'user') return true;
   const profile = window.BSF_USER_PROFILE || window.BSF_CURRENT_USER || {};
-  return Boolean(profile.machineId || profile.deviceId);
+  return Boolean((Array.isArray(profile.machineIds) && profile.machineIds.length) || profile.machineId || profile.deviceId);
+}
+
+function currentUserMachineIds(){
+  if(currentRole !== 'user') return [];
+  const profile = window.BSF_USER_PROFILE || window.BSF_CURRENT_USER || {};
+  const ids = Array.isArray(profile.machineIds) ? profile.machineIds.map(String) : [];
+  if(!ids.length && (profile.machineId || profile.deviceId)) ids.push(String(profile.machineId || profile.deviceId));
+  if(!ids.length && typeof userRecords !== 'undefined' && Array.isArray(userRecords)){
+    const record = userRecords.find(function(user){ return user.username === currentUsername || user.email === currentUsername; });
+    if(record && Array.isArray(record.machineIds)) record.machineIds.forEach(function(id){ ids.push(String(id)); });
+  }
+  return Array.from(new Set(ids));
 }
 
 function resolveClientForCurrentUser(){
@@ -103,7 +115,9 @@ function refreshClientScope(){
 function resolveMachineForCurrentUser(){
   if(currentRole !== 'user') return '';
   const profile = window.BSF_USER_PROFILE || window.BSF_CURRENT_USER || {};
-  const direct = profile.machineId || profile.deviceId || window.BSF_CURRENT_MACHINE_ID;
+  const assigned = currentUserMachineIds();
+  if(assigned.length > 1) return '';
+  const direct = assigned[0] || window.BSF_CURRENT_MACHINE_ID;
   if(direct) return direct;
   if(typeof userRecords !== 'undefined' && Array.isArray(userRecords)){
     const record = userRecords.find(function(user){ return user.username === currentUsername || user.email === currentUsername; });
@@ -133,9 +147,14 @@ function scopedClientNames(){
 
 function scopedDevices(){
   const client = refreshClientScope();
-  const machineId = refreshMachineScope();
-  let list = isClientScopedRole() ? devices.filter(function(device){ return (device.client || 'Unassigned') === client; }) : devices.slice();
-  if(currentRole === 'user' && machineId) list = list.filter(function(device){ return device.id === machineId || device.backendId === machineId; });
+  const machineIds = currentUserMachineIds();
+  let list = devices.slice();
+  if(currentRole !== 'user' && isClientScopedRole()) list = list.filter(function(device){ return (device.client || 'Unassigned') === client; });
+  if(currentRole === 'user' && machineIds.length){
+    list = list.filter(function(device){
+      return machineIds.indexOf(String(device.id)) >= 0 || machineIds.indexOf(String(device.backendId || '')) >= 0;
+    });
+  }
   return list;
 }
 
@@ -150,7 +169,8 @@ function applyClientScopeToState(){
     if(typeof reportFilters !== 'undefined'){ reportFilters.client = ''; reportFilters.device = ''; }
     return;
   }
-  const client = refreshClientScope();
+  const machineIds = currentUserMachineIds();
+  const client = machineIds.length === 1 ? refreshClientScope() : '';
   if(!isClientScopedRole()) return;
   const machineId = refreshMachineScope();
   machineFilters.client = client; machineFilters.device = machineId;

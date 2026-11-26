@@ -354,17 +354,31 @@ export async function loadLatestVendorTelemetrySnapshots({
   }]));
 }
 
-export async function resolveVendorDeviceIds({ clientId, machineId, vendorAccountId } = {}) {
-  if (!clientId && !machineId && !vendorAccountId) return null;
+export async function resolveVendorDeviceIds({
+  clientId,
+  machineId,
+  machineIds,
+  vendorAccountId,
+} = {}) {
+  const selectors = [...new Set([
+    ...(Array.isArray(machineIds) ? machineIds : machineIds ? [machineIds] : []),
+    ...(machineId ? [machineId] : []),
+  ].map(String).filter(Boolean))];
+  if (!clientId && !selectors.length && !vendorAccountId) return null;
   const params = [];
   const clauses = [];
   if (vendorAccountId) {
     params.push(String(vendorAccountId));
     clauses.push(`m.vendor_account_id = $${params.length}`);
   }
-  if (machineId) {
-    params.push(String(machineId));
-    clauses.push(`(m.vendor_device_id = $${params.length} OR m.id::text = $${params.length} OR m.device_id = $${params.length} OR m.serial = $${params.length})`);
+  if (selectors.length) {
+    params.push(selectors);
+    clauses.push(`(
+      m.vendor_device_id = ANY($${params.length}::text[])
+      OR m.id::text = ANY($${params.length}::text[])
+      OR m.device_id = ANY($${params.length}::text[])
+      OR m.serial = ANY($${params.length}::text[])
+    )`);
   }
   if (clientId) {
     params.push(String(clientId));

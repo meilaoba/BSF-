@@ -162,6 +162,15 @@ function bsfDirectoryUserRow(row){
       ? 'disabled'
       : (rawStatus || 'active');
   const clientId = bsfField(row, ['client_id', 'clientId']) || '';
+  const machineIds = Array.isArray(row && row.machine_ids)
+    ? row.machine_ids.map(String)
+    : [];
+  const machineNames = Array.isArray(row && row.machine_names)
+    ? row.machine_names.map(String)
+    : [];
+  const machineSerials = Array.isArray(row && row.machine_serials)
+    ? row.machine_serials.map(String)
+    : [];
   return {
     id:bsfField(row, ['id']) || '',
     name:bsfField(row, ['full_name', 'fullName', 'email', 'phone']) || '',
@@ -172,8 +181,11 @@ function bsfDirectoryUserRow(row){
     roleValue:bsfDirectoryRoleValue(bsfField(row, ['role'])),
     client:bsfField(row, ['client_name', 'client']) || '',
     clientId:clientId,
-    machineId:bsfField(row, ['machine_id', 'machineId']) || '',
-    machineName:bsfField(row, ['machine_serial', 'machine_name']) || '',
+    machineId:machineIds[0] || bsfField(row, ['machine_id', 'machineId']) || '',
+    machineName:machineNames[0] || bsfField(row, ['machine_serial', 'machine_name']) || '',
+    machineIds:machineIds.length ? machineIds : (bsfField(row, ['machine_id', 'machineId']) ? [String(bsfField(row, ['machine_id', 'machineId']))] : []),
+    machineNames:machineNames.length ? machineNames : (bsfField(row, ['machine_serial', 'machine_name']) ? [String(bsfField(row, ['machine_serial', 'machine_name']))] : []),
+    machineSerials:machineSerials.length ? machineSerials : (bsfField(row, ['machine_serial']) ? [String(bsfField(row, ['machine_serial']))] : []),
     status:bsfDirectoryStatusLabel(statusValue),
     statusValue:statusValue,
     vendorUserId:bsfField(row, ['vendorUserId', 'vendor_user_id']) || '',

@@ -368,7 +368,10 @@ test('device assignment modal loads assigned devices and submits the complete ch
       },
     },
     document:{
-      getElementById(){ return modal.removed ? null : modal; },
+      getElementById(id){
+        if(id === 'page-content') return null;
+        return modal.removed ? null : modal;
+      },
       createElement(){ return modal; },
       body:{ appendChild(){} },
     },
@@ -385,6 +388,8 @@ test('device assignment modal loads assigned devices and submits the complete ch
   assert.match(modal.innerHTML, /Composter A/);
   assert.match(modal.innerHTML, /Composter B/);
   assert.match(modal.innerHTML, /data-device-id="30"/);
+  assert.doesNotMatch(modal.innerHTML, /SN-A/);
+  assert.doesNotMatch(modal.innerHTML, /SN-B/);
 
   await vm.runInContext('saveUserAssignments()', sandbox);
   assert.deepEqual(JSON.parse(JSON.stringify(submitted)), {

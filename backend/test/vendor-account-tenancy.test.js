@@ -29,5 +29,5 @@ test('device assignment validates token pool and target client ownership', () =>
   assert.match(assignment, /const machineVendorAccountId = role === 'client_admin'/);
   assert.match(assignment, /vendor_account_id = \$4/);
   assert.match(assignment, /INSERT INTO machines/);
-  assert.match(assignment, /UPDATE users SET client_id/);
+  assert.match(assignment, /UPDATE users[\s\S]+SET client_id[\s\S]+user_machines/);
 });

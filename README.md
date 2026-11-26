@@ -167,6 +167,10 @@ Clients、Machines 和 Users 统一使用集合式接口：`GET/POST` 使用集�
 `/emDeviceAssign/allocateEquipment` 提交最终保留的设备集合。该接口是全量覆盖，
 空数组表示清空全部分配。
 
+普通用户与 Machine 的授权使用 `user_machines` 多对多关系。厂家分配成功后，
+BSF 会同步该用户的完整设备集合；图表、报表、原始数据和设备数据查询均按集合
+进行权限过滤。`users.machine_id` 仅作为旧的兼容字段保留。
+
 ### 部署与自检
 
 ~~~bash

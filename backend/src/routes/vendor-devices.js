@@ -293,7 +293,10 @@ export function registerVendorDeviceRoutes(router) {
       }
 
       await clientDb.query(
-        `UPDATE users SET client_id = $2 WHERE machine_id = $1 AND role = 'user'`,
+        `UPDATE users
+            SET client_id = $2
+          WHERE role = 'user'
+            AND id IN (SELECT user_id FROM user_machines WHERE machine_id = $1)`,
         [saved.id, clientId]
       );
       await clientDb.query(

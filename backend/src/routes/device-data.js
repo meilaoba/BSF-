@@ -1,7 +1,7 @@
 import { sendJson, sendOk, readJsonBody } from '../lib/http.js';
 import { ForbiddenError, ValidationError } from '../lib/errors.js';
 import { query } from '../db.js';
-import { clampLimit, optionalString, optionalUuid } from '../lib/validate.js';
+import { clampLimit, optionalString, optionalUuid, optionalUuidList } from '../lib/validate.js';
 import { requireApiKey } from '../middleware/auth.js';
 import {
   ingestTelemetryPayload,
@@ -23,7 +23,10 @@ export function registerDeviceDataRoutes(router) {
   router.get('/api/v1/device-data', async (req, res) => {
     if (!req.auth) throw new ValidationError('Authentication required');
     const url = new URL(req.url || '/', 'http://localhost');
-    const machineId = optionalUuid(url.searchParams.get('machineId'), 'machineId');
+    const machineIds = optionalUuidList([
+      ...url.searchParams.getAll('machineIds'),
+      ...url.searchParams.getAll('machineId'),
+    ], 'machineId');
     let clientId = optionalUuid(url.searchParams.get('clientId'), 'clientId');
     const from = dateFilter(url.searchParams.get('from'), 'from');
     const to = dateFilter(url.searchParams.get('to'), 'to');
@@ -47,8 +50,16 @@ export function registerDeviceDataRoutes(router) {
         clientId = ownedClient.rows[0].id;
       }
     }
-    const deviceIds = clientId || machineId || vendorScopeAccountId
-      ? await resolveVendorDeviceIds({ clientId, machineId, vendorAccountId: vendorScopeAccountId })
+    const scopedMachineIds = role === 'user'
+      ? (req.auth.user.machineIds || machineIds)
+      : machineIds;
+    if (role === 'user') clientId = null;
+    const deviceIds = clientId || scopedMachineIds.length || vendorScopeAccountId
+      ? await resolveVendorDeviceIds({
+        clientId,
+        machineIds: scopedMachineIds,
+        vendorAccountId: vendorScopeAccountId,
+      })
       : null;
     const rows = await loadVendorTelemetryHistory({
       vendorAccountId,

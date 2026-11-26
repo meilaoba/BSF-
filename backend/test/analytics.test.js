@@ -270,17 +270,41 @@ test('device lookup keeps client admin and user machine filters inside their tru
   );
   assert.deepEqual(
     analyticsDeviceLookup({ role: 'user', clientId: 'trusted-client', machineId: 'trusted-machine' }),
-    { clientId: 'trusted-client', machineId: 'trusted-machine' }
+    { machineIds: ['trusted-machine'] }
   );
   assert.equal(analyticsDeviceLookup({ role: 'master_admin', clientId: null, machineId: null }), null);
 });
-test('user scope always uses the single linked machine', () => {
+test('user scope keeps every assigned machine and rejects forged machine filters', () => {
+  assert.deepEqual(
+    analyticsScopeForUser(
+      { role: 'user', clientId: 'trusted-client', machineIds: ['machine-a', 'machine-b'] },
+      {}
+    ),
+    {
+      role: 'user',
+      clientId: 'trusted-client',
+      machineId: null,
+      machineIds: ['machine-a', 'machine-b'],
+    }
+  );
   assert.deepEqual(
     analyticsScopeForUser(
       { role: 'user', clientId: 'trusted-client', machineId: 'trusted-machine' },
-      { clientId: 'forged-client', machineId: 'forged-machine' }
+      { clientId: 'forged-client', machineId: 'trusted-machine' }
     ),
-    { role: 'user', clientId: 'trusted-client', machineId: 'trusted-machine' }
+    {
+      role: 'user',
+      clientId: 'trusted-client',
+      machineId: 'trusted-machine',
+      machineIds: ['trusted-machine'],
+    }
+  );
+  assert.throws(
+    () => analyticsScopeForUser(
+      { role: 'user', clientId: 'trusted-client', machineIds: ['trusted-machine'] },
+      { machineId: 'forged-machine' }
+    ),
+    (error) => error.code === 'VENDOR_ACCOUNT_SCOPE_REQUIRED'
   );
   assert.throws(
     () => analyticsScopeForUser({ role: 'user', clientId: 'trusted-client', machineId: null }, {}),

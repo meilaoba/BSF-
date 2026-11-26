@@ -14,6 +14,7 @@ import {
   optionalPhone,
   optionalString,
   optionalUuid,
+  optionalUuidList,
   requireDisplayText,
   requireEmail,
   requireEnum,
@@ -155,16 +156,19 @@ function translateVendorUserCreateError(error) {
  */
 function scopeFilter(searchParams, alias, params, { supportsMachine = true } = {}) {
   const clientId = optionalUuid(searchParams.get('clientId'), 'clientId');
-  const machineId = optionalUuid(searchParams.get('machineId'), 'machineId');
+  const machineIds = optionalUuidList([
+    ...searchParams.getAll('machineIds'),
+    ...searchParams.getAll('machineId'),
+  ], 'machineId');
   const clauses = [];
 
   if (clientId) {
     params.push(clientId);
     clauses.push(`${alias}.client_id = $${params.length}`);
   }
-  if (machineId && supportsMachine) {
-    params.push(machineId);
-    clauses.push(`${alias}.machine_id = $${params.length}`);
+  if (machineIds.length && supportsMachine) {
+    params.push(machineIds);
+    clauses.push(`${alias}.machine_id = ANY($${params.length}::uuid[])`);
   }
   return clauses;
 }
@@ -333,10 +337,13 @@ export function registerDirectoryRoutes(router) {
       params.push(clientId);
       clauses.push(`m.client_id = $${params.length}`);
     }
-    const machineId = optionalUuid(search.get('machineId'), 'machineId');
-    if (machineId) {
-      params.push(machineId);
-      clauses.push(`m.id = $${params.length}`);
+    const machineIds = optionalUuidList([
+      ...search.getAll('machineIds'),
+      ...search.getAll('machineId'),
+    ], 'machineId');
+    if (machineIds.length) {
+      params.push(machineIds);
+      clauses.push(`m.id = ANY($${params.length}::uuid[])`);
     }
     const vendorAccountId = clientAdminVendorAccountId(req);
     if (vendorAccountId) {
@@ -361,7 +368,7 @@ export function registerDirectoryRoutes(router) {
               vd.device_name AS vendor_device_name,
               vd.online_code AS vendor_online_code,
               vd.last_synced_at AS vendor_last_synced_at,
-              (SELECT count(*)::int FROM users u WHERE u.machine_id = m.id) AS user_count
+              (SELECT count(*)::int FROM user_machines um WHERE um.machine_id = m.id) AS user_count
          FROM machines m
          LEFT JOIN clients c ON c.id = m.client_id
          LEFT JOIN vendor_devices vd ON vd.vendor_device_id = m.vendor_device_id
@@ -450,7 +457,10 @@ export function registerDirectoryRoutes(router) {
 
       // Keep the client linkage of scoped users consistent with the machine.
       await client.query(
-        `UPDATE users SET client_id = $2 WHERE machine_id = $1 AND role = 'user'`,
+        `UPDATE users
+            SET client_id = $2
+          WHERE role = 'user'
+            AND id IN (SELECT user_id FROM user_machines WHERE machine_id = $1)`,
         [machineId, rows[0].client_id]
       );
 
@@ -558,7 +568,24 @@ export function registerDirectoryRoutes(router) {
     const { rows } = await query(
       `SELECT u.id, u.vendor_user_id, u.vendor_username, u.vendor_type, u.email, u.phone, u.full_name, u.role, u.status,
               u.client_id, u.machine_id, u.last_login_at, u.created_at, u.updated_at,
-              c.name AS client_name, m.serial AS machine_serial, m.name AS machine_name
+              c.name AS client_name, m.serial AS machine_serial, m.name AS machine_name,
+              COALESCE((
+                SELECT array_agg(um.machine_id::text ORDER BY um.created_at, um.machine_id)
+                  FROM user_machines um
+                 WHERE um.user_id = u.id
+              ), ARRAY[]::text[]) AS machine_ids,
+              COALESCE((
+                SELECT array_agg(COALESCE(mm.name, mm.serial) ORDER BY um.created_at, um.machine_id)
+                  FROM user_machines um
+                  JOIN machines mm ON mm.id = um.machine_id
+                 WHERE um.user_id = u.id
+              ), ARRAY[]::text[]) AS machine_names,
+              COALESCE((
+                SELECT array_agg(mm.serial ORDER BY um.created_at, um.machine_id)
+                  FROM user_machines um
+                  JOIN machines mm ON mm.id = um.machine_id
+                 WHERE um.user_id = u.id
+              ), ARRAY[]::text[]) AS machine_serials
          FROM users u
          LEFT JOIN clients c ON c.id = u.client_id
          LEFT JOIN machines m ON m.id = u.machine_id
@@ -703,28 +730,39 @@ export function registerDirectoryRoutes(router) {
       }
     }
 
-    const { rows } = await query(
-      `INSERT INTO users
-         (vendor_user_id, vendor_username, vendor_type, email, phone, full_name, role, client_id, machine_id, status, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10,'invited'), $11)
-       RETURNING id, vendor_user_id, vendor_username, email, phone, full_name, role, status,
-                 client_id, machine_id, created_at`,
-      [
-        vendorUserId,
-        userName,
-        createVendorAccount ? vendorType : null,
-        email,
-        phone,
-        optionalDisplayText(body.fullName, 'fullName', { max: 200 }) || userName,
-        role,
-        clientId,
-        machineId,
-        createVendorAccount
-          ? 'active'
-          : (body.status ? requireEnum(body.status, 'status', ['active', 'invited', 'disabled']) : null),
-        JSON.stringify(metadata),
-      ]
-    );
+    const { rows } = await withTransaction(async (clientDb) => {
+      const inserted = await clientDb.query(
+        `INSERT INTO users
+           (vendor_user_id, vendor_username, vendor_type, email, phone, full_name, role, client_id, machine_id, status, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10,'invited'), $11)
+         RETURNING id, vendor_user_id, vendor_username, email, phone, full_name, role, status,
+                   client_id, machine_id, created_at`,
+        [
+          vendorUserId,
+          userName,
+          createVendorAccount ? vendorType : null,
+          email,
+          phone,
+          optionalDisplayText(body.fullName, 'fullName', { max: 200 }) || userName,
+          role,
+          clientId,
+          machineId,
+          createVendorAccount
+            ? 'active'
+            : (body.status ? requireEnum(body.status, 'status', ['active', 'invited', 'disabled']) : null),
+          JSON.stringify(metadata),
+        ]
+      );
+      if (machineId) {
+        await clientDb.query(
+          `INSERT INTO user_machines (user_id, machine_id)
+           VALUES ($1, $2)
+           ON CONFLICT (user_id, machine_id) DO NOTHING`,
+          [inserted.rows[0].id, machineId]
+        );
+      }
+      return inserted;
+    });
 
     await audit({
       action: 'user.create',
@@ -857,31 +895,45 @@ export function registerDirectoryRoutes(router) {
 
     let rows;
     try {
-      ({ rows } = await query(
-        `UPDATE users
-            SET email = COALESCE($2, email),
-                phone = COALESCE($3, phone),
-                full_name = COALESCE($4, full_name),
-                role = $5,
-                client_id = $6,
-                machine_id = $7,
-                status = COALESCE($8, status),
-                vendor_username = COALESCE($9, vendor_username)
-          WHERE id = $1
-            RETURNING id, vendor_user_id, vendor_username, vendor_type, email, phone, full_name,
-                      role, status, client_id, machine_id, updated_at`,
-        [
-          userId,
-          email,
-          phone,
-          fullName,
-          role,
-          clientId,
-          machineId,
-          status,
-          userName,
-        ]
-      ));
+      ({ rows } = await withTransaction(async (clientDb) => {
+        const updated = await clientDb.query(
+          `UPDATE users
+              SET email = COALESCE($2, email),
+                  phone = COALESCE($3, phone),
+                  full_name = COALESCE($4, full_name),
+                  role = $5,
+                  client_id = $6,
+                  machine_id = $7,
+                  status = COALESCE($8, status),
+                  vendor_username = COALESCE($9, vendor_username)
+            WHERE id = $1
+              RETURNING id, vendor_user_id, vendor_username, vendor_type, email, phone, full_name,
+                        role, status, client_id, machine_id, updated_at`,
+          [
+            userId,
+            email,
+            phone,
+            fullName,
+            role,
+            clientId,
+            machineId,
+            status,
+            userName,
+          ]
+        );
+        if (body.machineId !== undefined) {
+          await clientDb.query('DELETE FROM user_machines WHERE user_id = $1', [userId]);
+          if (machineId) {
+            await clientDb.query(
+              `INSERT INTO user_machines (user_id, machine_id)
+               VALUES ($1, $2)
+               ON CONFLICT (user_id, machine_id) DO NOTHING`,
+              [userId, machineId]
+            );
+          }
+        }
+        return updated;
+      }));
     } catch (error) {
       if (vendorUpdated) {
         await audit({
@@ -911,7 +963,6 @@ export function registerDirectoryRoutes(router) {
       }
       throw new NotFoundError('User not found');
     }
-
     await audit({
       action: 'user.update',
       actorType: 'api',

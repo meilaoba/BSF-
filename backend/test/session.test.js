@@ -51,6 +51,45 @@ test('public user payload does not expose vendor tokens', () => {
   assert.equal(Object.prototype.hasOwnProperty.call(user, 'refreshToken'), false);
 });
 
+test('public user payload preserves every assigned machine', () => {
+  const user = publicUser({
+    id: 'bf99f7e7-17f7-4f0a-98f5-0f386ee68d16',
+    role: 'user',
+    machine_id: '11111111-1111-4111-8111-111111111111',
+    machine_ids: [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    ],
+    metadata: {},
+  });
+  assert.deepEqual(user.machineIds, [
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+  ]);
+  assert.equal(user.machineId, '11111111-1111-4111-8111-111111111111');
+});
+
+test('ordinary user request scope carries the complete machine set', () => {
+  const req = { url: '/api/v1/machines' };
+  applyDataScope(req, {
+    user: {
+      role: 'user',
+      clientId: 'client-a',
+      machineIds: [
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ],
+    },
+  });
+  const url = new URL(req.url, 'http://localhost');
+  assert.equal(
+    url.searchParams.get('machineIds'),
+    '11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222'
+  );
+  assert.equal(url.searchParams.get('machineId'), null);
+  assert.equal(url.searchParams.get('clientId'), null);
+});
+
 test('tenant roles cannot bypass master-only routes with a trailing slash', () => {
   const session = { user: { role: 'client_admin', clientId: 'client-id' } };
   assert.throws(

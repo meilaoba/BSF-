@@ -27,7 +27,12 @@ const SESSION_COLUMNS = `
   u.machine_id,
   u.status,
   u.metadata,
-  u.last_login_at
+  u.last_login_at,
+  COALESCE((
+    SELECT json_agg(DISTINCT um.machine_id::text)
+      FROM user_machines um
+     WHERE um.user_id = u.id
+  ), '[]'::json) AS machine_ids
 `;
 
 export function parseCookies(req) {
@@ -78,6 +83,12 @@ export function clearAuthCookies() {
 
 export function publicUser(row) {
   const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const machineIds = Array.isArray(row.machine_ids)
+    ? row.machine_ids.map(String)
+    : [];
+  if (row.machine_id && !machineIds.includes(String(row.machine_id))) {
+    machineIds.unshift(String(row.machine_id));
+  }
   return {
     id: row.id,
     userName: row.vendor_username || row.full_name || row.email || 'user',
@@ -87,7 +98,8 @@ export function publicUser(row) {
     role: row.role,
     vendorUserId: row.vendor_user_id == null ? null : String(row.vendor_user_id),
     clientId: row.client_id || null,
-    machineId: row.machine_id || null,
+    machineId: machineIds[0] || row.machine_id || null,
+    machineIds,
     avatarUrl: metadata.vendor?.userIcon || null,
     vendorType: row.vendor_type == null ? null : Number(row.vendor_type),
     vendorParentId: metadata.vendor?.parentId || null,
@@ -368,9 +380,17 @@ export function applyDataScope(req, session) {
   if (role === 'client_admin') {
     if (!session.user.vendorUserId) throw new ForbiddenError('Account has no vendor account identity');
   } else if (role === 'user') {
-    if (!session.user.machineId) throw new ForbiddenError('Account is not linked to a Machine');
-    url.searchParams.set('machineId', session.user.machineId);
-    if (session.user.clientId) url.searchParams.set('clientId', session.user.clientId);
+    const machineIds = session.user.machineIds?.length
+      ? session.user.machineIds
+      : (session.user.machineId ? [session.user.machineId] : []);
+    if (!machineIds.length) throw new ForbiddenError('Account is not linked to a Machine');
+    url.searchParams.set('machineIds', machineIds.join(','));
+    if (machineIds.length === 1) {
+      url.searchParams.set('machineId', machineIds[0]);
+    }
+    if (machineIds.length === 1 && session.user.clientId) {
+      url.searchParams.set('clientId', session.user.clientId);
+    }
   }
   req.url = `${url.pathname}${url.search}`;
 }

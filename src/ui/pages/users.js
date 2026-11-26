@@ -5,6 +5,7 @@ function renderUsers(container){
   const safeUsers = users.map(function(user){
     const safe = Object.assign({}, user);
     ['name','username','email','role','client','machineId','status'].forEach(function(key){ safe[key] = bsfEscapeHtml(user[key]); });
+    safe.assignedDevices = (user.machineNames || []).map(bsfEscapeHtml).join(', ');
     safe.userId = String(user.id || '').replace(/[^a-zA-Z0-9-]/g, '');
     safe.vendorUserId = String(user.vendorUserId || '').replace(/[^0-9]/g, '');
     safe.displayRole = user.isManaged === false ? 'Unmanaged' : user.role;
@@ -31,7 +32,7 @@ function renderUsers(container){
           <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Email</th>
           <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Role</th>
           <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Client</th>
-          <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Linked Machine</th>
+          <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Assigned Devices</th>
           <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Status</th>
           <th style="padding:14px 20px;text-align:left;color:#94a3b8;font-weight:600;">Actions</th>
         </tr></thead>
@@ -42,7 +43,7 @@ function renderUsers(container){
               <td style="padding:14px 20px;color:#94a3b8;">${u.email}</td>
               <td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;background:${u.displayRole==='Master Admin'?'rgba(239,68,68,0.15)':u.displayRole==='Client Admin'?'rgba(59,130,246,0.15)':u.displayRole==='Unmanaged'?'rgba(148,163,184,0.15)':'rgba(16,185,129,0.15)'};color:${u.displayRole==='Master Admin'?'#ef4444':u.displayRole==='Client Admin'?'#3b82f6':u.displayRole==='Unmanaged'?'#94a3b8':'#10b981'};">${u.displayRole}</span></td>
               <td style="padding:14px 20px;color:#e2e8f0;">${u.client}</td>
-              <td style="padding:14px 20px;color:#94a3b8;">${u.machineName || u.machineId || "—"}</td>
+              <td style="padding:14px 20px;color:#94a3b8;">${u.assignedDevices || u.machineName || "—"}</td>
               <td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;${u.statusStyle}">${u.status}</span></td>
               <td style="padding:14px 20px;">${u.userId ? '<button onclick="openUserModal(\'' + u.userId + '\')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button>' + (u.vendorUserId ? '<button onclick="openUserAssignmentModal(\'' + u.userId + '\')" style="padding:6px 14px;background:#1d4ed8;border:none;border-radius:6px;color:#fff;font-size:12px;cursor:pointer;margin-right:6px;">Devices</button>' : '') + '<button onclick="deleteUserRecord(\'' + u.userId + '\')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;">Delete</button>' : (u.vendorUserId ? '<button onclick="deleteVendorUserRecord(\'' + u.vendorUserId + '\')" style="padding:6px 14px;background:#7f1d1d;border:none;border-radius:6px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Delete Vendor Account</button>' : '<span style="color:#64748b;font-size:12px;">Vendor account only</span>')}</td>
             </tr>
@@ -178,8 +179,7 @@ function openUserModal(userRef){
         '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Client</label>' +
         '<select id="user-client-input"' + clientSelectAttrs + ' onchange="syncUserMachineOptions()" style="' + fieldStyle + clientSelectStyle + '">' + userClientOptions(user.clientId) + '</select>' +
       '</div>' +
-      '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Machine</label>' +
-      '<select id="user-machine-input" style="' + fieldStyle + '">' + userMachineOptions(user.clientId, user.machineId, clientAdmin) + '</select>' +
+      (isEdit ? '' : '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Linked Machine</label><select id="user-machine-input" style="' + fieldStyle + '">' + userMachineOptions(user.clientId, user.machineId, clientAdmin) + '</select>') +
       '<label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Status</label>' +
       '<select id="user-status-input" style="' + fieldStyle + '"><option value="active"' + (user.statusValue!=='disabled'?' selected':'') + '>Active</option><option value="disabled"' + (user.statusValue==='disabled'?' selected':'') + '>Disabled</option></select>' +
       '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;"><button onclick="closeUserModal()" style="padding:9px 18px;background:#334155;border:none;border-radius:8px;color:#e2e8f0;font-size:13px;cursor:pointer;">Cancel</button><button onclick="saveUserModal()" style="padding:9px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Save</button></div>' +
@@ -217,7 +217,7 @@ async function saveUserModal(){
     }
   }
   if(!existing && !password){ alert('Initial Password is required for a new user'); return; }
-  const payload={id:existing?existing.id:'',userName:userName,email:email,mobile:mobile,password:password,role:role,clientId:clientId || null,machineId:machineId || null,status:statusValue};
+  const payload={id:existing?existing.id:'',userName:userName,email:email,mobile:mobile,password:password,role:role,clientId:clientId || null,status:statusValue,...(existing?{}:{machineId:machineId || null})};
   if(window.BSF_API_CONFIG && window.BSF_API_CONFIG.enabled){
     try{ if(existing) await window.BSF_API.updateUser(existing.id,payload); else await window.BSF_API.createUser(payload); }catch(error){ alert('Save failed: '+error.message); return; }
   }
@@ -276,11 +276,9 @@ function assignmentDeviceRows(user, assignments){
   return devices.map(function(device){
     const id = String(device.id || '');
     const label = device.name || device.deviceName || device.serial || device.deviceSerialNum || id;
-    const serial = device.serial || device.deviceSerialNum || '';
     return '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid #334155;">' +
       '<input type="checkbox" data-device-id="' + clientEscape(id) + '"' + (selected.has(id) ? ' checked' : '') + ' style="width:16px;height:16px;" />' +
       '<span style="color:#e2e8f0;font-size:13px;font-weight:600;">' + clientEscape(label) + '</span>' +
-      (serial ? '<span style="color:#64748b;font-size:11px;">' + clientEscape(serial) + '</span>' : '') +
     '</label>';
   }).join('');
 }
@@ -298,6 +296,9 @@ async function openUserAssignmentModal(userRef){
   let assignments;
   try { assignments = await window.BSF_API.getUserAssignments(user.id); }
   catch(error){ alert('Unable to load device assignments: ' + error.message); return; }
+  if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
+  const page = document.getElementById('page-content');
+  if(page) renderUsers(page);
   let modal = document.getElementById('user-assignment-modal');
   if(!modal){ modal = document.createElement('div'); modal.id='user-assignment-modal'; document.body.appendChild(modal); }
   modal.dataset.userId = user.id;
@@ -325,6 +326,9 @@ async function saveUserAssignments(){
   try {
     await window.BSF_API.setUserAssignments(modal.dataset.userId, deviceIds);
     closeUserAssignmentModal();
+    if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
+    const page = document.getElementById('page-content');
+    if(page) renderUsers(page);
     alert('Device assignments updated');
   } catch(error) {
     alert('Assignment failed: ' + error.message);
