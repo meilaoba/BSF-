@@ -11,7 +11,7 @@ import {
   sendError,
   sendJson,
 } from './lib/http.js';
-import { AppError, UnauthorizedError } from './lib/errors.js';
+import { UnauthorizedError, isAppError } from './lib/errors.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerNotificationRoutes } from './routes/notifications.js';
 import { registerDirectoryRoutes } from './routes/directory.js';
@@ -113,7 +113,7 @@ const server = http.createServer(async (req, res) => {
 
     await route.handler(req, res);
   } catch (err) {
-    if (!(err instanceof AppError) && isProduction) {
+    if (!isAppError(err) && isProduction) {
       // Never leak internals; keep the full detail in the service log.
       console.error('[api] unhandled error:', err);
       return sendJson(res, 500, {

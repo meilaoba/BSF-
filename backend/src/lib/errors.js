@@ -58,3 +58,15 @@ export class ProviderError extends AppError {
     this.retryable = retryable;
   }
 }
+
+export function isAppError(value) {
+  if (value instanceof AppError) return true;
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && typeof value.code === 'string'
+    && Number.isInteger(value.status)
+    && value.status >= 400
+    && value.status <= 599
+  );
+}
