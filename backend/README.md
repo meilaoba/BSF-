@@ -73,6 +73,7 @@ session; tenant roles are scoped by the backend.
 | GET | `/api/v1/auth/me` | Current authenticated user and role |
 | POST | `/api/v1/auth/logout` | Revoke the current session |
 | POST | `/api/v1/auth/refresh` | Reserved until the vendor provides a refresh endpoint |
+| POST | `/api/v1/auth/change-password` | Change the signed-in vendor user's own password |
 | GET | `/api/v1/health` | minimal public readiness status |
 | GET | `/api/v1/internal/health` | detailed status (service key or Master Admin) |
 | GET | `/api/v1/meta/providers` | is Email / WhatsApp configured yet |
@@ -154,6 +155,12 @@ The browser never calls the vendor login API directly. The backend:
 4. maps vendor `type` 1/2/3 to `master_admin` / `client_admin` / `user`;
 5. stores vendor tokens encrypted with AES-256-GCM;
 6. sets an opaque `HttpOnly` session cookie and a separate CSRF cookie.
+
+Password changes always use the signed-in user's `vendor_user_id`; the browser
+cannot submit another vendor user ID. The current password is hashed as uppercase
+MD5 and the new password uses the documented AES-CBC/Base64 contract.
+Administrator password resets first verify that the target appears in the
+current vendor account's child-user list. The temporary password is `123456`.
 
 ### Vendor device list proxy
 

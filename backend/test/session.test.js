@@ -144,6 +144,9 @@ test('a user without a machine can sign in but cannot read device data', () => {
   };
   const sessionRequest = { url: '/api/v1/auth/me' };
   assert.doesNotThrow(() => applyDataScope(sessionRequest, session));
+  const passwordRequest = { url: '/api/v1/auth/change-password' };
+  assert.doesNotThrow(() => applyDataScope(passwordRequest, session));
+  assert.equal(passwordRequest.url, '/api/v1/auth/change-password');
 
   const machinesRequest = { url: '/api/v1/machines?limit=1000' };
   assert.throws(

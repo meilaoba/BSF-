@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = fs.readFileSync(path.join(root, 'src/routes/vendor-users.js'), 'utf8');
+const auth = fs.readFileSync(path.join(root, 'src/routes/auth.js'), 'utf8');
 const middleware = fs.readFileSync(path.join(root, 'src/middleware/session.js'), 'utf8');
 const directory = fs.readFileSync(path.join(root, 'src/routes/directory.js'), 'utf8');
 const nginx = [
@@ -25,6 +26,12 @@ test('vendor user routes expose query, assignment read and full replacement writ
   assert.match(source, /action: 'vendor_user\.device_assignment'/);
   assert.match(source, /router\.delete\('\/api\/v1\/vendor-users'/);
   assert.match(source, /action: 'vendor_user\.delete_unmanaged'/);
+  assert.match(source, /router\.post\('\/api\/v1\/vendor-users\/reset-password'/);
+  assert.match(source, /resetVendorUserPassword\(/);
+  assert.match(source, /action: 'vendor_user\.password\.reset'/);
+  assert.match(auth, /router\.post\('\/api\/v1\/auth\/change-password'/);
+  assert.match(auth, /changeVendorUserPassword\(/);
+  assert.match(auth, /action: 'auth\.password\.change'/);
 });
 
 test('vendor user identity is resolved server-side and assignments are verified after write', () => {

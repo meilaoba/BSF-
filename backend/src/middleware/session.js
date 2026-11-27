@@ -367,6 +367,7 @@ export function applyDataScope(req, session) {
   if (path === '/api/v1/auth/me'
     || path === '/api/v1/auth/logout'
     || path === '/api/v1/auth/refresh'
+    || path === '/api/v1/auth/change-password'
     || path === '/api/v1/vendor-devices'
     || path === '/api/v1/vendor-devices/history'
     || path === '/api/v1/vendor-templates'

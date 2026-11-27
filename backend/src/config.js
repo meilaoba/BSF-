@@ -136,6 +136,14 @@ export const config = {
       userListUrl: str('VENDOR_USER_LIST_URL', 'https://iot.creekscomposter.com:8888/user/list'),
       userUpdateUrl: str('VENDOR_USER_UPDATE_URL', 'https://iot.creekscomposter.com:8888/user/update'),
       userDeleteUrl: str('VENDOR_USER_DELETE_URL', 'https://iot.creekscomposter.com:8888/user/delete'),
+      userResetPasswordUrl: str(
+        'VENDOR_USER_RESET_PASSWORD_URL',
+        'https://iot.creekscomposter.com:8888/user/resetPassword'
+      ),
+      userUpdatePasswordUrl: str(
+        'VENDOR_USER_UPDATE_PASSWORD_URL',
+        'https://iot.creekscomposter.com:8888/user/updatePassword'
+      ),
       assignedUserUrl: str('VENDOR_ASSIGNED_USER_URL', 'https://iot.creekscomposter.com:8888/emDeviceAssign/assignedUser'),
       allocateEquipmentUrl: str('VENDOR_ALLOCATE_EQUIPMENT_URL', 'https://iot.creekscomposter.com:8888/emDeviceAssign/allocateEquipment'),
       deviceListUrl: str('VENDOR_DEVICE_LIST_URL', 'https://iot.creekscomposter.com:8888/emDevice/queryListData'),

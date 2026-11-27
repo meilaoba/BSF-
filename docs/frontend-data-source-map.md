@@ -205,7 +205,8 @@
 | Avatar Initials | BSF 计算 | 根据用户名或邮箱生成 |
 | Display Name、Username、Email、Phone | 本地数据库 + 登录会话 | 当前 BSF 用户资料 |
 | Role | 本地数据库 | BSF 角色 |
-| Password fields | 用户输入 | 修改密码时提交 |
+| Password fields | 用户输入 | 修改密码时提交；旧密码 MD5、新密码 AES-CBC |
+| Reset Password action | 厂家用户列表 | 管理员重置当前账号子用户密码，临时密码固定为 `123456` |
 
 ## 重要现状
 

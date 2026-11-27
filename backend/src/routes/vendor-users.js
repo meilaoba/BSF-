@@ -5,7 +5,11 @@ import { optionalInt, optionalString, optionalUuid } from '../lib/validate.js';
 import { requireApiKey } from '../middleware/auth.js';
 import { getVendorAccessToken } from '../middleware/session.js';
 import { listAllVendorDevicesCached } from '../providers/vendor-devices.js';
-import { deleteVendorUser, listAllVendorUsers } from '../providers/vendor-user.js';
+import {
+  deleteVendorUser,
+  listAllVendorUsers,
+  resetVendorUserPassword,
+} from '../providers/vendor-user.js';
 import {
   listVendorUserAssignments,
   replaceVendorUserAssignments,
@@ -334,6 +338,52 @@ export function registerVendorUserRoutes(router) {
       fromUserId: String(fromUserId),
       unmappedVendorDeviceIds,
       ...(await enrichDevices(assignments)),
+    });
+  });
+
+  router.post('/api/v1/vendor-users/reset-password', async (req, res) => {
+    requireUserManager(req);
+    const body = await readJsonBody(req);
+    const vendorUserId = optionalInt(body.vendorUserId, 'vendorUserId', { min: 1 });
+    if (!vendorUserId) throw new ValidationError('`vendorUserId` is required');
+
+    const credentials = await vendorCredentials(req);
+    const actorUserId = Number(credentials.userId);
+    if (!credentials.token || !Number.isInteger(actorUserId) || actorUserId < 1) {
+      throw new AppError('VENDOR_SESSION_EXPIRED', 'Vendor account identity is unavailable', {
+        status: 401,
+      });
+    }
+    const remote = await listAllVendorUsers({
+      token: credentials.token,
+      userId: actorUserId,
+      maxPages: 5,
+    });
+    const target = remote.records.find((record) => String(record.id) === String(vendorUserId));
+    if (!target) throw new NotFoundError('Vendor user not found');
+
+    const result = await resetVendorUserPassword({
+      token: credentials.token,
+      id: vendorUserId,
+    });
+    await audit({
+      action: 'vendor_user.password.reset',
+      actorType: 'user',
+      actorId: req.auth?.user?.id || null,
+      actorLabel: req.auth?.user?.userName || null,
+      entityType: 'vendor_user',
+      entityId: String(vendorUserId),
+      after: {
+        vendorUserId,
+        userName: target.userName,
+        temporaryPasswordIssued: true,
+      },
+      ip: clientIp(req),
+    });
+    sendOk(res, {
+      vendorUserId: String(vendorUserId),
+      userName: target.userName,
+      temporaryPassword: result.temporaryPassword,
     });
   });
 

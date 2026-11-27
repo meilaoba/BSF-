@@ -6,11 +6,13 @@ process.env.NODE_ENV = 'development';
 
 const {
   addVendorUser,
+  changeVendorUserPassword,
   deleteVendorUser,
   encryptVendorUserPassword,
   findVendorUserByName,
   listAllVendorUsers,
   listVendorUsers,
+  resetVendorUserPassword,
   updateVendorUser,
 } = await import('../src/providers/vendor-user.js');
 
@@ -241,6 +243,105 @@ test('deletes the vendor child user by vendor id', async () => {
   assert.match(calls[0].url, /\/user\/delete$/);
   assert.equal(calls[0].options.headers.token, 'vendor-token');
   assert.deepEqual(JSON.parse(calls[0].options.body), { id: 52 });
+});
+
+test('changes the current vendor password with MD5 old and AES new values', async () => {
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    calls.push({ url: String(url), options });
+    return new Response(JSON.stringify({ code: 200, msg: '修改成功', data: null }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    await changeVendorUserPassword({
+      token: 'vendor-token',
+      id: 52,
+      currentPassword: '123456',
+      newPassword: '65432100',
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  assert.match(calls[0].url, /\/user\/updatePassword$/);
+  assert.equal(calls[0].options.headers.token, 'vendor-token');
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    id: 52,
+    oldPassword: 'E10ADC3949BA59ABBE56E057F20F883E',
+    newPassword: encryptVendorUserPassword('65432100'),
+  });
+});
+
+test('maps an incorrect current vendor password to a readable error', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify({
+    code: 4003,
+    msg: '修改失败',
+    data: null,
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  try {
+    await assert.rejects(
+      changeVendorUserPassword({
+        token: 'vendor-token',
+        id: 52,
+        currentPassword: 'wrong-password',
+        newPassword: '65432100',
+      }),
+      (error) => {
+        assert.equal(error.code, 'VENDOR_PASSWORD_INVALID');
+        assert.equal(error.status, 400);
+        return true;
+      }
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('resets a vendor child password through the documented id-only payload', async () => {
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    calls.push({ url: String(url), options });
+    return new Response(JSON.stringify({ code: 200, msg: '修改成功', data: null }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const result = await resetVendorUserPassword({ token: 'vendor-token', id: 52 });
+    assert.equal(result.temporaryPassword, '123456');
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  assert.match(calls[0].url, /\/user\/resetPassword$/);
+  assert.equal(calls[0].options.headers.token, 'vendor-token');
+  assert.deepEqual(JSON.parse(calls[0].options.body), { id: 52 });
+});
+
+test('maps a missing reset target to not found', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify({
+    code: 4003,
+    msg: '修改失败',
+    data: null,
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  try {
+    await assert.rejects(
+      resetVendorUserPassword({ token: 'vendor-token', id: 999 }),
+      (error) => {
+        assert.equal(error.code, 'VENDOR_PASSWORD_RESET_TARGET_NOT_FOUND');
+        assert.equal(error.status, 404);
+        return true;
+      }
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test('treats an already missing vendor user as an idempotent delete', async () => {

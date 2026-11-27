@@ -45,7 +45,7 @@ function renderUsers(container){
               <td style="padding:14px 20px;color:#e2e8f0;">${u.client}</td>
               <td style="padding:14px 20px;color:#94a3b8;">${u.assignedDevices || u.machineName || "—"}</td>
               <td style="padding:14px 20px;"><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;${u.statusStyle}">${u.status}</span></td>
-              <td style="padding:14px 20px;">${u.userId ? '<button onclick="openUserModal(\'' + u.userId + '\')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button>' + (u.vendorUserId ? '<button onclick="openUserAssignmentModal(\'' + u.userId + '\')" style="padding:6px 14px;background:#1d4ed8;border:none;border-radius:6px;color:#fff;font-size:12px;cursor:pointer;margin-right:6px;">Devices</button>' : '') + '<button onclick="deleteUserRecord(\'' + u.userId + '\')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;">Delete</button>' : (u.vendorUserId ? '<button onclick="deleteVendorUserRecord(\'' + u.vendorUserId + '\')" style="padding:6px 14px;background:#7f1d1d;border:none;border-radius:6px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Delete Vendor Account</button>' : '<span style="color:#64748b;font-size:12px;">Vendor account only</span>')}</td>
+              <td style="padding:14px 20px;">${u.userId ? '<button onclick="openUserModal(\'' + u.userId + '\')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;font-size:12px;cursor:pointer;margin-right:6px;">Edit</button>' + (u.vendorUserId ? '<button onclick="openUserAssignmentModal(\'' + u.userId + '\')" style="padding:6px 14px;background:#1d4ed8;border:none;border-radius:6px;color:#fff;font-size:12px;cursor:pointer;margin-right:6px;">Devices</button><button onclick="resetUserPassword(\'' + u.vendorUserId + '\')" style="padding:6px 14px;background:#92400e;border:none;border-radius:6px;color:#fff;font-size:12px;cursor:pointer;margin-right:6px;">Reset Password</button>' : '') + '<button onclick="deleteUserRecord(\'' + u.userId + '\')" style="padding:6px 14px;background:#334155;border:none;border-radius:6px;color:#ef4444;font-size:12px;cursor:pointer;">Delete</button>' : (u.vendorUserId ? '<button onclick="resetUserPassword(\'' + u.vendorUserId + '\')" style="padding:6px 14px;background:#92400e;border:none;border-radius:6px;color:#fff;font-size:12px;cursor:pointer;margin-right:6px;">Reset Password</button><button onclick="deleteVendorUserRecord(\'' + u.vendorUserId + '\')" style="padding:6px 14px;background:#7f1d1d;border:none;border-radius:6px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Delete Vendor Account</button>' : '<span style="color:#64748b;font-size:12px;">Vendor account only</span>')}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -233,6 +233,28 @@ async function deleteVendorUserRecord(vendorUserId){
   }
   if(window.BSF_LOAD_DIRECTORY_DATA) await window.BSF_LOAD_DIRECTORY_DATA();
   renderUsers(document.getElementById('page-content'));
+}
+
+async function resetUserPassword(vendorUserId){
+  const vendorId = Number(vendorUserId);
+  if(!Number.isInteger(vendorId) || vendorId < 1){
+    alert('Vendor account id is invalid');
+    return;
+  }
+  if(!window.BSF_API || typeof window.BSF_API.resetVendorUserPassword !== 'function'){
+    alert('Vendor password reset API is unavailable');
+    return;
+  }
+  const user = userRecords.find(function(item){ return String(item.vendorUserId) === String(vendorId); });
+  const label = user ? (user.username || user.name || String(vendorId)) : String(vendorId);
+  if(!confirm('Reset the vendor password for "'+label+'" to the default password 123456?')) return;
+  try {
+    const result = await window.BSF_API.resetVendorUserPassword(vendorId);
+    const temporaryPassword = result && result.temporaryPassword ? result.temporaryPassword : '123456';
+    alert('Password reset successfully. Temporary password: ' + temporaryPassword);
+  } catch(error) {
+    alert('Password reset failed: ' + error.message);
+  }
 }
 
 function assignmentDeviceRows(user, assignments){

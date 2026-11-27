@@ -126,12 +126,14 @@ POST /api/v1/notifications/send           发送通知（入队）
 POST /api/v1/notifications/test/email     测试邮件
 POST /api/v1/notifications/test/whatsapp  测试 WhatsApp
 POST /api/v1/alerts/temperature           温度阈值判断 + 分发告警
+POST /api/v1/auth/change-password         修改当前用户厂家密码
 GET|POST|PUT|DELETE /api/v1/clients       客户
 GET|POST|PUT|DELETE /api/v1/machines      设备（含客户关联）
 GET  /api/v1/vendor-devices              厂家设备列表（只读代理）
 PUT  /api/v1/vendor-devices/assignment   将自有设备分配给 Client
 POST /api/v1/vendor-devices/sync         同步厂家设备资料（不自动绑定）
-GET|DELETE /api/v1/vendor-users          查询子用户 / 删除未纳管厂家账号
+GET|DELETE|POST /api/v1/vendor-users     查询子用户 / 删除未纳管账号 / 重置密码
+POST /api/v1/vendor-users/reset-password 子用户密码重置为 123456
 GET|PUT /api/v1/vendor-users/assignments 查询/覆盖子用户设备分配
 GET  /api/v1/device-data                 历史遥测查询
 POST /api/v1/device-data/ingest          遥测写入

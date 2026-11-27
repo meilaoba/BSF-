@@ -11,6 +11,7 @@ import {
 } from '../lib/http.js';
 import { requireString } from '../lib/validate.js';
 import { loginWithVendor, refreshVendorToken } from '../providers/vendor-auth.js';
+import { changeVendorUserPassword } from '../providers/vendor-user.js';
 import {
   authCookies,
   clearAuthCookies,
@@ -345,6 +346,36 @@ export function registerAuthRoutes(router) {
     });
     res.setHeader('Set-Cookie', clearAuthCookies());
     sendOk(res, { loggedOut: true });
+  });
+
+  router.post('/api/v1/auth/change-password', async (req, res) => {
+    if (!req.auth) throw new AppError('UNAUTHORIZED', 'Authentication required', { status: 401 });
+    const vendorUserId = Number(req.auth.user?.vendorUserId);
+    if (!Number.isInteger(vendorUserId) || vendorUserId < 1) {
+      throw new AppError('VENDOR_USER_NOT_LINKED', 'This account has no linked vendor identity', {
+        status: 409,
+      });
+    }
+    const body = await readJsonBody(req);
+    const token = await getVendorAccessToken(req.auth);
+    const result = await changeVendorUserPassword({
+      token,
+      id: vendorUserId,
+      currentPassword: body.currentPassword,
+      newPassword: body.newPassword,
+    });
+    await audit({
+      actorType: 'user',
+      actorId: req.auth.user.id,
+      actorLabel: req.auth.user.userName,
+      action: 'auth.password.change',
+      entityType: 'user',
+      entityId: req.auth.user.id,
+      metadata: { vendorUserId },
+      ip: clientIp(req),
+      userAgent: String(req.headers['user-agent'] || '').slice(0, 500),
+    });
+    sendOk(res, { updated: true, message: result.message });
   });
 
   router.post('/api/v1/auth/refresh', async (req, res) => {
