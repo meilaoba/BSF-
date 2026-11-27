@@ -62,15 +62,29 @@ function accountToast(message, type){
   setTimeout(function(){ if(toast) toast.remove(); }, 3200);
 }
 
+const ACCOUNT_PASSWORD_CHANGE_ENABLED = false;
+
 function renderAccount(container){
   const roleLabel = accountRoleLabel();
   const profile = accountCurrentProfile();
+  const passwordCard = ACCOUNT_PASSWORD_CHANGE_ENABLED ? `
+      <div style="background:#1e293b;border-radius:12px;padding:24px;border:1px solid #334155;">
+        <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 18px;text-transform:uppercase;letter-spacing:.5px;">Change Password</h3>
+        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Current Password</label>
+        <input id="account-current-password" type="password" placeholder="Enter current password" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" />
+        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">New Password</label>
+        <input id="account-new-password" type="password" placeholder="At least 8 characters" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" />
+        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Confirm New Password</label>
+        <input id="account-confirm-password" type="password" placeholder="Repeat new password" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
+        <p style="margin:10px 0 0;color:#64748b;font-size:11px;">Use at least 8 characters.</p>
+        <button onclick="saveAccountPassword()" style="width:100%;margin-top:18px;padding:11px 18px;background:#3b82f6;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:13px;cursor:pointer;">Update Password</button>
+      </div>` : '';
   container.innerHTML = `
     <div style="margin-bottom:24px;">
       <h2 style="font-size:22px;font-weight:700;color:#f8fafc;margin:0 0 8px;">Account Settings</h2>
       <p style="color:#64748b;font-size:14px;margin:0;">Manage your profile and security preferences</p>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+    <div style="display:grid;grid-template-columns:${ACCOUNT_PASSWORD_CHANGE_ENABLED ? '1fr 1fr' : 'minmax(0, 640px)'};gap:16px;align-items:start;">
       <div style="background:#1e293b;border-radius:12px;padding:24px;border:1px solid #334155;">
         <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 18px;text-transform:uppercase;letter-spacing:.5px;">Profile</h3>
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
@@ -89,17 +103,7 @@ function renderAccount(container){
         <input type="text" value="${roleLabel}" readonly style="width:100%;box-sizing:border-box;padding:10px 14px;background:#111827;border:1px solid #334155;border-radius:8px;color:#94a3b8;font-size:14px;" />
         <button onclick="saveAccountProfile()" style="width:100%;margin-top:18px;padding:11px 18px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:13px;cursor:pointer;">Save Profile</button>
       </div>
-      <div style="background:#1e293b;border-radius:12px;padding:24px;border:1px solid #334155;">
-        <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 18px;text-transform:uppercase;letter-spacing:.5px;">Change Password</h3>
-        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Current Password</label>
-        <input id="account-current-password" type="password" placeholder="Enter current password" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" />
-        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">New Password</label>
-        <input id="account-new-password" type="password" placeholder="At least 8 characters" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;margin-bottom:14px;" />
-        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">Confirm New Password</label>
-        <input id="account-confirm-password" type="password" placeholder="Repeat new password" style="width:100%;box-sizing:border-box;padding:10px 14px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;" />
-        <p style="margin:10px 0 0;color:#64748b;font-size:11px;">Use at least 8 characters.</p>
-        <button onclick="saveAccountPassword()" style="width:100%;margin-top:18px;padding:11px 18px;background:#3b82f6;border:none;border-radius:8px;color:#fff;font-weight:600;font-size:13px;cursor:pointer;">Update Password</button>
-      </div>
+      ${passwordCard}
     </div>
   `;
   applyStoredAccountProfile();
